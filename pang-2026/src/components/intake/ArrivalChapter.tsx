@@ -119,9 +119,10 @@ export function ArrivalChapter(props: ArrivalChapterProps): ReactElement {
         className="pointer-events-none absolute inset-0 grid place-items-center"
         style={{
           opacity: overlayVisible ? 1 : 0,
-          // A plain opacity envelope, not a motion primitive. No
-          // cubic-bezier (P15 is about motion curves, not named
-          // easing keywords); the overlay is declarative chrome
+          // A plain opacity envelope, not a motion primitive. P15
+          // constrains motion curves (bans hand-authored bezier
+          // easings outside the motion lib); a named CSS easing
+          // keyword is not that. The overlay is declarative chrome
           // that reveals the wall, not a gesture response.
           transition: "opacity 600ms ease-out",
         }}

@@ -698,9 +698,81 @@ the Primitive §35 "React is the adapter" rule, which already
 declares the canvas as the primary surface and React as the
 composition around it.
 
-The fourth step of the iteration (the RAF loop's perf budget at
-tier B, the Tweaks menu, and OPFS texture rehydration) is still
-open. Step 3 as scoped is landed.
+The fourth step of the iteration (RAF perf budget at tier B, the
+Tweaks menu, OPFS texture rehydration) was still open at the end
+of this pass; the rehydration piece landed in a follow-up pass
+the same day (see step 4 notes below).
+
+---
+
+## Iteration #2 — findings, step 4 partial (2026-04-22)
+
+Step 4 was scoped as three pieces: RAF perf budget at tier B,
+Tweaks menu, and OPFS texture rehydration. The rehydration piece
+landed in this pass. The other two are still open — they are
+amplifiers on what works, not floor-level correctness, so they can
+follow once Laura has walked the current ceiling.
+
+### What landed — OPFS texture rehydration
+
+- **`src/stores/works.persist.ts`.** A one-way-data mirror of the
+  in-memory works store into OPFS:
+  - `/works/index.json` — the durable entry list (id, status,
+    size). `imageUrl` is intentionally omitted because a `blob:`
+    URL does not survive a page load; serialising it would invite
+    optimistic reads of a dead URL.
+  - `/works/<id>.png` — each entry's rectified bytes.
+- **`hydrateWorks()`**. On cold boot, reads the sidecar, reads
+  each entry's image bytes, mints a fresh `URL.createObjectURL`
+  for each, and returns a ready-to-drop-in entry list. Orphaned
+  ids (index says yes, image file missing) are skipped — better
+  to show the rest of the wall than to show nothing.
+- **`installWorksPersistence()`**. Subscribes to the store. On
+  every entry change it writes the index + persists bytes for
+  added ids and deletes bytes for removed ids. Returns an
+  unsubscribe function; `AppBoot` holds it for the session.
+- **`AppBoot` orchestration.** The sequence is: bootstrap OPFS
+  (ensures the `/works` directory exists), hydrate entries into
+  the store, *then* install the subscription. Running it in that
+  order avoids a race where an empty snapshot overwrites the
+  sidecar before hydration can populate the store.
+- **Failure policy is "non-fatal everywhere."** Every OPFS write
+  swallows its own error. A storage blip does not block a
+  render; the next mutation gets a fresh write. Iteration #5
+  surfaces these into observability.
+
+### What we verified
+
+- Static: 38 tests pass (+17 for `parseDurable`, `parseIndex`,
+  `serialiseIndex`, round-trip and malformed-input edges). Lint,
+  typecheck, gates (26/26), and production build clean.
+- Live (preview harness): seeded a synthetic entry into OPFS,
+  reloaded, confirmed the DOM twin renders the hydrated button;
+  cleared OPFS, reloaded, confirmed the twin renders the "an
+  empty wall" empty state. Focus round-trip still works post-
+  rehydration.
+
+### What this tightens
+
+No new gates (P5 OPFS bootstrap and A16 intake queue already
+assert the storage surface). No doctrine revisions — rehydration
+is the execution of the `works.ts` top-of-file promise that
+persistence "is owned by `works.persist.ts`." The updated
+works.ts doctrine comment now points at the persist module
+instead of saying "later."
+
+### What is still open for step 4
+
+- **RAF perf budget at tier B.** The RAF loop in `TheRoomCanvas`
+  has no frame-time metering yet. P7 covers INP + LoAF globally;
+  the canvas-specific "degrade pixel ratio if tier B drops below
+  budget" rule is not wired.
+- **Tweaks menu.** `--knob-time-warmth` is read once on mount;
+  the UI that mutates it (and the preference-store subscription
+  for live updates) hasn't landed.
+
+Both are amplifiers, not floor-level correctness. Laura can walk
+the current ceiling before they need to land.
 
 ---
 

@@ -16,9 +16,12 @@
  *     wall layout or a manual-hanging mode replaces `layoutEntries()`
  *     without touching the store.
  *
- * Persistence lives in the OPFS boot (P5) later; this iteration
- * keeps the store in-memory. Empty on fresh install (Laura is the
- * baseline).
+ * Persistence is owned by `works.persist.ts` (OPFS: index sidecar
+ * + per-entry image bytes, installed on AppBoot). The store itself
+ * stays pure/in-memory; the persistence layer is a mirror, not a
+ * middleware, so tests and non-DOM consumers can exercise the
+ * store without reaching for OPFS. Empty on fresh install — Laura
+ * is the baseline.
  */
 
 import { create } from "zustand";
