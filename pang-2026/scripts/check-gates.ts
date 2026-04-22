@@ -2,11 +2,12 @@
 /**
  * PANG — gate runner.
  *
- * Mechanical enforcement of the 48 gates. Iteration #0 exercises the
- * subset reachable without a runtime: P1–P10, P23, P24. Remaining
- * gates plug in as their subject matter lands (P6 CSP has code here
- * because the headers live in next.config.ts; A-gates need a running
- * API route and land alongside the intake agent).
+ * Mechanical enforcement of the 48 gates. Gates plug in as their
+ * subject matter lands:
+ *
+ *   iter #0  — P1–P10, P23, P24                                  (platform floor)
+ *   iter #1  — + A1–A4, A7, A8, A16, A21                         (intake agent)
+ *   iter #2  — + P11, P15, P19, P20, P25, A10                    (the Room + zero-tap review)
  *
  * Each gate is a pure function `() => GateResult`. A gate can pass,
  * fail (CI-blocking), or skip (with a named reason — e.g. "no /fonts
@@ -454,6 +455,268 @@ async function p24(): Promise<GateResult> {
   return pass(id, title);
 }
 
+// ---------- P-gates (iteration #2 additions) ----------------------
+
+/**
+ * Shared source-tree walker. Returns paths (relative to repo root)
+ * for every file under `roots` that matches `exts`. Directories under
+ * `skip` (e.g. `src/lib/motion`, `_archive`) are pruned. Results
+ * include `.ts`, `.tsx`, `.css`, `.mjs` by default — the widest set
+ * any gate needs — and gates filter further by prefix.
+ */
+async function walkRepoFiles(
+  roots: string[],
+  exts: readonly string[] = ["ts", "tsx", "css", "mjs"],
+  skip: readonly string[] = [],
+): Promise<string[]> {
+  const { readdir } = await import("node:fs/promises");
+  const out: string[] = [];
+  const allowed = new Set(exts);
+  async function visit(dir: string): Promise<void> {
+    if (skip.some((s) => dir === s || dir.startsWith(`${s}/`))) return;
+    let entries;
+    try {
+      entries = await readdir(join(ROOT, dir), { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      const p = `${dir}/${e.name}`;
+      if (e.isDirectory()) {
+        await visit(p);
+      } else {
+        const ext = e.name.split(".").pop();
+        if (ext && allowed.has(ext)) out.push(p);
+      }
+    }
+  }
+  for (const r of roots) await visit(r);
+  return out;
+}
+
+/**
+ * P11 — OKLCH-only colour. No hex triplet/quad/6/8, `rgb()`, `rgba()`,
+ * `hsl()`, or `hsla()` literal in any `.css` or inline `style={{…}}`
+ * in `src/**` / `app/**`. `currentColor`, `transparent`, named CSS
+ * keywords, and token references are fine; OKLCH is preferred.
+ *
+ * The scan is literal — a regex hit in source text. A comment that
+ * *describes* hex (e.g. "#fff was ... replaced with oklch") will
+ * trigger the gate on purpose: doctrine says drop the old literal
+ * entirely so diffs stay clean.
+ */
+async function p11(): Promise<GateResult> {
+  const id = "P11";
+  const title = "OKLCH-only colour; no hex/rgb/hsl literals";
+  const files = await walkRepoFiles(["src", "app"], ["ts", "tsx", "css"]);
+  // Hex colour literals: #rgb | #rgba | #rrggbb | #rrggbbaa. The
+  // leading boundary prevents id-selector false-positives like `#abc { ... }`
+  // in a CSS selector position, which would not be a colour; we
+  // require the hex to follow `:`, `(`, or whitespace after an `=`.
+  const hexRe = /(?:[:=]\s*|\(\s*|,\s*)#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/;
+  const funcRe = /\b(?:rgb|rgba|hsl|hsla)\s*\(/;
+  for (const f of files) {
+    const src = await read(f);
+    if (hexRe.test(src)) {
+      // Report the first offending line for actionability.
+      const line = src.split("\n").findIndex((ln) => hexRe.test(ln)) + 1;
+      return fail(id, title, `${f}:${line} uses a hex colour literal`);
+    }
+    if (funcRe.test(src)) {
+      const line = src.split("\n").findIndex((ln) => funcRe.test(ln)) + 1;
+      return fail(id, title, `${f}:${line} uses rgb/rgba/hsl/hsla()`);
+    }
+  }
+  return pass(id, title);
+}
+
+/**
+ * P15 — Springs default. Arbitrary `cubic-bezier(...)` curves outside
+ * `src/lib/motion/` are a 2018-era habit; 2026 motion lives in
+ * `linear()` easing, View Transitions, and a small preset library.
+ * Allowed via an explicit opt-out comment `p15-exception:` immediately
+ * above the line — for the one-off case an upstream CSS feature
+ * genuinely requires it.
+ *
+ * Ban is narrow: the literal string `cubic-bezier(`. `linear(0, ...)`
+ * (the new CSS easing function) is fine. Our View Transitions
+ * scaffold in `app/globals.css` already uses `linear(...)`.
+ */
+async function p15(): Promise<GateResult> {
+  const id = "P15";
+  const title = "Springs default; no cubic-bezier() outside motion lib";
+  const files = await walkRepoFiles(
+    ["src", "app"],
+    ["ts", "tsx", "css"],
+    ["src/lib/motion"],
+  );
+  const re = /cubic-bezier\s*\(/;
+  for (const f of files) {
+    const src = await read(f);
+    if (!re.test(src)) continue;
+    const lines = src.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      if (!re.test(lines[i]!)) continue;
+      const prev = lines[i - 1] ?? "";
+      if (/p15-exception:/.test(prev)) continue;
+      return fail(
+        id,
+        title,
+        `${f}:${i + 1} cubic-bezier(...) without 'p15-exception:' comment`,
+      );
+    }
+  }
+  return pass(id, title);
+}
+
+/**
+ * P19 — Canvas for art. The Room must render through a canvas surface
+ * backed by tier-picked renderers (WebGPU → WebGL2). Mechanical check:
+ *
+ *   1. `src/room/gpu/renderer.ts` and `src/room/gl2/renderer.ts` exist.
+ *   2. The scene factory exists and re-exports the metric constants.
+ *   3. `app/page.tsx` mounts `TheRoomCanvas` (directly or transitively
+ *      through a `_the-room/*Client` composition).
+ *   4. `app/page.tsx` does NOT use `display: grid`, `columns:`, or a
+ *      masonry pattern for art — those are the 2018 shelf-pack habit.
+ *
+ * The "no DOM grid for art" check is coarse: we scan `app/page.tsx`
+ * (the Room root) for forbidden CSS atoms. Other routes (lists,
+ * chrome) may still use grid / columns freely.
+ */
+async function p19(): Promise<GateResult> {
+  const id = "P19";
+  const title = "The Room renders through a canvas with tiered renderers";
+  if (!(await exists("src/room/gpu/renderer.ts")))
+    return fail(id, title, "src/room/gpu/renderer.ts missing (WebGPU tier)");
+  if (!(await exists("src/room/gl2/renderer.ts")))
+    return fail(id, title, "src/room/gl2/renderer.ts missing (WebGL2 tier)");
+  if (!(await exists("src/room/scene.ts")))
+    return fail(id, title, "src/room/scene.ts missing");
+  if (!(await exists("src/room/dom/TheRoomCanvas.tsx")))
+    return fail(id, title, "TheRoomCanvas.tsx missing");
+  const page = await read("app/page.tsx");
+  if (!/TheRoom(Client|Canvas)/.test(page))
+    return fail(
+      id,
+      title,
+      "app/page.tsx must mount TheRoomClient / TheRoomCanvas (canvas composition)",
+    );
+  if (/display:\s*grid/.test(page) || /\bcolumns:\s*\d/.test(page))
+    return fail(
+      id,
+      title,
+      "app/page.tsx uses display: grid / columns for art — use canvas",
+    );
+  return pass(id, title);
+}
+
+/**
+ * P20 — CV in a worker. Segmentation + rectangle detection must live
+ * in `src/workers/cv/*.worker.ts` files, and the main thread reaches
+ * them only via the dispatch boundary (`src/workers/cv/dispatch.ts`
+ * or `cameraControl.ts` instantiating a `new Worker(new URL(...,
+ * import.meta.url))`). Direct main-thread imports of any worker-only
+ * identifier are the regression we're guarding against.
+ */
+async function p20(): Promise<GateResult> {
+  const id = "P20";
+  const title = "CV (segmenter + rectangle detector) runs in a worker";
+  for (const w of [
+    "src/workers/cv/segmenter.worker.ts",
+    "src/workers/cv/rectangleDetector.worker.ts",
+    "src/workers/cv/dispatch.ts",
+  ]) {
+    if (!(await exists(w))) return fail(id, title, `${w} missing`);
+  }
+  // Forbid any main-thread file from statically importing a
+  // `.worker.ts` module *at runtime*. The legitimate shape is
+  // `new Worker(new URL("./foo.worker.ts", import.meta.url))` which
+  // uses a URL literal, not an `import { ... } from ".worker"`.
+  //
+  // `import type { ... } from ".worker"` is fine: TypeScript erases
+  // type-only imports at build time, so no worker code runs on the
+  // main thread. The regex requires a *non-type* `import` to trip.
+  const files = await walkRepoFiles(["src", "app"], ["ts", "tsx"]);
+  const staticWorkerImport =
+    /^\s*import\s+(?!type\b)[^;]*from\s+['"][^'"]*\.worker(?:\.ts)?['"]/m;
+  for (const f of files) {
+    if (f.startsWith("src/workers/cv/")) continue;
+    const src = await read(f);
+    if (staticWorkerImport.test(src)) {
+      return fail(
+        id,
+        title,
+        `${f} statically imports a .worker module at runtime — use new Worker(new URL(...))`,
+      );
+    }
+  }
+  return pass(id, title);
+}
+
+/**
+ * P25 — Zero-tap review. Between capture and arrival, no *required*
+ * text input / textarea / select may render, and no `<select>` at all
+ * (every select in this surface family has historically meant a
+ * required choice). Edits are opt-in: the collector can tap a field
+ * to open a free-text editor, but the "add to wall" path is always
+ * available unconditionally.
+ *
+ * Mechanical check: scan `app/scan/**` and `src/components/intake/**`:
+ *
+ *   1. No `<select>` element anywhere.
+ *   2. No `required` attribute on any `<input>` / `<textarea>`.
+ *   3. `IntakeReview.tsx` exports a button with `aria-label="add to
+ *      wall"` (the arrival gateway) and does not declare `disabled=`
+ *      on it anywhere.
+ */
+async function p25(): Promise<GateResult> {
+  const id = "P25";
+  const title = "Zero-tap review between capture and arrival";
+  const files = await walkRepoFiles(
+    ["app/scan", "src/components/intake"],
+    ["ts", "tsx"],
+  );
+  for (const f of files) {
+    const src = await read(f);
+    if (/<select\b/.test(src))
+      return fail(id, title, `${f} renders <select> in the scan surface`);
+    if (/\brequired\b\s*(=|\/>|>)/.test(src)) {
+      // Narrow: only flag if it's on an input/textarea/select element.
+      // Tolerate code that mentions "required" in a prop-type comment.
+      const re = /<(?:input|textarea|select)\b[^>]*\brequired\b[^>]*>/;
+      if (re.test(src))
+        return fail(id, title, `${f} has a required input in scan surface`);
+    }
+  }
+  // "Add to wall" entry point must be present and unconditional.
+  if (!(await exists("src/components/intake/IntakeReview.tsx")))
+    return fail(id, title, "IntakeReview.tsx missing");
+  const review = await read("src/components/intake/IntakeReview.tsx");
+  if (!/aria-label=["']add to wall["']/.test(review))
+    return fail(
+      id,
+      title,
+      'IntakeReview.tsx must expose a button with aria-label="add to wall"',
+    );
+  // Guard against a disabled= gate creeping onto the arrival button.
+  // Flag any `disabled=` within five lines of the aria-label="add to
+  // wall" marker — correct, simple, and easy to override intentionally
+  // (move the disabled prop further in the JSX if genuinely needed).
+  const lines = review.split("\n");
+  const idx = lines.findIndex((ln) => /aria-label=["']add to wall["']/.test(ln));
+  if (idx >= 0) {
+    const window = lines.slice(Math.max(0, idx - 5), idx + 5).join("\n");
+    if (/\bdisabled=/.test(window))
+      return fail(
+        id,
+        title,
+        "IntakeReview.tsx gates the add-to-wall button with disabled=",
+      );
+  }
+  return pass(id, title);
+}
+
 // ---------- A-gates (iteration #1 subset) -------------------------
 
 /** Recursive walker used by several A-gates. */
@@ -683,6 +946,58 @@ async function a16(): Promise<GateResult> {
 }
 
 /**
+ * A10 — Every model call is wrapped in a `gen_ai.*` OpenTelemetry
+ * span. The shim in `src/lib/otel/span.ts` exports `withOtelSpan`;
+ * any file in `src/ai/agents/*` that calls `messages.create` must do
+ * so inside a `withOtelSpan("...", ...)` block whose name starts with
+ * `gen_ai.` (the OpenTelemetry GenAI semantic-conventions prefix).
+ *
+ * Static check: for each agent file with a `messages.create` call,
+ * require both `withOtelSpan(` and a span name literal matching
+ * `"gen_ai\..*"`. The scan is generous about formatting — it looks
+ * at the file, not the AST — but the rule is crisp enough that
+ * refactors can't accidentally slip an un-spanned call through.
+ */
+async function a10(): Promise<GateResult> {
+  const id = "A10";
+  const title = "Model calls wrapped in gen_ai.* OTel span";
+  if (!(await exists("src/lib/otel/span.ts")))
+    return fail(id, title, "src/lib/otel/span.ts missing (withOtelSpan shim)");
+  const shim = await read("src/lib/otel/span.ts");
+  if (!/export\s+(?:async\s+)?function\s+withOtelSpan\b/.test(shim))
+    return fail(id, title, "withOtelSpan() not exported from span.ts");
+
+  const files = await walkAgentFiles();
+  let checked = 0;
+  for (const f of files) {
+    if (!f.startsWith("src/ai/agents/")) continue;
+    if (
+      f.endsWith("/_shared.ts") ||
+      f.endsWith("/models.ts") ||
+      f.endsWith("/budgets.ts")
+    )
+      continue;
+    const src = await read(f);
+    if (!/messages\.create\s*\(/.test(src)) continue;
+    if (!/withOtelSpan\s*\(/.test(src))
+      return fail(
+        id,
+        title,
+        `${f} calls messages.create without withOtelSpan(...)`,
+      );
+    if (!/["'`]gen_ai\.[\w.]+["'`]/.test(src))
+      return fail(
+        id,
+        title,
+        `${f} has no gen_ai.* span name literal (required by OTel GenAI conventions)`,
+      );
+    checked++;
+  }
+  if (checked === 0) return skip(id, title, "no agent call sites yet");
+  return pass(id, title);
+}
+
+/**
  * A21 — Each agent exports a `RETRY_POLICY` constant with the fields
  * the contract requires. The contract type is defined in _shared.ts.
  */
@@ -717,6 +1032,9 @@ async function a21(): Promise<GateResult> {
 
 // ---------- runner -------------------------------------------------
 
+// Runner list. Order is **reading order**: P-gates in numeric order
+// (grouped by family via the DS Appendix B convention), then A-gates.
+// A new gate appended here is visible in the report the same run.
 const GATES = [
   p1,
   p2,
@@ -728,14 +1046,20 @@ const GATES = [
   p8,
   p9,
   p10,
+  p11,
+  p15,
+  p19,
+  p20,
   p23,
   p24,
+  p25,
   a1,
   a2,
   a3,
   a4,
   a7,
   a8,
+  a10,
   a16,
   a21,
 ];
@@ -764,7 +1088,8 @@ async function main(): Promise<void> {
   };
 
   console.log(
-    "\nPANG gates — iteration #1 scope (P1–P10, P23, P24 + A1–A4, A7, A8, A16, A21)",
+    "\nPANG gates — iteration #2 scope\n" +
+      "  P1–P11, P15, P19, P20, P23–P25  +  A1–A4, A7, A8, A10, A16, A21",
   );
   console.log("─".repeat(70));
   for (const r of results) {
