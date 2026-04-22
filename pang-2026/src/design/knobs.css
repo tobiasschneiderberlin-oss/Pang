@@ -1,0 +1,36 @@
+/**
+ * PANG — runtime knob overlays.
+ *
+ * Token values live in `src/styles/tokens.css` (DS Appendix A).
+ * @property registrations for animatable knobs live in
+ * `app/globals.css`. This file carries only the data-* attribute
+ * overlays written by `preferences.ts`:
+ *
+ *   • `data-appearance`        → color-scheme rebind
+ *   • `data-motion-explicit`   → opt-out of OS reduced-motion override
+ *
+ * The overlay separation keeps tokens.css purely declarative;
+ * runtime mutation is scoped here.
+ */
+
+/* --- Color scheme ------------------------------------------------- */
+/* Default behaviour: follow the OS. The preference store overrides
+   via `data-appearance` when the user forces a mode. */
+:root {
+  color-scheme: light dark;
+}
+:root[data-appearance="light"] { color-scheme: light; }
+:root[data-appearance="dark"]  { color-scheme: dark; }
+
+/* --- Motion overlay ---------------------------------------------- */
+/* The `--knob-motion` knob is a number in [0, 1]; consumers
+   multiply transition / animation durations by it.
+   `preferences.ts` writes the collector's chosen value directly.
+   OS `prefers-reduced-motion` still wins unless the collector has
+   explicitly picked full motion (signalled by the
+   `data-motion-explicit="full"` attribute). */
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion-explicit="full"]) {
+    --knob-motion: 0.4;
+  }
+}

@@ -1,0 +1,4201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PANG — Design System 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ════════════════════════════════════════════════════════════════
+   PANG 2026 — editorial / hyper-functional / dimensional-flat
+   One long publication. No sidebars. No rounded cards.
+   ════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Paper & ink — OKLCH */
+  --paper: oklch(0.975 0.004 80);
+  --paper-5: oklch(0.95 0.005 80);
+  --paper-10: oklch(0.90 0.006 78);
+  --hairline: oklch(0.82 0.008 78);
+  --ink-muted: oklch(0.52 0.012 80);
+  --ink-ai: oklch(0.42 0.012 75);
+  --ink: oklch(0.14 0.01 80);
+  /* Pigment — swappable via Tweaks. Default: Minium.
+     Minium is the lead-red of illuminated manuscripts — old enough for the
+     Gagosian dealer, warm enough for a 19-year-old Gen Z collector. Recognisable
+     to both, owned by neither. The accent a Rothko enthusiast and an NFT-native
+     would both agree is "right."
+     --warm       lamp   — soft form on paper (pills, selection)
+     --warm-deep  deep   — saturated ink accent (italics, numerals, links)
+     --warm-glow  glow   — chromatic halo on Night (alive-work aura) */
+  --warm: oklch(0.74 0.16 38);
+  --warm-deep: oklch(0.54 0.19 32);
+  --warm-glow: oklch(0.68 0.22 34);
+  --cool: oklch(0.66 0.13 230);
+
+  /* Corner radii — two tiers, mechanical. Gate P9.
+     0   → containers, art surfaces, wall labels, editorial frames
+     2px → interactive chrome only (buttons, pills, fields, panel) */
+  --r-chrome: 2px;
+
+  /* Night */
+  --night: oklch(0.11 0.008 260);
+  --night-5: oklch(0.17 0.010 260);
+  --night-10: oklch(0.24 0.012 258);
+  --night-hair: oklch(0.32 0.012 255);
+  --night-muted: oklch(0.62 0.015 255);
+  --night-ink: oklch(0.96 0.005 80);
+
+  /* Spacing — mechanical */
+  --u: 8px;
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 20px;
+  --s-6: 24px; --s-8: 32px; --s-10: 40px; --s-12: 48px; --s-16: 64px;
+  --s-20: 80px; --s-24: 96px; --s-32: 128px;
+
+  /* Type */
+  --serif: "Instrument Serif", ui-serif, Georgia, serif;
+  --sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --mono: "Geist Mono", ui-monospace, "SF Mono", monospace;
+
+  /* Knobs */
+  --knob-time-warmth: 0.5;
+  --knob-warmth-multiplier: 0.7;
+  --knob-wall-gap: 24px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "ss01", "cv11";
+}
+body { overflow-x: hidden; }
+a { color: inherit; text-decoration: none; }
+::selection { background: var(--warm); color: var(--ink); }
+
+/* ─── Masthead: fixed top bar, brutalist ruler ─────────────────── */
+.masthead {
+  position: fixed; top: 0; left: 0; right: 0;
+  display: grid;
+  grid-template-columns: minmax(280px, auto) 1fr minmax(280px, auto);
+  align-items: center;
+  gap: var(--s-8);
+  padding: 10px var(--s-6);
+  background: color-mix(in oklch, var(--paper) 86%, transparent);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  border-bottom: 1px solid var(--hairline);
+  z-index: 50;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.masthead .ms-l { display: flex; gap: var(--s-6); align-items: center; color: var(--ink-muted); }
+.masthead .ms-l strong { color: var(--ink); font-weight: 500; letter-spacing: 0.08em; }
+.masthead .ms-c {
+  font-family: var(--serif);
+  font-size: 18px;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  color: var(--ink);
+  font-style: italic;
+}
+.masthead .ms-r { display: flex; justify-content: flex-end; gap: var(--s-5); color: var(--ink-muted); }
+.masthead .ms-r em { font-style: normal; color: var(--ink); }
+.masthead .ms-r .apx-jump {
+  cursor: pointer;
+  color: var(--warm-deep);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-chrome);
+  padding: 2px 8px;
+  transition: background 120ms, color 120ms, border-color 120ms;
+}
+.masthead .ms-r .apx-jump:hover {
+  background: var(--warm-deep);
+  color: var(--paper);
+  border-color: var(--warm-deep);
+}
+
+/* timestamp jitter (hyper-functional detail) */
+.stamp { font-variant-numeric: tabular-nums; }
+.stamp::before { content: "●"; color: var(--warm-deep); margin-right: 6px; font-size: 8px; vertical-align: 2px; }
+
+/* ─── Registration corners (printer's marks) ───────────────────── */
+.reg-mark {
+  position: fixed;
+  width: 20px; height: 20px;
+  pointer-events: none;
+  z-index: 40;
+  color: var(--ink-muted);
+  opacity: 0.5;
+}
+.reg-mark::before, .reg-mark::after {
+  content: ""; position: absolute; background: currentColor;
+}
+.reg-mark.tl { top: 56px; left: 16px; }
+.reg-mark.tr { top: 56px; right: 16px; }
+.reg-mark.bl { bottom: 16px; left: 16px; }
+.reg-mark.br { bottom: 16px; right: 16px; }
+.reg-mark.tl::before, .reg-mark.tr::before, .reg-mark.bl::before, .reg-mark.br::before {
+  width: 20px; height: 1px; top: 10px; left: 0;
+}
+.reg-mark.tl::after, .reg-mark.tr::after, .reg-mark.bl::after, .reg-mark.br::after {
+  width: 1px; height: 20px; left: 10px; top: 0;
+}
+
+/* ─── Global page grid ─────────────────────────────────────────── */
+.page {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0 var(--s-8);
+}
+@media (max-width: 720px) { .page { padding: 0 var(--s-5); } }
+
+/* ─── HERO — dark mode first, big editorial statement ─────────── */
+.hero {
+  position: relative;
+  background: var(--night);
+  color: var(--night-ink);
+  padding: 140px 0 var(--s-20);
+  overflow: hidden;
+  border-bottom: 1px solid var(--night-hair);
+}
+.hero::before {
+  /* radial warm lamp, top-right */
+  content: "";
+  position: absolute;
+  top: -20%; right: -10%;
+  width: 70%; aspect-ratio: 1;
+  background: radial-gradient(circle, oklch(0.78 0.14 62 / 0.18) 0%, transparent 60%);
+  pointer-events: none;
+}
+.hero .page { position: relative; z-index: 2; }
+.hero .kicker {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--night-muted);
+  display: flex;
+  gap: var(--s-4);
+  align-items: center;
+  margin-bottom: var(--s-8);
+}
+.hero .kicker .rule { flex: 1; height: 1px; background: var(--night-hair); }
+.hero h1 {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: clamp(56px, 9vw, 144px);
+  line-height: 0.92;
+  letter-spacing: -0.02em;
+  max-width: 14ch;
+}
+.hero h1 em {
+  font-style: italic;
+  color: var(--warm);
+}
+.hero h1 .ampersand {
+  font-style: italic;
+  color: var(--warm);
+  font-family: var(--serif);
+}
+.hero .sub {
+  margin-top: var(--s-10);
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: var(--s-12);
+  align-items: start;
+}
+@media (max-width: 860px) { .hero .sub { grid-template-columns: 1fr; gap: var(--s-6); } }
+.hero .folio {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--night-muted);
+  line-height: 1.8;
+}
+.hero .folio strong { color: var(--night-ink); font-weight: 500; }
+.hero .lede {
+  font-size: 22px;
+  line-height: 1.45;
+  color: var(--night-ink);
+  max-width: 60ch;
+  font-weight: 300;
+}
+.hero .lede strong { color: var(--warm); font-weight: 500; }
+
+/* stats strip */
+.stats {
+  margin-top: var(--s-16);
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  border-top: 1px solid var(--night-hair);
+  border-bottom: 1px solid var(--night-hair);
+}
+@media (max-width: 860px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+.stats > div {
+  padding: var(--s-5) var(--s-4);
+  border-right: 1px solid var(--night-hair);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+.stats > div:last-child { border-right: 0; }
+.stats .n {
+  font-family: var(--serif);
+  font-size: 56px;
+  line-height: 0.9;
+  font-weight: 400;
+  color: var(--night-ink);
+  font-variant-numeric: tabular-nums;
+}
+.stats .k {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--night-muted);
+}
+
+/* ─── Section — with big numeral, rule, editorial header ───────── */
+section {
+  padding: var(--s-24) 0;
+  border-bottom: 1px solid var(--hairline);
+  position: relative;
+}
+section.tight { padding: var(--s-20) 0; }
+section.dark {
+  background: var(--night);
+  color: var(--night-ink);
+  border-bottom-color: var(--night-hair);
+}
+section.dark .hairline, section.dark hr { border-color: var(--night-hair); background: var(--night-hair); }
+section.dark .muted, section.dark .label { color: var(--night-muted); }
+section.dark h2, section.dark h3 { color: var(--night-ink); }
+
+.sec-head {
+  display: grid;
+  grid-template-columns: 140px 1fr 200px;
+  gap: var(--s-8);
+  align-items: start;
+  margin-bottom: var(--s-16);
+  padding-bottom: var(--s-6);
+  border-bottom: 1px solid var(--hairline);
+}
+section.dark .sec-head { border-bottom-color: var(--night-hair); }
+@media (max-width: 860px) {
+  .sec-head { grid-template-columns: 1fr; gap: var(--s-4); }
+}
+.sec-num {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 80px;
+  line-height: 0.85;
+  color: var(--warm-deep);
+  font-weight: 400;
+}
+section.dark .sec-num { color: var(--warm); }
+.sec-title {
+  align-self: end;
+}
+.sec-title .eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  margin-bottom: var(--s-3);
+}
+section.dark .sec-title .eyebrow { color: var(--night-muted); }
+.sec-title h2 {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: clamp(40px, 5.6vw, 72px);
+  line-height: 1.06;
+  letter-spacing: -0.015em;
+  max-width: 18ch;
+  padding-bottom: 0.12em; /* room for italic descenders */
+}
+.sec-title h2.title-tight { line-height: 1.02; }
+.sec-title h2.title-balance { text-wrap: balance; max-width: 16ch; }
+.sec-title h2 em { font-style: italic; color: var(--warm-deep); }
+section.dark .sec-title h2 em { color: var(--warm); }
+.sec-meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.7;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+  text-align: right;
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--hairline);
+  align-self: end;
+}
+section.dark .sec-meta { color: var(--night-muted); border-top-color: var(--night-hair); }
+@media (max-width: 860px) { .sec-meta { text-align: left; } }
+
+.sec-lede {
+  font-size: 20px;
+  line-height: 1.45;
+  max-width: 56ch;
+  font-weight: 300;
+  color: var(--ink);
+  margin-bottom: var(--s-10);
+}
+section.dark .sec-lede { color: var(--night-ink); }
+.sec-lede strong { font-weight: 500; color: var(--ink); background: linear-gradient(transparent 60%, oklch(0.78 0.14 62 / 0.35) 60%); padding: 0 2px; }
+section.dark .sec-lede strong { color: var(--warm); background: none; }
+.sec-lede code, code.inline {
+  font-family: var(--mono);
+  font-size: 0.85em;
+  background: var(--paper-10);
+  border: 1px solid var(--hairline);
+  padding: 1px 6px;
+  color: var(--ink);
+}
+section.dark code.inline, section.dark .sec-lede code {
+  background: var(--night-10); border-color: var(--night-hair); color: var(--night-ink);
+}
+
+/* ─── Utility typography ───────────────────────────────────────── */
+.label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+.muted { color: var(--ink-muted); }
+
+/* ─── VOICE — 2-column editorial table ─────────────────────────── */
+.voice-grid {
+  display: grid;
+  grid-template-columns: 120px 1fr 1fr;
+  border-top: 1px solid var(--ink);
+}
+@media (max-width: 720px) {
+  .voice-grid { grid-template-columns: 80px 1fr; }
+  .voice-grid .v-bad { grid-column: 2; border-top: 1px dashed var(--hairline); padding-top: var(--s-2); }
+}
+.voice-grid > div {
+  padding: var(--s-5) var(--s-4);
+  border-bottom: 1px solid var(--hairline);
+  display: flex;
+  align-items: center;
+}
+.voice-grid .v-reg {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--warm-deep);
+  align-self: stretch;
+  border-right: 1px solid var(--hairline);
+  align-items: flex-start;
+  padding-top: var(--s-5);
+}
+.voice-grid .v-good {
+  font-family: var(--serif);
+  font-size: 22px;
+  line-height: 1.25;
+  color: var(--ink);
+  border-right: 1px solid var(--hairline);
+}
+.voice-grid .v-bad {
+  font-family: var(--sans);
+  font-size: 14px;
+  color: var(--ink-muted);
+  text-decoration: line-through;
+  text-decoration-color: oklch(0.65 0.18 25 / 0.5);
+  text-decoration-thickness: 1px;
+}
+
+.voice-grid .v-good::before {
+  content: "+";
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--warm-deep);
+  margin-right: var(--s-3);
+  font-weight: 500;
+}
+.voice-grid .v-bad::before {
+  content: "−";
+  font-family: var(--mono);
+  font-size: 14px;
+  color: oklch(0.55 0.18 25);
+  margin-right: var(--s-3);
+  text-decoration: none;
+  display: inline-block;
+}
+
+/* banned words — tight typographic blocks */
+.bans {
+  margin-top: var(--s-12);
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+  border: 1px solid var(--ink);
+}
+@media (max-width: 860px) { .bans { grid-template-columns: 1fr; } }
+.ban-card {
+  padding: var(--s-6);
+  border-right: 1px solid var(--ink);
+  position: relative;
+  background: var(--paper);
+}
+.ban-card:last-child { border-right: 0; }
+@media (max-width: 860px) {
+  .ban-card { border-right: 0; border-bottom: 1px solid var(--ink); }
+  .ban-card:last-child { border-bottom: 0; }
+}
+.ban-card .ban-t {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: var(--s-4);
+  padding-bottom: var(--s-2);
+  border-bottom: 1px dashed var(--hairline);
+}
+.ban-card .ban-t span:first-child {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.ban-card .ban-t span:last-child {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--ink-muted);
+}
+.ban-card p {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.9;
+  color: var(--ink);
+}
+.ban-card p.prose {
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-muted);
+}
+.ban-card em { font-style: italic; color: var(--ink); font-family: var(--serif); font-size: 15px; }
+
+/* ─── COLOR — big tonal bands, not card grid ───────────────────── */
+.palette-band {
+  margin-top: var(--s-10);
+}
+.palette-band + .palette-band { margin-top: var(--s-16); }
+.palette-band h3 {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  margin-bottom: var(--s-4);
+  display: flex; align-items: center; gap: var(--s-3);
+}
+.palette-band h3::before {
+  content: ""; width: 40px; height: 1px; background: var(--ink);
+}
+
+.tonal-row {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 1px;
+  background: var(--ink);
+  border: 1px solid var(--ink);
+}
+@media (max-width: 720px) { .tonal-row { grid-template-columns: repeat(2, 1fr); } }
+.tonal-row.night { grid-template-columns: repeat(4, 1fr); background: var(--night-hair); border-color: var(--night-hair); }
+.tonal-row.accent { grid-template-columns: repeat(3, 1fr); }
+
+.swatch {
+  position: relative;
+  aspect-ratio: 1;
+  padding: var(--s-4);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  overflow: hidden;
+}
+.swatch .s-num {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 36px;
+  line-height: 1;
+  font-weight: 400;
+  opacity: 0.7;
+  align-self: flex-end;
+}
+.swatch .s-name {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 500;
+}
+.swatch .s-val {
+  font-size: 9px;
+  letter-spacing: 0;
+  text-transform: none;
+  opacity: 0.8;
+  margin-top: 2px;
+}
+.swatch .s-use {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-top: var(--s-1);
+  opacity: 0.7;
+  max-width: 18ch;
+}
+
+/* ─── TYPE — big specimen blocks ───────────────────────────────── */
+.type-specimen {
+  display: grid;
+  grid-template-columns: 100px 1fr 160px;
+  gap: var(--s-6);
+  align-items: baseline;
+  padding: var(--s-8) 0;
+  border-bottom: 1px solid var(--hairline);
+}
+@media (max-width: 720px) { .type-specimen { grid-template-columns: 1fr; gap: var(--s-3); } }
+.type-specimen:last-child { border-bottom: 0; }
+.type-specimen .ts-tag {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  padding-top: 8px;
+  border-top: 1px solid var(--ink);
+  align-self: start;
+}
+.type-specimen .ts-sample { color: var(--ink); }
+.type-specimen .ts-meta {
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--ink-muted);
+  letter-spacing: 0.02em;
+  text-align: right;
+  padding-top: 8px;
+  border-top: 1px solid var(--hairline);
+  align-self: start;
+}
+@media (max-width: 720px) { .type-specimen .ts-meta { text-align: left; } }
+
+/* drop cap treatment */
+.drop-cap::first-letter {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 4.5em;
+  float: left;
+  line-height: 0.85;
+  padding: 6px 10px 0 0;
+  color: var(--warm-deep);
+  font-weight: 400;
+}
+
+/* ─── SPACE & CORNERS — honest ruler ───────────────────────────── */
+.ruler {
+  display: grid;
+  grid-template-columns: 80px 1fr 80px;
+  gap: var(--s-5);
+  align-items: center;
+  padding: var(--s-3) 0;
+  border-bottom: 1px dashed var(--hairline);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.ruler .r-name { color: var(--ink); letter-spacing: 0.05em; }
+.ruler .r-bar { height: 14px; background: var(--ink); }
+.ruler .r-use { color: var(--ink-muted); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; text-align: right; }
+
+.corner-note {
+  margin-top: var(--s-10);
+  padding: var(--s-8);
+  border: 1px solid var(--ink);
+  background: var(--paper-5);
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--s-8);
+  align-items: end;
+}
+.corner-note .cn-text h4 {
+  font-family: var(--serif);
+  font-size: 36px;
+  line-height: 1;
+  font-weight: 400;
+  max-width: 16ch;
+  margin-bottom: var(--s-4);
+}
+.corner-note .cn-text p { color: var(--ink-muted); max-width: 56ch; }
+.corner-note .cn-demo {
+  display: flex; gap: var(--s-3); align-items: flex-end;
+}
+.corner-demo-box {
+  width: 60px; height: 60px;
+  background: var(--ink);
+  position: relative;
+}
+.corner-demo-box.chrome { border-radius: var(--r-chrome); }
+.corner-demo-box.rounded { border-radius: 12px; opacity: 0.25; }
+.corner-demo-box.rounded::after {
+  content: "✕"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  color: var(--paper); font-family: var(--mono); font-size: 24px;
+}
+
+/* ─── MOTION — demonstrable lanes ──────────────────────────────── */
+.motion-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+}
+@media (max-width: 720px) { .motion-pair { grid-template-columns: 1fr; } }
+.motion-card {
+  background: var(--paper);
+  padding: var(--s-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  min-height: 320px;
+}
+.motion-card h4 {
+  font-family: var(--serif);
+  font-size: 32px;
+  line-height: 1;
+  font-weight: 400;
+}
+.motion-card h4 em { font-style: italic; color: var(--warm-deep); }
+.motion-card .m-meta { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; color: var(--ink-muted); text-transform: uppercase; }
+.lane {
+  margin-top: auto;
+  height: 60px;
+  border-top: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+  position: relative;
+  background:
+    linear-gradient(to right, var(--hairline) 1px, transparent 1px) 0 0 / calc(100% / 10) 100%;
+}
+.lane .dot {
+  position: absolute;
+  top: 50%;
+  left: 4%;
+  width: 20px; height: 20px;
+  background: var(--warm);
+  border: 1px solid var(--warm-deep);
+  transform: translate(-50%, -50%);
+}
+.lane.running .dot { animation: spring 1100ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.lane.tween .dot { background: var(--cool); border-color: oklch(0.45 0.15 235); }
+.lane.tween.running .dot { animation: tween 300ms cubic-bezier(0.4, 0, 0.2, 1) both; }
+@keyframes spring {
+  0%   { left: 4%; }
+  100% { left: 96%; }
+}
+@keyframes tween {
+  0%   { left: 4%; }
+  100% { left: 96%; }
+}
+.play-btn {
+  align-self: flex-start;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  background: var(--ink);
+  color: var(--paper);
+  border: 1px solid var(--ink);
+  border-radius: var(--r-chrome);
+  padding: 10px 18px;
+  cursor: pointer;
+  transition: background 120ms;
+}
+.play-btn:hover { background: var(--warm-deep); border-color: var(--warm-deep); }
+.play-btn::after { content: " →"; }
+
+.motion-notes {
+  margin-top: var(--s-10);
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+  border: 1px solid var(--hairline);
+}
+@media (max-width: 720px) { .motion-notes { grid-template-columns: 1fr; } }
+.mnote {
+  padding: var(--s-6);
+  border-right: 1px solid var(--hairline);
+}
+.mnote:last-child { border-right: 0; }
+.mnote h5 {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink);
+  margin-bottom: var(--s-3);
+}
+.mnote p { color: var(--ink-muted); font-size: 14px; max-width: 40ch; }
+
+/* ─── CHROME & GLASS — dark demo scenes ────────────────────────── */
+.glass-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-5);
+}
+@media (max-width: 720px) { .glass-pair { grid-template-columns: 1fr; } }
+.glass-card {
+  background: var(--night);
+  padding: 0;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--night-hair);
+}
+.glass-stage {
+  aspect-ratio: 4/3;
+  position: relative;
+  background:
+    radial-gradient(ellipse 60% 50% at 22% 38%, oklch(0.26 0.04 45) 0%, transparent 70%),
+    radial-gradient(ellipse 50% 50% at 78% 55%, oklch(0.22 0.03 70) 0%, transparent 70%),
+    linear-gradient(160deg, var(--night) 0%, var(--night-5) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--s-5);
+}
+.glass-stage::before {
+  /* simulated art — canvas 1 */
+  content: "";
+  position: absolute;
+  left: 8%; top: 14%;
+  width: 36%; aspect-ratio: 3/4;
+  background:
+    linear-gradient(180deg, oklch(0.56 0.09 42) 0%, oklch(0.32 0.05 35) 100%);
+  border: 1px solid oklch(0.65 0.08 40);
+  box-shadow: 0 30px 60px -15px oklch(0 0 0 / 0.6);
+}
+.glass-stage::after {
+  /* simulated art — canvas 2 */
+  content: "";
+  position: absolute;
+  right: 8%; top: 22%;
+  width: 40%; aspect-ratio: 5/4;
+  background:
+    radial-gradient(ellipse at 30% 70%, oklch(0.72 0.08 75) 0%, oklch(0.48 0.06 60) 60%, oklch(0.32 0.04 50) 100%);
+  border: 1px solid oklch(0.62 0.06 70);
+  box-shadow: 0 30px 60px -15px oklch(0 0 0 / 0.6);
+}
+.glass-pill {
+  position: relative; z-index: 2;
+  background: oklch(0.18 0.01 260 / 0.5);
+  backdrop-filter: blur(18px) saturate(1.5);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  border: 1px solid oklch(1 0 0 / 0.15);
+  border-radius: var(--r-chrome);
+  padding: 10px 18px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--night-ink);
+  text-transform: uppercase;
+  box-shadow: 0 8px 24px -4px oklch(0 0 0 / 0.4);
+}
+.glass-pill.warm {
+  background: oklch(0.78 0.14 62 / 0.25);
+  border-color: oklch(0.78 0.14 62 / 0.5);
+  color: oklch(0.95 0.08 65);
+}
+.glass-label {
+  padding: var(--s-4) var(--s-5);
+  background: var(--night);
+  color: var(--night-muted);
+  border-top: 1px solid var(--night-hair);
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.glass-label strong { color: var(--night-ink); font-weight: 500; }
+
+/* ─── KNOBS — numbered index ───────────────────────────────────── */
+.knobs {
+  border: 1px solid var(--ink);
+}
+.knob-row {
+  display: grid;
+  grid-template-columns: 60px 200px 1fr 200px;
+  gap: var(--s-6);
+  padding: var(--s-5) var(--s-6);
+  border-bottom: 1px solid var(--hairline);
+  align-items: baseline;
+}
+@media (max-width: 720px) { .knob-row { grid-template-columns: 40px 1fr; gap: var(--s-3); } }
+.knob-row:last-child { border-bottom: 0; }
+.knob-row .k-n {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 32px;
+  line-height: 1;
+  color: var(--warm-deep);
+  font-weight: 400;
+}
+.knob-row .k-name {
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+  font-weight: 500;
+}
+.knob-row .k-desc {
+  font-size: 14px;
+  color: var(--ink-muted);
+  line-height: 1.5;
+  max-width: 48ch;
+}
+.knob-row .k-range {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--ink-muted);
+  text-align: right;
+}
+@media (max-width: 720px) {
+  .knob-row .k-name, .knob-row .k-desc, .knob-row .k-range { grid-column: 2; text-align: left; padding: 0; }
+}
+
+/* ─── ROOM — 3 environments, no card chrome ────────────────────── */
+.rooms {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--ink);
+  border: 1px solid var(--ink);
+}
+@media (max-width: 860px) { .rooms { grid-template-columns: 1fr; } }
+.room-pane {
+  background: var(--paper);
+  display: flex;
+  flex-direction: column;
+}
+.room-label {
+  padding: var(--s-4) var(--s-5);
+  border-bottom: 1px solid var(--hairline);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+.room-label strong { color: var(--ink); font-weight: 500; }
+.room-box {
+  aspect-ratio: 4/3;
+  position: relative;
+  background:
+    linear-gradient(
+      to bottom,
+      oklch(0.20 0.02 calc(260 - (var(--knob-time-warmth, 0.5) * 210)) / calc(1 - var(--knob-time-warmth, 0.5) * 0.4)),
+      oklch(0.14 0.02 calc(260 - (var(--knob-time-warmth, 0.5) * 210)))
+    );
+  overflow: hidden;
+}
+.room-box::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at 30% 25%,
+    oklch(0.85 0.14 calc(80 - (var(--knob-time-warmth, 0.5) * 25)) / calc(0.2 + var(--knob-time-warmth, 0.5) * 0.4)) 0%,
+    transparent 55%
+  );
+  pointer-events: none;
+}
+.room-box .work {
+  position: absolute;
+  background: oklch(0.96 0.01 80);
+  box-shadow: 0 8px 20px -6px oklch(0 0 0 / 0.5);
+}
+.room-box .work.dim { opacity: calc(0.5 + var(--knob-time-warmth, 0.5) * 0.25); }
+.room-box .work.alive {
+  box-shadow:
+    0 8px 20px -6px oklch(0 0 0 / 0.5),
+    0 0 calc(24px + var(--knob-warmth-multiplier, 0.7) * 40px)
+      calc(4px + var(--knob-warmth-multiplier, 0.7) * 8px)
+      oklch(0.78 0.14 62 / calc(0.3 + var(--knob-warmth-multiplier, 0.7) * 0.4));
+}
+
+/* ─── AI PRIMITIVES — tighter editorial tiles ──────────────────── */
+.prim-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  border: 1px solid var(--ink);
+}
+@media (max-width: 860px) { .prim-grid { grid-template-columns: 1fr; } }
+.prim {
+  border-right: 1px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+  display: flex;
+  flex-direction: column;
+}
+.prim:nth-child(2n) { border-right: 0; }
+.prim:nth-last-child(-n+2):not(:nth-child(2n-1)) { border-bottom: 0; }
+.prim:last-child { border-bottom: 0; }
+.prim .p-stage {
+  padding: var(--s-8);
+  min-height: 280px;
+  background: var(--paper-5);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--s-3);
+}
+.prim .p-foot {
+  padding: var(--s-5) var(--s-6);
+  border-top: 1px solid var(--ink);
+  background: var(--paper);
+}
+.prim .p-foot code { font-family: var(--mono); font-size: 11px; color: var(--ink); }
+.prim .p-foot p { margin-top: var(--s-2); color: var(--ink-muted); font-size: 13px; line-height: 1.5; }
+
+/* field display */
+.field-row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: var(--s-4);
+  padding: var(--s-2) 0;
+  border-bottom: 1px solid var(--hairline);
+  align-items: baseline;
+}
+.field-row:last-child { border-bottom: 0; }
+.f-key { font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-muted); }
+.f-val { font-family: var(--serif); font-size: 20px; color: var(--ink); }
+.f-val[data-src="ai"] { color: var(--ink-ai); font-style: italic; }
+.f-val[data-src="user"] { color: var(--ink); }
+.f-val[data-low="1"] { text-decoration: underline dotted oklch(0.55 0.18 25); text-decoration-thickness: 1.5px; text-underline-offset: 4px; }
+
+/* diff */
+.diff-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto;
+  gap: var(--s-3);
+  align-items: center;
+  padding: var(--s-3) 0;
+  border-bottom: 1px solid var(--hairline);
+  font-family: var(--serif);
+  font-size: 18px;
+}
+.diff-row:last-child { border-bottom: 0; }
+.diff-row .d-orig { color: var(--ink-muted); text-decoration: line-through; text-decoration-thickness: 1px; }
+.diff-row .d-arrow { font-family: var(--mono); color: var(--warm-deep); font-size: 12px; }
+.diff-row .d-prop { color: var(--ink-ai); font-style: italic; }
+.diff-row .d-accept {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 5px 10px;
+  border: 0;
+  border-radius: var(--r-chrome);
+  cursor: pointer;
+}
+.diff-row .d-accept:hover { background: var(--warm-deep); }
+
+/* stream */
+.stream-box {
+  font-family: var(--serif);
+  font-size: 20px;
+  line-height: 1.45;
+  color: var(--ink-ai);
+  font-style: italic;
+  min-height: 100px;
+}
+.caret { display: inline-block; width: 2px; height: 0.9em; background: var(--warm-deep); margin-left: 2px; vertical-align: -2px; animation: caret 800ms infinite steps(2); }
+@keyframes caret { 0% { opacity: 1; } 50% { opacity: 0; } }
+
+/* queue */
+.queue-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--s-4);
+  padding: var(--s-4);
+  border: 1px solid var(--hairline);
+  align-items: center;
+}
+.queue-row + .queue-row { border-top: 0; }
+.bars { display: flex; gap: 3px; align-items: flex-end; }
+.bars span { width: 3px; background: var(--warm-deep); animation: bar 1200ms infinite ease-in-out; }
+.bars span:nth-child(1) { height: 8px; animation-delay: 0ms; }
+.bars span:nth-child(2) { height: 14px; animation-delay: 120ms; }
+.bars span:nth-child(3) { height: 10px; animation-delay: 240ms; }
+@keyframes bar { 0%, 100% { transform: scaleY(0.5); } 50% { transform: scaleY(1); } }
+
+/* agents — horizontal rail */
+.agents {
+  margin-top: var(--s-16);
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--ink);
+  border: 1px solid var(--ink);
+}
+@media (max-width: 860px) { .agents { grid-template-columns: repeat(2, 1fr); } }
+.agent {
+  background: var(--paper);
+  padding: var(--s-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-height: 200px;
+}
+.agent .a-head { display: flex; justify-content: space-between; align-items: baseline; }
+.agent .a-n {
+  font-family: var(--serif);
+  font-size: 44px;
+  font-style: italic;
+  line-height: 0.9;
+  color: var(--warm-deep);
+}
+.agent .a-status {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+.agent .a-status.live { color: var(--warm-deep); }
+.agent .a-status.live::before { content: "● "; color: var(--warm-deep); }
+.agent h4 {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 400;
+  margin-top: auto;
+}
+.agent p { color: var(--ink-muted); font-size: 13px; line-height: 1.5; }
+
+/* ─── CHROME PRIMITIVES ────────────────────────────────────────── */
+.chrome-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0;
+  border: 1px solid var(--ink);
+}
+@media (max-width: 860px) { .chrome-grid { grid-template-columns: 1fr; } }
+.chrome-cell {
+  border-right: 1px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+  display: flex;
+  flex-direction: column;
+}
+.chrome-cell:nth-child(2n) { border-right: 0; }
+.chrome-cell:nth-last-child(-n+2) { border-bottom: 0; }
+.chrome-cell .c-stage {
+  padding: var(--s-8);
+  background: var(--paper-5);
+  min-height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.chrome-cell .c-foot {
+  padding: var(--s-5) var(--s-6);
+  border-top: 1px solid var(--ink);
+}
+.chrome-cell .c-foot code { font-family: var(--mono); font-size: 11px; color: var(--ink); }
+.chrome-cell .c-foot p { margin-top: var(--s-2); color: var(--ink-muted); font-size: 13px; }
+
+/* popover demo */
+.pop-wrap { display: flex; flex-direction: column; align-items: center; gap: var(--s-6); }
+.pop-trigger {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  background: var(--ink);
+  color: var(--paper);
+  border: 0;
+  border-radius: var(--r-chrome);
+  padding: 10px 18px;
+  cursor: pointer;
+}
+.pop-body {
+  padding: var(--s-4);
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  border-radius: var(--r-chrome);
+  max-width: 240px;
+  box-shadow: 4px 4px 0 var(--ink);
+  font-family: var(--serif);
+  font-size: 14px;
+  color: var(--ink);
+  line-height: 1.4;
+}
+.pop-body .pop-cap { font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--warm-deep); margin-bottom: var(--s-2); font-style: normal; }
+
+/* phone */
+.phone {
+  width: 180px;
+  aspect-ratio: 9/19;
+  background: var(--ink);
+  padding: 8px;
+  position: relative;
+  box-shadow: 0 24px 48px -12px oklch(0 0 0 / 0.3);
+}
+.phone .notch { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); width: 60px; height: 18px; background: var(--ink); border-radius: 10px; z-index: 2; }
+.phone .screen {
+  width: 100%; height: 100%;
+  background: var(--night);
+  padding: 38px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+  position: relative;
+}
+.phone .p-wall {
+  flex: 1;
+  background: oklch(0.17 0.01 260);
+  position: relative;
+}
+.phone .p-wall .pw { position: absolute; background: var(--paper); }
+.phone .p-cta {
+  padding: 8px;
+  background: var(--warm);
+  color: var(--ink);
+  border-radius: var(--r-chrome);
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* CTA stack */
+.cta-stack { display: flex; flex-direction: column; gap: var(--s-3); min-width: 280px; }
+.cta {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 14px 20px;
+  text-align: left;
+  border: 1px solid var(--ink);
+  border-radius: var(--r-chrome);
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.cta:hover { background: var(--ink); color: var(--paper); }
+.cta.solid { background: var(--ink); color: var(--paper); }
+.cta.solid:hover { background: var(--warm-deep); border-color: var(--warm-deep); }
+.cta.warm { background: var(--warm); border-color: var(--warm); }
+.cta.warm:hover { background: var(--warm-deep); border-color: var(--warm-deep); color: var(--paper); }
+.cta::after { content: "→"; font-weight: 500; }
+
+/* tiers */
+.tier-stack { display: flex; flex-direction: column; width: 100%; border: 1px solid var(--ink); }
+.tier {
+  display: grid;
+  grid-template-columns: 60px 1fr auto;
+  gap: var(--s-4);
+  padding: var(--s-4) var(--s-5);
+  border-bottom: 1px solid var(--hairline);
+  align-items: center;
+}
+.tier:last-child { border-bottom: 0; }
+.tier .t-letter {
+  font-family: var(--serif);
+  font-size: 44px;
+  font-style: italic;
+  line-height: 1;
+  color: var(--warm-deep);
+}
+.tier.a .t-letter { color: var(--warm-deep); }
+.tier .t-name { font-size: 14px; color: var(--ink); }
+.tier .t-desc { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-muted); }
+
+/* ─── A11Y ─────────────────────────────────────────────────────── */
+.canvas-stub {
+  aspect-ratio: 4/3;
+  background: var(--night);
+  position: relative;
+  width: 100%;
+  border: 1px solid var(--night-hair);
+}
+.entity {
+  position: absolute;
+  background: oklch(0.6 0.03 80);
+  border: 1px solid oklch(0.7 0.03 80);
+  width: 18%;
+}
+.entity.focused {
+  outline: 2px solid var(--warm);
+  outline-offset: 3px;
+}
+.a11y-rules {
+  padding: var(--s-6);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 2;
+  color: var(--ink);
+  background: var(--paper);
+}
+.a11y-rules .ar-row { display: flex; gap: var(--s-3); padding: var(--s-2) 0; border-bottom: 1px dashed var(--hairline); }
+.a11y-rules .ar-row:last-child { border-bottom: 0; }
+.a11y-rules .ar-row::before { content: "▸"; color: var(--warm-deep); }
+
+/* ─── GATES — index style, grid of small labels ────────────────── */
+.gate-section {
+  margin-top: var(--s-10);
+}
+.gate-section h3 {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink);
+  margin-bottom: var(--s-5);
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: var(--s-4);
+  align-items: center;
+}
+.gate-section h3 .rule { height: 1px; background: var(--hairline); }
+.gate-section h3 .count { color: var(--ink-muted); }
+
+.gate-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1px;
+  background: var(--hairline);
+  border: 1px solid var(--hairline);
+}
+.gate {
+  background: var(--paper);
+  padding: var(--s-3) var(--s-4);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+  display: flex;
+  gap: var(--s-3);
+  align-items: baseline;
+}
+.gate .g-id {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 18px;
+  color: var(--warm-deep);
+  min-width: 32px;
+}
+.gate.a .g-id { color: var(--cool); }
+.gate:hover { background: var(--ink); color: var(--paper); }
+.gate:hover .g-id { color: var(--warm); }
+
+/* The one test */
+.one-test {
+  margin-top: var(--s-20);
+  padding: var(--s-16) var(--s-12);
+  background: var(--night);
+  color: var(--night-ink);
+  border: 1px solid var(--ink);
+  position: relative;
+}
+.one-test::before {
+  content: "§";
+  position: absolute;
+  top: var(--s-6); right: var(--s-8);
+  font-family: var(--serif);
+  font-size: 80px;
+  color: var(--warm);
+  line-height: 1;
+}
+.one-test .ot-eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--warm); margin-bottom: var(--s-6); }
+.one-test .ot-body {
+  font-family: var(--serif);
+  font-size: clamp(28px, 3.6vw, 44px);
+  line-height: 1.15;
+  font-weight: 400;
+  max-width: 28ch;
+  letter-spacing: -0.01em;
+}
+.one-test .ot-body em { font-style: italic; color: var(--warm); }
+.one-test .ot-foot {
+  margin-top: var(--s-8);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--night-muted);
+  text-transform: uppercase;
+}
+
+/* ─── Colophon ─────────────────────────────────────────────────── */
+.colophon {
+  padding: var(--s-16) 0 var(--s-12);
+  border-top: 1px solid var(--ink);
+  background: var(--paper-5);
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--s-8);
+}
+@media (max-width: 720px) { .colophon { grid-template-columns: 1fr; } }
+.colophon h5 {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: var(--s-4);
+  color: var(--ink-muted);
+}
+.colophon p { font-family: var(--mono); font-size: 12px; line-height: 1.9; color: var(--ink); }
+.colophon p a:hover { color: var(--warm-deep); }
+.colophon .big {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 28px;
+  line-height: 1.1;
+  color: var(--ink);
+}
+
+/* ─── TWEAKS panel ─────────────────────────────────────────────── */
+.tweaks {
+  position: fixed;
+  right: var(--s-5); bottom: var(--s-5);
+  width: 320px;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  border-radius: var(--r-chrome);
+  padding: var(--s-5);
+  z-index: 60;
+  transform: translateY(calc(100% + var(--s-6)));
+  transition: transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 8px 8px 0 var(--ink);
+}
+.tweaks.on { transform: translateY(0); }
+.tweaks h4 {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  margin-bottom: var(--s-4);
+  padding-bottom: var(--s-3);
+  border-bottom: 1px solid var(--ink);
+  display: flex; justify-content: space-between; align-items: baseline;
+}
+.tweaks h4 span { font-family: var(--serif); font-style: italic; font-size: 18px; color: var(--warm-deep); letter-spacing: 0; text-transform: none; }
+.t-row {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: var(--s-3);
+  padding: var(--s-3) 0;
+  border-bottom: 1px dashed var(--hairline);
+  align-items: center;
+}
+.t-row:last-of-type { border-bottom: 0; }
+.t-row label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-muted); }
+.seg { display: flex; border: 1px solid var(--ink); border-radius: var(--r-chrome); overflow: hidden; }
+.seg button {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--paper);
+  border: 0;
+  padding: 6px 4px;
+  cursor: pointer;
+  color: var(--ink);
+  border-right: 1px solid var(--ink);
+}
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+
+/* Accent swatch picker */
+.accent-row { grid-template-columns: 90px 1fr; align-items: start; }
+.accent-swatches {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+}
+.accent-swatches button {
+  position: relative;
+  background: transparent;
+  border: 1px solid var(--hairline);
+  padding: 4px 4px 14px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  transition: border-color 140ms, transform 140ms;
+}
+.accent-swatches button span {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  border: 1px solid oklch(0 0 0 / 0.15);
+}
+.accent-swatches button em {
+  font-family: var(--mono);
+  font-style: normal;
+  font-size: 7px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  text-align: center;
+  position: absolute;
+  left: 0; right: 0; bottom: 3px;
+}
+.accent-swatches button:hover { border-color: var(--ink); }
+.accent-swatches button[aria-pressed="true"] {
+  border-color: var(--ink);
+  transform: translateY(-2px);
+  box-shadow: 2px 2px 0 var(--ink);
+}
+.accent-swatches button[aria-pressed="true"] em { color: var(--ink); }
+.t-row input[type="range"] {
+  width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  height: 20px;
+}
+.t-row input[type="range"]::-webkit-slider-runnable-track {
+  height: 1px; background: var(--ink);
+}
+.t-row input[type="range"]::-moz-range-track { height: 1px; background: var(--ink); }
+.t-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px; height: 12px;
+  background: var(--warm);
+  border: 1px solid var(--ink);
+  margin-top: -6px;
+  cursor: pointer;
+}
+.t-row input[type="range"]::-moz-range-thumb {
+  width: 12px; height: 12px; background: var(--warm); border: 1px solid var(--ink); cursor: pointer;
+}
+.tweaks-foot { margin-top: var(--s-3); padding-top: var(--s-3); border-top: 1px solid var(--hairline); font-family: var(--mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-muted); }
+kbd { font-family: var(--mono); font-size: 10px; border: 1px solid var(--ink); padding: 1px 5px; }
+
+/* ─── Section index (TOC) ──────────────────────────────────────── */
+.toc {
+  padding: var(--s-10) 0;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--paper-5);
+}
+.toc-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0;
+}
+@media (max-width: 860px) { .toc-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 540px) { .toc-grid { grid-template-columns: repeat(2, 1fr); } }
+.toc-item {
+  padding: var(--s-4);
+  border-right: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  cursor: pointer;
+}
+.toc-item:hover { background: var(--paper); }
+.toc-item:last-child { border-right: 0; }
+.toc-item .t-n {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 28px;
+  color: var(--warm-deep);
+  line-height: 1;
+}
+.toc-item .t-name {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.toc-item .t-sub {
+  font-size: 12px;
+  color: var(--ink-muted);
+  line-height: 1.3;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   APPENDICES — machine layer
+   Structured reference for Claude Code. Same visual system.
+   ════════════════════════════════════════════════════════════════ */
+
+section.appendix {
+  background: var(--paper-5);
+  border-top: 2px solid var(--ink);
+}
+section.appendix + section.appendix {
+  border-top: 1px solid var(--hairline);
+}
+.apx-eyebrow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-5);
+  margin-bottom: var(--s-6);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+.apx-eyebrow strong {
+  color: var(--warm-deep);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+.apx-eyebrow .apx-pagenum {
+  margin-left: auto;
+  font-style: italic;
+  font-family: var(--serif);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 14px;
+  color: var(--ink-muted);
+}
+
+/* Copy-paste code blocks */
+.code-block {
+  background: var(--ink);
+  color: var(--night-ink);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.65;
+  padding: var(--s-8);
+  border-radius: var(--r-chrome);
+  overflow-x: auto;
+  position: relative;
+  margin: var(--s-6) 0;
+}
+.code-block::before {
+  content: attr(data-lang);
+  position: absolute;
+  top: var(--s-3);
+  right: var(--s-4);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: oklch(0.6 0.02 80);
+}
+.code-block .c-comment { color: oklch(0.55 0.02 80); font-style: italic; }
+.code-block .c-prop { color: oklch(0.78 0.12 40); }
+.code-block .c-val { color: oklch(0.85 0.04 80); }
+.code-block .c-num { color: oklch(0.72 0.16 240); }
+.code-block .c-key { color: oklch(0.72 0.16 240); }
+.code-block .c-str { color: oklch(0.78 0.12 40); }
+
+.copy-btn {
+  position: absolute;
+  top: var(--s-3);
+  right: var(--s-20);
+  background: transparent;
+  color: var(--night-muted);
+  border: 1px solid var(--night-hair);
+  border-radius: var(--r-chrome);
+  padding: 4px 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+.copy-btn:hover { background: var(--night-hair); color: var(--night-ink); }
+.copy-btn.copied { color: var(--warm); border-color: var(--warm); }
+
+/* Gate table — full detail */
+.gate-family {
+  margin-bottom: var(--s-16);
+}
+.gate-family-head {
+  display: grid;
+  grid-template-columns: 200px 1fr auto;
+  align-items: baseline;
+  gap: var(--s-6);
+  padding-bottom: var(--s-3);
+  margin-bottom: var(--s-5);
+  border-bottom: 1px solid var(--ink);
+}
+.gate-family-head .gf-name {
+  font-family: var(--serif);
+  font-size: 28px;
+  font-style: italic;
+  color: var(--warm-deep);
+}
+.gate-family-head .gf-desc {
+  font-size: 14px;
+  color: var(--ink-muted);
+  max-width: 60ch;
+}
+.gate-family-head .gf-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+.gate-table {
+  display: grid;
+  grid-template-columns: 60px 180px 1fr 120px 80px;
+  gap: 0;
+  font-size: 13px;
+}
+@media (max-width: 900px) {
+  .gate-table { grid-template-columns: 48px 1fr; }
+  .gate-table .gt-fail, .gate-table .gt-folder, .gate-table .gt-auto { display: none; }
+}
+.gate-table .gt-head {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--hairline);
+  background: transparent;
+}
+.gate-table > div:not(.gt-head) {
+  padding: 14px 12px;
+  border-bottom: 1px solid var(--hairline);
+  line-height: 1.45;
+}
+.gate-table .gt-id {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 18px;
+  color: var(--warm-deep);
+  padding-left: 0;
+}
+.gate-table .gt-name {
+  font-weight: 500;
+  color: var(--ink);
+}
+.gate-table .gt-fail {
+  color: var(--ink-muted);
+  font-size: 12.5px;
+}
+.gate-table .gt-fail code {
+  font-family: var(--mono);
+  font-size: 11px;
+  background: var(--paper-10);
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+.gate-table .gt-folder {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-muted);
+  letter-spacing: 0;
+}
+.gate-table .gt-auto {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+.gate-table .gt-auto.yes { color: var(--warm-deep); }
+
+/* Component inventory */
+.comp-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px;
+  background: var(--hairline);
+  border: 1px solid var(--hairline);
+}
+@media (max-width: 900px) { .comp-grid { grid-template-columns: 1fr; } }
+.comp-card {
+  background: var(--paper);
+  padding: var(--s-5) var(--s-6);
+}
+.comp-card .c-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-4);
+  margin-bottom: var(--s-3);
+}
+.comp-card .c-name {
+  font-family: var(--serif);
+  font-size: 22px;
+  color: var(--ink);
+}
+.comp-card .c-path {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-muted);
+  letter-spacing: 0;
+}
+.comp-card .c-desc {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink-muted);
+  margin-bottom: var(--s-4);
+}
+.comp-card .c-signature {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  background: var(--paper-10);
+  padding: var(--s-3);
+  border-radius: var(--r-chrome);
+  color: var(--ink);
+  line-height: 1.6;
+  overflow-x: auto;
+  margin-bottom: var(--s-3);
+}
+.comp-card .c-refs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+.comp-card .c-refs .ref {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  background: var(--paper-10);
+  color: var(--ink-muted);
+  border-radius: var(--r-chrome);
+}
+.comp-card .c-refs .ref.gate { color: var(--warm-deep); }
+.comp-card .c-refs .ref.knob { color: oklch(0.46 0.03 245); }
+
+/* Folder tree */
+.tree {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.75;
+  color: var(--ink);
+  background: var(--paper);
+  padding: var(--s-6);
+  border: 1px solid var(--hairline);
+  white-space: pre;
+  overflow-x: auto;
+}
+.tree .t-dir { color: var(--ink); font-weight: 500; }
+.tree .t-note { color: var(--ink-muted); font-style: italic; }
+.tree .t-gate { color: var(--warm-deep); }
+
+/* First-boot checklist */
+.boot-list {
+  counter-reset: boot;
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 1px;
+  background: var(--hairline);
+  border: 1px solid var(--hairline);
+}
+.boot-list li {
+  counter-increment: boot;
+  background: var(--paper);
+  padding: var(--s-5) var(--s-6) var(--s-5) calc(var(--s-6) * 2);
+  position: relative;
+}
+.boot-list li::before {
+  content: counter(boot, decimal-leading-zero);
+  position: absolute;
+  left: var(--s-5);
+  top: var(--s-5);
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 20px;
+  color: var(--warm-deep);
+  line-height: 1;
+}
+.boot-list li h4 {
+  font-family: var(--sans);
+  font-size: 15px;
+  font-weight: 500;
+  margin-bottom: var(--s-2);
+  letter-spacing: -0.005em;
+}
+.boot-list li p {
+  font-size: 13.5px;
+  color: var(--ink-muted);
+  line-height: 1.5;
+  margin-bottom: var(--s-3);
+  max-width: 72ch;
+}
+.boot-list li .cmd {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--ink);
+  color: var(--night-ink);
+  padding: 8px 14px;
+  border-radius: var(--r-chrome);
+  display: inline-block;
+}
+
+/* Doctrine edit protocol */
+.doctrine-protocol {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-6);
+  margin-top: var(--s-8);
+}
+@media (max-width: 860px) { .doctrine-protocol { grid-template-columns: 1fr; } }
+.dp-card {
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  padding: var(--s-6);
+}
+.dp-card h4 {
+  font-family: var(--serif);
+  font-size: 20px;
+  font-style: italic;
+  color: var(--warm-deep);
+  margin-bottom: var(--s-3);
+}
+.dp-card h4::before {
+  content: "§ ";
+  color: var(--ink-muted);
+  font-style: normal;
+  font-family: var(--mono);
+  font-size: 14px;
+}
+.dp-card p {
+  font-size: 14px;
+  line-height: 1.55;
+  margin-bottom: var(--s-3);
+  max-width: 46ch;
+}
+.dp-card ul {
+  list-style: none;
+  padding: 0;
+  margin: var(--s-3) 0 0;
+}
+.dp-card ul li {
+  padding: 6px 0 6px 20px;
+  font-size: 13px;
+  color: var(--ink-muted);
+  line-height: 1.5;
+  position: relative;
+}
+.dp-card ul li::before {
+  content: "—";
+  position: absolute;
+  left: 0;
+  color: var(--warm-deep);
+  font-family: var(--mono);
+}
+
+/* Apx runner (opening of appendix block) */
+.apx-runner {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: var(--s-5);
+  padding-bottom: var(--s-4);
+  margin-bottom: var(--s-10);
+  border-bottom: 2px solid var(--ink);
+}
+.apx-runner .ar-title {
+  font-family: var(--serif);
+  font-size: clamp(44px, 5vw, 64px);
+  line-height: 1.0;
+  letter-spacing: -0.015em;
+}
+.apx-runner .ar-title em { color: var(--warm-deep); }
+.apx-runner .ar-meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  text-align: right;
+  line-height: 1.8;
+}
+
+/* Example pair — violation / fix */
+.example-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--hairline);
+  margin: var(--s-5) 0;
+  border: 1px solid var(--hairline);
+}
+@media (max-width: 720px) { .example-pair { grid-template-columns: 1fr; } }
+.example-pair .ex {
+  background: var(--paper);
+  padding: var(--s-5);
+}
+.example-pair .ex .ex-head {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: var(--s-3);
+}
+.example-pair .ex.bad .ex-head { color: oklch(0.55 0.18 25); }
+.example-pair .ex.good .ex-head { color: var(--warm-deep); }
+.example-pair .ex pre {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+</style>
+</head>
+<body>
+
+<!-- Registration marks -->
+<div class="reg-mark tl"></div>
+<div class="reg-mark tr"></div>
+<div class="reg-mark bl"></div>
+<div class="reg-mark br"></div>
+
+<!-- Masthead -->
+<header class="masthead">
+  <div class="ms-l">
+    <strong>PANG</strong>
+    <span>DS · v0.1</span>
+    <span class="stamp" id="stamp">2026.04.22 · 11:04:00</span>
+  </div>
+  <div class="ms-c">The room the collection lives in.</div>
+  <div class="ms-r">
+    <span>9 KNOBS</span>
+    <span>47 GATES</span>
+    <span>4 AGENTS</span>
+    <span class="apx-jump">APX</span>
+    <em>⌘T</em>
+  </div>
+</header>
+
+<!-- HERO -->
+<section class="hero" data-screen-label="00 Cover">
+  <div class="page">
+    <div class="kicker">
+      <span>DESIGN SYSTEM <em>№1</em></span>
+      <span class="rule"></span>
+      <span>SPRING 2026</span>
+      <span class="rule"></span>
+      <span>INTERNAL · NOT FOR CIRCULATION</span>
+    </div>
+    <h1>
+      A quiet <em>room</em>,<br>
+      the size of <em>a collection</em>.
+    </h1>
+    <div class="sub">
+      <div class="folio">
+        <strong>PANG_DS / 2026 / V0.1</strong><br>
+        ED. — C. JAMISON<br>
+        ART — STUDIO PANG<br>
+        TYPE — INSTRUMENT SERIF /<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;GEIST MONO /<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;GEIST SANS<br>
+        PRINT — 1440 × 4× A4<br>
+        SET — OKLCH
+      </div>
+      <p class="lede">
+        PANG is not an app of screens — it is one continuous space.
+        This document is the visual ledger of the system that makes the space hold:
+        <strong>one opinionated base</strong>, <strong>nine bounded knobs</strong>,
+        <strong>forty-seven mechanical gates</strong>, and a voice that does not introduce itself.
+      </p>
+    </div>
+
+    <div class="stats">
+      <div><div class="n">09</div><div class="k">Knobs / bounded</div></div>
+      <div><div class="n">47</div><div class="k">Build gates</div></div>
+      <div><div class="n">04</div><div class="k">AI agents</div></div>
+      <div><div class="n">33</div><div class="k">Primitives</div></div>
+      <div><div class="n">04</div><div class="k">Voice registers</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- Table of contents -->
+<section class="toc tight" style="padding: 0;" data-screen-label="00a Contents">
+  <div class="page" style="padding-top: var(--s-6); padding-bottom: var(--s-6);">
+    <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom: var(--s-4);">
+      <div class="label">Contents</div>
+      <div class="label">§ 12 parts</div>
+    </div>
+    <div class="toc-grid">
+      <a class="toc-item" href="#voice"><div class="t-n">01</div><div class="t-name">Voice</div><div class="t-sub">Four registers, never mixed.</div></a>
+      <a class="toc-item" href="#color"><div class="t-n">02</div><div class="t-name">Color</div><div class="t-sub">OKLCH only. Warm is earned.</div></a>
+      <a class="toc-item" href="#type"><div class="t-n">03</div><div class="t-name">Type</div><div class="t-sub">Serif display, sans body.</div></a>
+      <a class="toc-item" href="#scale"><div class="t-n">04</div><div class="t-name">Space</div><div class="t-sub">A scale. Zero radius.</div></a>
+      <a class="toc-item" href="#motion"><div class="t-n">05</div><div class="t-name">Motion</div><div class="t-sub">Springs by default.</div></a>
+      <a class="toc-item" href="#glass"><div class="t-n">06</div><div class="t-name">Chrome &amp; glass</div><div class="t-sub">Liquid glass, routed.</div></a>
+      <a class="toc-item" href="#knobs"><div class="t-n">07</div><div class="t-name">The nine knobs</div><div class="t-sub">Every point proofed.</div></a>
+      <a class="toc-item" href="#room"><div class="t-n">08</div><div class="t-name">The Room</div><div class="t-sub">Space, not a grid.</div></a>
+      <a class="toc-item" href="#ai"><div class="t-n">09</div><div class="t-name">AI primitives</div><div class="t-sub">Thinking alongside her.</div></a>
+      <a class="toc-item" href="#chrome"><div class="t-n">10</div><div class="t-name">Chrome prims</div><div class="t-sub">Native, not hand-rolled.</div></a>
+      <a class="toc-item" href="#a11y"><div class="t-n">11</div><div class="t-name">A11y floor</div><div class="t-sub">WCAG 2.2 + EAA.</div></a>
+      <a class="toc-item" href="#gates"><div class="t-n">12</div><div class="t-name">Gates</div><div class="t-sub">Build-failure conditions.</div></a>
+    </div>
+  </div>
+</section>
+
+<!-- 01 VOICE -->
+<section id="voice" data-screen-label="01 Voice">
+  <div class="page">
+    <div class="sec-head">
+      <div class="sec-num">01</div>
+      <div class="sec-title">
+        <div class="eyebrow">Chapter one · Voice</div>
+        <h2>One character,<br><em>four registers.</em></h2>
+      </div>
+      <div class="sec-meta">
+        PART OF → PANG_VOICE.MD<br>
+        GATES → A4, A5, P14<br>
+        OWNED BY → EDITORIAL
+      </div>
+    </div>
+
+    <p class="sec-lede drop-cap">
+      The voice is the room the collection lives in. A gallery room does not introduce itself, does not apologize, does not narrate. Every string traces back to one of <strong>four registers</strong>. Strings that drift between them read as two voices glued together, and the lint gate refuses the commit.
+    </p>
+
+    <div class="voice-grid" role="table" aria-label="Voice registers: approved and rejected examples">
+      <div class="v-reg">Quiet</div>
+      <div class="v-good">Provenance</div>
+      <div class="v-bad">Learn more about the provenance of this artwork</div>
+
+      <div class="v-reg">Quiet</div>
+      <div class="v-good">Offline</div>
+      <div class="v-bad">You are currently offline</div>
+
+      <div class="v-reg">Warm</div>
+      <div class="v-good">Your fourth Hojgaard, the largest.</div>
+      <div class="v-bad">Welcome back to your amazing collection!</div>
+
+      <div class="v-reg">Warm</div>
+      <div class="v-good">Add to wall</div>
+      <div class="v-bad">Confirm and add to collection</div>
+
+      <div class="v-reg">Confident</div>
+      <div class="v-good">Certificate of Authenticity recognized</div>
+      <div class="v-bad">We have successfully detected your CoA!</div>
+
+      <div class="v-reg">Confident</div>
+      <div class="v-good">Filed</div>
+      <div class="v-bad">Your document has been filed successfully</div>
+
+      <div class="v-reg">Factual</div>
+      <div class="v-good">Connection lost. Try again.</div>
+      <div class="v-bad">Oops — we lost connection. Sorry about that!</div>
+
+      <div class="v-reg">Factual</div>
+      <div class="v-good">Camera access not allowed. Enable in Settings.</div>
+      <div class="v-bad">Please allow camera access to continue</div>
+    </div>
+
+    <div class="bans">
+      <div class="ban-card">
+        <div class="ban-t"><span>— Banned in prose</span><span>A5</span></div>
+        <p>renowned · celebrated · acclaimed · iconic · seminal · groundbreaking · pioneering · one&nbsp;of&nbsp;the&nbsp;most&nbsp;important · widely&nbsp;regarded · known&nbsp;as&nbsp;a&nbsp;master&nbsp;of</p>
+      </div>
+      <div class="ban-card">
+        <div class="ban-t"><span>— Banned in chrome</span><span>P14</span></div>
+        <p>seamless · powerful · beautifully&nbsp;designed · intelligent · intuitive · delightful · premium · successfully · welcome! · let's&nbsp;get&nbsp;started</p>
+      </div>
+      <div class="ban-card">
+        <div class="ban-t"><span>— Refused mechanics</span><span>A4</span></div>
+        <p class="prose">
+          First-person <em>(I / we / us)</em>,
+          exclamation marks,
+          apology, hedging, title case,
+          questions-as-chrome,
+          celebration preambles.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 02 COLOR -->
+<section id="color" data-screen-label="02 Color">
+  <div class="page">
+    <div class="sec-head">
+      <div class="sec-num">02</div>
+      <div class="sec-title">
+        <div class="eyebrow">Chapter two · Color</div>
+        <h2><em>OKLCH</em> only.<br>No hex. No HSL.</h2>
+      </div>
+      <div class="sec-meta">
+        GATES → P11, P12<br>
+        FORMAT → oklch(L C H)<br>
+        MODE → light-dark()
+      </div>
+    </div>
+
+    <p class="sec-lede">
+      Perceptual uniformity is the point — equal chroma steps read as equal chroma on the eye. <strong>Warm is earned</strong>: it appears in the arrival lamp and nowhere else. <strong>Cool is the verification tone.</strong> Everything between is paper and ink. A file that imports a hex literal fails the commit.
+    </p>
+
+    <div class="palette-band">
+      <h3>Paper &amp; ink · locked</h3>
+      <div class="tonal-row">
+        <div class="swatch" style="background: oklch(0.985 0.004 80); color: oklch(0.14 0.01 80);">
+          <div><div class="s-name">Paper 0</div><div class="s-val">0.985 / 0.004 / 80</div><div class="s-use">Page ground</div></div>
+          <div class="s-num">00</div>
+        </div>
+        <div class="swatch" style="background: oklch(0.95 0.005 80); color: oklch(0.14 0.01 80);">
+          <div><div class="s-name">Paper 5</div><div class="s-val">0.950 / 0.005 / 80</div><div class="s-use">Surface lift</div></div>
+          <div class="s-num">05</div>
+        </div>
+        <div class="swatch" style="background: oklch(0.82 0.008 78); color: oklch(0.14 0.01 80);">
+          <div><div class="s-name">Paper 20</div><div class="s-val">0.820 / 0.008 / 78</div><div class="s-use">Hairline</div></div>
+          <div class="s-num">20</div>
+        </div>
+        <div class="swatch" style="background: oklch(0.52 0.012 80); color: oklch(0.985 0.004 80);">
+          <div><div class="s-name">Ink 60</div><div class="s-val">0.520 / 0.012 / 80</div><div class="s-use">Muted body</div></div>
+          <div class="s-num">60</div>
+        </div>
+        <div class="swatch" style="background: oklch(0.42 0.012 75); color: oklch(0.985 0.004 80);">
+          <div><div class="s-name">Ink 40</div><div class="s-val">0.420 / 0.012 / 75</div><div class="s-use">AI voice</div></div>
+          <div class="s-num">40</div>
+        </div>
+        <div class="swatch" style="background: oklch(0.14 0.01 80); color: oklch(0.985 0.004 80);">
+          <div><div class="s-name">Ink 0</div><div class="s-val">0.140 / 0.010 / 80</div><div class="s-use">User voice</div></div>
+          <div class="s-num">00</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="palette-band">
+      <h3>Night · the Room after dark</h3>
+      <div class="tonal-row night">
+        <div class="swatch" style="background: oklch(0.11 0.008 260); color: oklch(0.96 0.005 80);">
+          <div><div class="s-name">Night 0</div><div class="s-val">0.110 / 0.008 / 260</div><div class="s-use">Canvas wall</div></div>
+          <div class="s-num">00</div>
+        </div>
+        <div class="swatch" style="background: oklch(0.17 0.010 260); color: oklch(0.96 0.005 80);">
+          <div><div class="s-name">Night 5</div><div class="s-val">0.170 / 0.010 / 260</div><div class="s-use">Lifted surface</div></div>
+          <div class="s-num">05</div>
+        </div>
+        <div class="swatch" style="background: oklch(0.24 0.012 258); color: oklch(0.96 0.005 80);">
+          <div><div class="s-name">Night 15</div><div class="s-val">0.240 / 0.012 / 258</div><div class="s-use">Pressed state</div></div>
+          <div class="s-num">15</div>
+        </div>
+        <div class="swatch" style="background: oklch(0.52 0.015 255); color: oklch(0.96 0.005 80);">
+          <div><div class="s-name">Night 40</div><div class="s-val">0.520 / 0.015 / 255</div><div class="s-use">Night muted</div></div>
+          <div class="s-num">40</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="palette-band">
+      <h3>Accents · earned, narrow use</h3>
+      <div class="tonal-row accent">
+        <div class="swatch" style="background: oklch(0.78 0.14 62); color: oklch(0.14 0.01 80);">
+          <div><div class="s-name">Warm · lamp</div><div class="s-val">0.780 / 0.140 / 62</div><div class="s-use">Arrival · ownership</div></div>
+          <div class="s-num">W</div>
+        </div>
+        <div class="swatch" style="background: oklch(0.58 0.16 50); color: oklch(0.96 0.005 80);">
+          <div><div class="s-name">Warm · deep</div><div class="s-val">0.580 / 0.160 / 50</div><div class="s-use">Ink accent, links</div></div>
+          <div class="s-num">WD</div>
+        </div>
+        <div class="swatch" style="background: oklch(0.66 0.13 230); color: oklch(0.14 0.01 80);">
+          <div><div class="s-name">Cool · verified</div><div class="s-val">0.660 / 0.130 / 230</div><div class="s-use">Confirmation</div></div>
+          <div class="s-num">C</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 03 TYPE -->
+<section id="type" data-screen-label="03 Type">
+  <div class="page">
+    <div class="sec-head">
+      <div class="sec-num">03</div>
+      <div class="sec-title">
+        <div class="eyebrow">Chapter three · Type</div>
+        <h2>A serif that <em>holds the room.</em></h2>
+      </div>
+      <div class="sec-meta">
+        GATES → P13, P14<br>
+        DISPLAY → INSTRUMENT SERIF<br>
+        UI → GEIST · GEIST MONO
+      </div>
+    </div>
+
+    <p class="sec-lede drop-cap">
+      Display is set in Instrument Serif — the italic holds the moments that matter (arrival, ownership, the one test). UI runs on Geist; data and gate IDs on Geist Mono. Sentence case for body, MONO-CAP-SPACED for labels. Title case is never allowed. <code class="inline">size-adjust</code> is tuned so fallback stacks hold the same metrics — zero CLS on first paint.
+    </p>
+
+    <div class="type-specimen">
+      <div class="ts-tag">Display / serif</div>
+      <div class="ts-sample" style="font-family: var(--serif); font-size: clamp(48px, 7vw, 88px); line-height: 0.95; letter-spacing: -0.02em;">A quiet <em style="color: var(--warm-deep);">room.</em></div>
+      <div class="ts-meta">INSTRUMENT SERIF<br>REG + ITALIC<br>-0.02em<br>USE → HERO · § § H2</div>
+    </div>
+    <div class="type-specimen">
+      <div class="ts-tag">Arrival line</div>
+      <div class="ts-sample" style="font-family: var(--serif); font-size: 32px; line-height: 1.2; font-style: italic;">Your fourth Hojgaard, the largest.</div>
+      <div class="ts-meta">SERIF ITALIC<br>32 / 1.20<br>USE → WARM REGISTER</div>
+    </div>
+    <div class="type-specimen">
+      <div class="ts-tag">Body</div>
+      <div class="ts-sample" style="font-size: 17px; line-height: 1.55; max-width: 52ch;">Danish painter based in Copenhagen. His figurative work draws on Nordic folk iconography and recent painting from Leipzig.</div>
+      <div class="ts-meta">GEIST 400<br>17 / 1.55<br>USE → PROSE</div>
+    </div>
+    <div class="type-specimen">
+      <div class="ts-tag">Metadata</div>
+      <div class="ts-sample muted" style="font-size: 14px; line-height: 1.5;">Oil on linen · 180 × 140 cm · 2024</div>
+      <div class="ts-meta">GEIST 400<br>14 / 1.50 · INK 60<br>USE → WALL LABEL</div>
+    </div>
+    <div class="type-specimen">
+      <div class="ts-tag">Label</div>
+      <div class="ts-sample label" style="font-size: 12px;">PROVENANCE · 2019 COPENHAGEN · 2024 BRUSSELS</div>
+      <div class="ts-meta">GEIST MONO 500<br>12 CAP · 0.14em<br>USE → CHROME</div>
+    </div>
+    <div class="type-specimen">
+      <div class="ts-tag">Mono</div>
+      <div class="ts-sample" style="font-family: var(--mono); font-size: 13px;">P1 · P23 · A5 · A14 · A23</div>
+      <div class="ts-meta">GEIST MONO 500<br>13 / 1.50<br>USE → GATE IDS · TIMESTAMPS</div>
+    </div>
+  </div>
+</section>
+
+<!-- 04 SPACE -->
+<section id="scale" data-screen-label="04 Space">
+  <div class="page">
+    <div class="sec-head">
+      <div class="sec-num">04</div>
+      <div class="sec-title">
+        <div class="eyebrow">Chapter four · Space &amp; corners</div>
+        <h2>A scale,<br><em>not a fudge.</em></h2>
+      </div>
+      <div class="sec-meta">
+        GATES → P9, P24<br>
+        BASE → 8px<br>
+        RADIUS → 0
+      </div>
+    </div>
+
+    <p class="sec-lede">
+      Every length in the codebase resolves to this scale or fails <code class="inline">P24</code>. Two-tier radii, mechanical: <strong>0</strong> for containers, wall labels, and anything that sits next to a work; <strong>2&nbsp;px</strong> for interactive chrome — buttons, pills, fields, the Tweaks panel. Anything above 4&nbsp;px outside <code class="inline">chrome/</code> fails <code class="inline">P9</code>.
+    </p>
+
+    <div style="display: grid; grid-template-columns: 1fr; max-width: 900px;">
+      <div class="ruler"><div class="r-name">s-1 · 4</div><div class="r-bar" style="width: 4px;"></div><div class="r-use">Icon padding</div></div>
+      <div class="ruler"><div class="r-name">s-2 · 8</div><div class="r-bar" style="width: 8px;"></div><div class="r-use">Tag gaps</div></div>
+      <div class="ruler"><div class="r-name">s-3 · 12</div><div class="r-bar" style="width: 12px;"></div><div class="r-use">Inline rhythm</div></div>
+      <div class="ruler"><div class="r-name">s-4 · 16</div><div class="r-bar" style="width: 16px;"></div><div class="r-use">Card gutters</div></div>
+      <div class="ruler"><div class="r-name">s-6 · 24</div><div class="r-bar" style="width: 24px;"></div><div class="r-use">Wall gap default</div></div>
+      <div class="ruler"><div class="r-name">s-8 · 32</div><div class="r-bar" style="width: 32px;"></div><div class="r-use">Section rhythm</div></div>
+      <div class="ruler"><div class="r-name">s-12 · 48</div><div class="r-bar" style="width: 48px;"></div><div class="r-use">Breathing room</div></div>
+      <div class="ruler"><div class="r-name">s-16 · 64</div><div class="r-bar" style="width: 64px;"></div><div class="r-use">Page-level breaks</div></div>
+      <div class="ruler"><div class="r-name">s-24 · 96</div><div class="r-bar" style="width: 96px;"></div><div class="r-use">Chapter spacing</div></div>
+    </div>
+
+    <div class="corner-note">
+      <div class="cn-text">
+        <h4>Two tiers,<br><em>not a spectrum.</em></h4>
+        <p>Sharp frames the art; <strong>2&nbsp;px softens the hand</strong>. Small enough to read as sharp at arm's length, large enough to feel intentional in the palm. No 6, no 8, no 12. Either 0 or chrome — nothing between — and nothing above four outside <code class="inline">chrome/</code>.</p>
+      </div>
+      <div class="cn-demo">
+        <div>
+          <div class="label" style="margin-bottom: 8px;">Containers · 0</div>
+          <div class="corner-demo-box"></div>
+        </div>
+        <div>
+          <div class="label" style="margin-bottom: 8px;">Chrome · 2</div>
+          <div class="corner-demo-box chrome"></div>
+        </div>
+        <div>
+          <div class="label" style="margin-bottom: 8px;">✕ Refused</div>
+          <div class="corner-demo-box rounded"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 05 MOTION -->
+<section id="motion" data-screen-label="05 Motion">
+  <div class="page">
+    <div class="sec-head">
+      <div class="sec-num">05</div>
+      <div class="sec-title">
+        <div class="eyebrow">Chapter five · Motion</div>
+        <h2>Springs by default.<br><em>Tweens by exception.</em></h2>
+      </div>
+      <div class="sec-meta">
+        GATES → P15, P16<br>
+        LIB → src/lib/motion/presets.ts<br>
+        VIEW TRANSITIONS → ARRIVAL · DETAIL
+      </div>
+    </div>
+
+    <p class="sec-lede">
+      Motion One presets live at <code class="inline">src/lib/motion/presets.ts</code>. A component that writes its own <code class="inline">duration:</code> fails the lint gate. Arrival and detail navigation use the native View Transitions API — <strong>not</strong> Framer Motion.
+    </p>
+
+    <div class="motion-pair">
+      <div class="motion-card">
+        <div class="m-meta">Spring · roomEnter</div>
+        <h4><em>Warm</em> overshoot.</h4>
+        <p class="muted" style="font-size: 14px; max-width: 40ch;">stiffness 170 · damping 26 · mass 1. Arrival of the Room. A touch of overshoot — like a painting settling on its hook.</p>
+        <div class="lane" id="lane-spring"><div class="dot"></div></div>
+        <button class="play-btn" data-lane="lane-spring">Play</button>
+      </div>
+      <div class="motion-card">
+        <div class="m-meta">Tween · arrivalLamp  (exception)</div>
+        <h4>Load-bearing <em>linearity.</em></h4>
+        <p class="muted" style="font-size: 14px; max-width: 40ch;">cubic-bezier(0.4, 0, 0.2, 1) · 300ms. The only sanctioned tween. Used when timing must be predictable — the lamp crossfade.</p>
+        <div class="lane tween" id="lane-tween"><div class="dot"></div></div>
+        <button class="play-btn" data-lane="lane-tween">Play</button>
+      </div>
+    </div>
+
+    <div class="motion-notes">
+      <div class="mnote">
+        <h5>View Transitions</h5>
+        <p>Cross-document. Arrival chapter. Detail zoom. Detail-to-detail navigation.</p>
+      </div>
+      <div class="mnote">
+        <h5>Reduced motion</h5>
+        <p>Every preset ships with a reduced-motion variant — fades replace slides. Enforced by <code class="inline">P23</code>.</p>
+      </div>
+      <div class="mnote">
+        <h5>Tonal breath</h5>
+        <p>A one-beat hold. Silence as information when streaming throughput drops below 5 tokens / second.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 06 GLASS -->
+<section id="glass" class="dark" data-screen-label="06 Chrome and glass">
+  <div class="page">
+    <div class="sec-head">
+      <div class="sec-num">06</div>
+      <div class="sec-title">
+        <div class="eyebrow">Chapter six · Chrome &amp; glass</div>
+        <h2>Liquid glass,<br><em>routed.</em></h2>
+      </div>
+      <div class="sec-meta">
+        GATES → P9<br>
+        FOLDER → src/components/chrome/<br>
+        SURFACE → CHROME ONLY
+      </div>
+    </div>
+
+    <p class="sec-lede">
+      Translucency is a carve-out, not a default. Only chrome elements — the floating verify pill, the offline banner, the install hint — use <code class="inline">backdrop-filter</code>. Art surfaces do not. A component importing glass utilities from outside <code class="inline">src/components/chrome/</code> fails <code class="inline">P9</code>.
+    </p>
+
+    <div class="glass-pair">
+      <div class="glass-card">
+        <div class="glass-stage"><div class="glass-pill">OFFLINE</div></div>
+        <div class="glass-label"><strong>Offline banner</strong> <span>blur 22 · sat 1.6</span></div>
+      </div>
+      <div class="glass-card">
+        <div class="glass-stage"><div class="glass-pill warm">VERIFIED BY GALERIE DROSTE</div></div>
+        <div class="glass-label"><strong>Verify pill · warm</strong> <span>earned / confirmed</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 07 KNOBS -->
+<section id="knobs" data-screen-label="07 Knobs">
+  <div class="page">
+    <div class="sec-head">
+      <div class="sec-num">07</div>
+      <div class="sec-title">
+        <div class="eyebrow">Chapter seven · Knobs</div>
+        <h2 class="title-tight">One base, <em>nine bounded axes.</em></h2>
+      </div>
+      <div class="sec-meta">
+        GATES → P24<br>
+        STORAGE → OPFS<br>
+        TENTH KNOB → DOCTRINE EDIT REQUIRED
+      </div>
+    </div>
+
+    <p class="sec-lede">
+      Open theming produces a long tail of combinations nobody designed. PANG ships one base and nine bounded knobs — every point on each axis is proofed. A tenth knob added without a doctrine edit fails <code class="inline">P24</code>. Preferences persist to OPFS, never <code class="inline">localStorage</code>.
+    </p>
+
+    <div class="knobs">
+      <div class="knob-row"><div class="k-n">01</div><div class="k-name">time-warmth</div><div class="k-desc">Dawn → night. Drives Room light &amp; arrival-field warmth. Registered as a <code class="inline">@property</code>.</div><div class="k-range">0.00 — 1.00</div></div>
+      <div class="knob-row"><div class="k-n">02</div><div class="k-name">warmth-multiplier</div><div class="k-desc">How much warmer an alive work glows than its neighbours on the wall.</div><div class="k-range">0.00 — 1.50</div></div>
+      <div class="knob-row"><div class="k-n">03</div><div class="k-name">wall-gap</div><div class="k-desc">Density between works on the wall. Persists per-collector.</div><div class="k-range">16 — 48 px</div></div>
+      <div class="knob-row"><div class="k-n">04</div><div class="k-name">room-scale</div><div class="k-desc">How much of the viewport the Room occupies at rest.</div><div class="k-range">0.75 — 1.25</div></div>
+      <div class="knob-row"><div class="k-n">05</div><div class="k-name">motion</div><div class="k-desc">Binary. Swaps every preset to its reduced-motion variant.</div><div class="k-range">0 | 1</div></div>
+      <div class="knob-row"><div class="k-n">06</div><div class="k-name">audio</div><div class="k-desc">Spatial audio opt-in. Silence is default.</div><div class="k-range">0 | 1</div></div>
+      <div class="knob-row"><div class="k-n">07</div><div class="k-name">haptics</div><div class="k-desc"><code class="inline">navigator.vibrate</code> on arrival and confirm.</div><div class="k-range">0 | 1</div></div>
+      <div class="knob-row"><div class="k-n">08</div><div class="k-name">name</div><div class="k-desc">Collector's display name. Used in ownership warmth, exactly once.</div><div class="k-range">string · ≤ 40</div></div>
+      <div class="knob-row"><div class="k-n">09</div><div class="k-name">theme</div><div class="k-desc"><code class="inline">auto</code> · <code class="inline">light</code> · <code class="inline">night</code>. <code class="inline">light-dark()</code> resolves the rest.</div><div class="k-range">enum · 3</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 08 ROOM -->
+<section id="room" data-screen-label="08 Room">
+  <div class="page">
+    <div class="sec-head">
+      <div class="sec-num">08</div>
+      <div class="sec-title">
+        <div class="eyebrow">Chapter eight · The Room</div>
+        <h2>The home surface<br>is <em>a space,</em> not a grid.</h2>
+      </div>
+      <div class="sec-meta">
+        RENDERER → WEBGPU → WEBGL → DOM<br>
+        GATE → P19<br>
+        BREATHES WITH → TIME-WARMTH
+      </div>
+    </div>
+
+    <p class="sec-lede">
+      Works hang at their true relative sizes. The room breathes with the time of day. A work with something alive — gallery opening, auction comparable, museum loan — is lit slightly warmer; the eye finds it without being told. WebGPU primary, WebGL 2 fallback, DOM grid as the low-end fallback.
+    </p>
+
+    <div class="rooms">
+      <div class="room-pane">
+        <div class="room-label"><strong>Morning</strong> <span>t 0.15</span></div>
+        <div class="room-box" style="--knob-time-warmth: 0.15; --knob-warmth-multiplier: 0.4;">
+          <div class="work alive" style="left: 14%; top: 30%; width: 14%; aspect-ratio: 3/4;"></div>
+          <div class="work" style="left: 34%; top: 22%; width: 22%; aspect-ratio: 5/4;"></div>
+          <div class="work dim" style="left: 62%; top: 34%; width: 12%; aspect-ratio: 3/5;"></div>
+          <div class="work dim" style="left: 80%; top: 42%; width: 10%; aspect-ratio: 1/1;"></div>
+        </div>
+      </div>
+      <div class="room-pane">
+        <div class="room-label"><strong>Afternoon</strong> <span>t 0.50</span></div>
+        <div class="room-box" style="--knob-time-warmth: 0.5; --knob-warmth-multiplier: 0.7;">
+          <div class="work alive" style="left: 14%; top: 30%; width: 14%; aspect-ratio: 3/4;"></div>
+          <div class="work" style="left: 34%; top: 22%; width: 22%; aspect-ratio: 5/4;"></div>
+          <div class="work dim" style="left: 62%; top: 34%; width: 12%; aspect-ratio: 3/5;"></div>
+          <div class="work dim" style="left: 80%; top: 42%; width: 10%; aspect-ratio: 1/1;"></div>
+        </div>
+      </div>
+      <div class="room-pane">
+        <div class="room-label"><strong>Night</strong> <span>t 0.92</span></div>
+        <div class="room-box" style="--knob-time-warmth: 0.92; --knob-warmth-multiplier: 1.1;">
+          <div class="work alive" style="left: 14%; top: 30%; width: 14%; aspect-ratio: 3/4;"></div>
+          <div class="work" style="left: 34%; top: 22%; width: 22%; aspect-ratio: 5/4;"></div>
+          <div class="work dim" style="left: 62%; top: 34%; width: 12%; aspect-ratio: 3/5;"></div>
+          <div class="work dim" style="left: 80%; top: 42%; width: 10%; aspect-ratio: 1/1;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 09 AI -->
+<section id="ai" data-screen-label="09 AI primitives">
+  <div class="page">
+    <div class="sec-head">
+      <div class="sec-num">09</div>
+      <div class="sec-title">
+        <div class="eyebrow">Chapter nine · AI primitives</div>
+        <h2>The app <em>thinks</em><br>alongside her.</h2>
+      </div>
+      <div class="sec-meta">
+        GATES → A13, A14, A15, A16<br>
+        MODEL → CLAUDE SONNET 4.6<br>
+        AI INK → 0.42 / 0.012 / 75
+      </div>
+    </div>
+
+    <p class="sec-lede">
+      The four primitives that expose AI state to Laura. <strong>AI ink is warm gray</strong>; user ink is near-black. Low-confidence fields get a dotted underline. AI output is always amendable — <strong>never replaced by a modal.</strong>
+    </p>
+
+    <div class="prim-grid">
+      <div class="prim">
+        <div class="p-stage">
+          <div class="label">ABOUT THE ARTIST</div>
+          <div class="field-row"><div class="f-key">Artist</div><div class="f-val" data-src="ai">Laust Hojgaard</div></div>
+          <div class="field-row"><div class="f-key">Title</div><div class="f-val" data-src="ai" data-low="1">Studio, evening</div></div>
+          <div class="field-row"><div class="f-key">Year</div><div class="f-val" data-src="user">2024</div></div>
+          <div class="field-row"><div class="f-key">Medium</div><div class="f-val" data-src="ai">Oil on linen</div></div>
+          <div class="field-row"><div class="f-key">Dimensions</div><div class="f-val" data-src="ai" data-low="1">180 × 140 cm</div></div>
+        </div>
+        <div class="p-foot">
+          <code>&lt;Confidence source="ai" confidence={…} /&gt;</code>
+          <p>Warm gray = AI proposed. Near-black = Laura confirmed. Dotted underline = confidence &lt; 0.5.</p>
+        </div>
+      </div>
+
+      <div class="prim">
+        <div class="p-stage">
+          <div class="diff-row">
+            <div class="d-orig">Untitled</div>
+            <div class="d-arrow">→</div>
+            <div class="d-prop">Studio, evening</div>
+            <button class="d-accept">Accept</button>
+          </div>
+          <div class="diff-row">
+            <div class="d-orig">2023</div>
+            <div class="d-arrow">→</div>
+            <div class="d-prop">2024</div>
+            <button class="d-accept">Accept</button>
+          </div>
+          <div class="diff-row">
+            <div class="d-orig">—</div>
+            <div class="d-arrow">→</div>
+            <div class="d-prop">Oil on linen</div>
+            <button class="d-accept">Accept</button>
+          </div>
+        </div>
+        <div class="p-foot">
+          <code>&lt;Diff original proposed onAccept onAmend /&gt;</code>
+          <p>Proposed value sits next to existing. Tap Accept, or tap the value itself to amend. No modal.</p>
+        </div>
+      </div>
+
+      <div class="prim">
+        <div class="p-stage">
+          <div class="label">STREAM · 12 t/s</div>
+          <div class="stream-box" id="stream-demo"></div>
+        </div>
+        <div class="p-foot">
+          <code>&lt;StreamingText source={asyncIterator} /&gt;</code>
+          <p>Word-boundary chunks. ≥ 10 t/s contract. Below 5 t/s → tonal breath.</p>
+        </div>
+      </div>
+
+      <div class="prim">
+        <div class="p-stage">
+          <div class="queue-row">
+            <div>
+              <div class="label">SAVED LOCALLY</div>
+              <div style="font-size:13px; color: var(--ink-muted); margin-top: 4px;">Will upload when online.</div>
+            </div>
+            <div class="bars"><span></span><span></span><span></span></div>
+          </div>
+          <div class="queue-row">
+            <div><div class="label">OFFLINE</div></div>
+            <div style="font-family: var(--mono); font-size: 11px; color: var(--ink-muted);">3 JOBS QUEUED</div>
+          </div>
+        </div>
+        <div class="p-foot">
+          <code>&lt;QueueBanner /&gt;</code>
+          <p>Appears only when queued jobs exist. TUS-resumable via OPFS. Retries silently on reconnect.</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top: var(--s-16); display:flex; justify-content: space-between; align-items: baseline; margin-bottom: var(--s-4);">
+      <div class="label">— Four agents, not forty.</div>
+      <div class="label">§ intake · enrichment · narrative · correspondence</div>
+    </div>
+    <div class="agents">
+      <div class="agent">
+        <div class="a-head"><div class="a-n">01</div><div class="a-status live">Live</div></div>
+        <h4>Intake</h4>
+        <p>Raw photo / email / CoA → structured artwork + arrival data. Claude Sonnet 4.6 (Vision).</p>
+      </div>
+      <div class="agent">
+        <div class="a-head"><div class="a-n">02</div><div class="a-status">Iter. #4</div></div>
+        <h4>Enrichment</h4>
+        <p>Artwork + provenance → structured timeline. Batch API (50% cost).</p>
+      </div>
+      <div class="agent">
+        <div class="a-head"><div class="a-n">03</div><div class="a-status">Iter. #10</div></div>
+        <h4>Narrative</h4>
+        <p>Collection state → monthly reading. Opus 4.6. One paragraph, maximum.</p>
+      </div>
+      <div class="agent">
+        <div class="a-head"><div class="a-n">04</div><div class="a-status">Iter. #8</div></div>
+        <h4>Correspondence</h4>
+        <p>Artwork + gallery → pre-written verification request. Amendable.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 10 CHROME PRIMITIVES -->
+<section id="chrome" data-screen-label="10 Chrome primitives">
+  <div class="page">
+    <div class="sec-head">
+      <div class="sec-num">10</div>
+      <div class="sec-title">
+        <div class="eyebrow">Chapter ten · Chrome primitives</div>
+        <h2 class="title-balance"><em>Native surfaces,</em> not hand-rolled.</h2>
+      </div>
+      <div class="sec-meta">
+        GATES → P17, P18<br>
+        APIS → ANCHOR · POPOVER · VT · CQ<br>
+        PORTALS → NONE
+      </div>
+    </div>
+
+    <p class="sec-lede">
+      2026 capabilities replace a decade of workarounds. Anchor Positioning replaces portals. The Popover API replaces modal state. Container queries replace viewport media queries inside components. View Transitions replace <code class="inline">AnimatePresence</code>.
+    </p>
+
+    <div class="chrome-grid">
+      <div class="chrome-cell">
+        <div class="c-stage">
+          <div class="pop-wrap">
+            <button class="pop-trigger">Provenance</button>
+            <div class="pop-body">
+              <div class="pop-cap">2019 · COPENHAGEN</div>
+              Painted during the Copenhagen residency. Shown at Spring Open Studios the same year.
+            </div>
+          </div>
+        </div>
+        <div class="c-foot">
+          <code>anchor() + [popover]</code>
+          <p>Native anchoring. No <code class="inline">createPortal</code>. Gate <code class="inline">P17</code>.</p>
+        </div>
+      </div>
+
+      <div class="chrome-cell">
+        <div class="c-stage">
+          <div class="phone">
+            <div class="notch"></div>
+            <div class="screen">
+              <div class="label" style="color: var(--night-muted); font-size: 8px;">LAURA · 14 WORKS</div>
+              <div class="p-wall">
+                <div class="pw alive" style="left: 10%; top: 28%; width: 22%; aspect-ratio: 3/4; box-shadow: 0 0 18px 4px oklch(0.78 0.14 62 / 0.55);"></div>
+                <div class="pw" style="left: 38%; top: 20%; width: 28%; aspect-ratio: 5/4;"></div>
+                <div class="pw" style="left: 72%; top: 32%; width: 18%; aspect-ratio: 3/5; opacity: 0.7;"></div>
+              </div>
+              <div class="p-cta">ADD YOUR FIRST WORK</div>
+            </div>
+          </div>
+        </div>
+        <div class="c-foot">
+          <code>PWA install · home screen</code>
+          <p>No install popups. No marketing shell. The gallery's link is acquisition and install in one gesture.</p>
+        </div>
+      </div>
+
+      <div class="chrome-cell">
+        <div class="c-stage">
+          <div class="cta-stack">
+            <button class="cta solid">Add to wall</button>
+            <button class="cta">Retake photo</button>
+            <button class="cta warm">Ask your gallery to confirm</button>
+          </div>
+        </div>
+        <div class="c-foot">
+          <code>CTA · verb-first, mono-caps</code>
+          <p>≥ 44px hit target. <code class="inline">:focus-visible</code> ring at 2px offset 3px. No <code class="inline">outline: none</code>.</p>
+        </div>
+      </div>
+
+      <div class="chrome-cell">
+        <div class="c-stage">
+          <div class="tier-stack">
+            <div class="tier a"><div class="t-letter">A</div><div><div class="t-name">Modern flagship · WebGPU · View Transitions · Passkeys</div><div class="t-desc">Canvas Room · full ceiling</div></div><div class="label">80%</div></div>
+            <div class="tier"><div class="t-letter">B</div><div><div class="t-name">Mainstream · WebGL 2 · no backdrop-filter</div><div class="t-desc">WebGL Room · solid chrome</div></div><div class="label">18%</div></div>
+            <div class="tier"><div class="t-letter">C</div><div><div class="t-name">Low-end · DOM grid · reduced motion forced</div><div class="t-desc">Grid wall · fades only</div></div><div class="label">2%</div></div>
+          </div>
+        </div>
+        <div class="c-foot">
+          <code>Capability tiers</code>
+          <p>Progressive enhancement is the contract. No tier is an error message.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 11 A11Y -->
+<section id="a11y" data-screen-label="11 Accessibility">
+  <div class="page">
+    <div class="sec-head">
+      <div class="sec-num">11</div>
+      <div class="sec-title">
+        <div class="eyebrow">Chapter eleven · Accessibility floor</div>
+        <h2>A quiet app is<br><em>an accessible app,</em></h2>
+      </div>
+      <div class="sec-meta">
+        GATES → P23<br>
+        STANDARD → WCAG 2.2 AA<br>
+        REGULATION → EAA · BINDING 2026
+      </div>
+    </div>
+
+    <p class="sec-lede">
+      — or it is a quiet app for some people only. WCAG 2.2 AA in the code, European Accessibility Act binding at launch. Canvas keyboard navigability is the hard one — solved with the DOM-mirror pattern: every canvas entity has a matching hidden <code class="inline">&lt;li tabindex="0"&gt;</code>; <code class="inline">ctx.drawFocusIfNeeded</code> paints the platform ring through the canvas.
+    </p>
+
+    <div class="chrome-grid">
+      <div class="chrome-cell">
+        <div class="c-stage" style="padding: 0; background: var(--night);">
+          <div class="canvas-stub" style="border: 0;">
+            <div class="entity focused" style="left: 18%; top: 22%; aspect-ratio: 3/4;"></div>
+            <div class="entity" style="left: 46%; top: 30%; aspect-ratio: 5/4;"></div>
+            <div class="entity" style="left: 74%; top: 40%; aspect-ratio: 3/5;"></div>
+          </div>
+        </div>
+        <div class="c-foot">
+          <code>Canvas focus · DOM mirror</code>
+          <p>Sibling <code class="inline">&lt;ul role="list"&gt;</code> hidden via <code class="inline">clip-path: inset(50%)</code> — never <code class="inline">display:none</code>. Tab reaches each entity; ring renders on canvas via <code class="inline">drawFocusIfNeeded</code>.</p>
+        </div>
+      </div>
+
+      <div class="chrome-cell">
+        <div class="c-stage" style="align-items: stretch; padding: 0;">
+          <div class="a11y-rules">
+            <div class="ar-row">Lighthouse a11y ≥ 98 per preview deploy</div>
+            <div class="ar-row">axe-core: 0 serious / 0 critical violations</div>
+            <div class="ar-row">Tap targets ≥ 24×24 CSS px · WCAG 2.2 §2.5.8</div>
+            <div class="ar-row"><code class="inline">:focus-visible</code> discipline · no outline: none outside globals.css</div>
+            <div class="ar-row">Reduced-motion variant per motion preset</div>
+            <div class="ar-row">VoiceOver + NVDA CI smoke · Room works list announced</div>
+          </div>
+        </div>
+        <div class="c-foot">
+          <code>P23 — sub-rules</code>
+          <p>The floor is enforced by CI, not reviewed by hand.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 12 GATES -->
+<section id="gates" data-screen-label="12 Gates">
+  <div class="page">
+    <div class="sec-head">
+      <div class="sec-num">12</div>
+      <div class="sec-title">
+        <div class="eyebrow">Chapter twelve · Gates</div>
+        <h2>Forty-seven mechanical<br>conditions. <em>Not a checklist.</em></h2>
+      </div>
+      <div class="sec-meta">
+        FAIL → BLOCK MERGE<br>
+        AUTHORITY → CI · NOT HUMANS<br>
+        REMOVAL → NAME THE REPLACEMENT
+      </div>
+    </div>
+
+    <p class="sec-lede">
+      Gates are build-failure conditions, not review comments. The runner is the only authority on whether a PR merges. A gate is never removed without naming what replaced it. Gates are <strong>subtractive</strong> — adding one shrinks the space of permissible code.
+    </p>
+
+    <div class="gate-section">
+      <h3><span>PWA + primitive gates</span><span class="rule"></span><span class="count">24 of 47</span></h3>
+      <div class="gate-grid">
+        <div class="gate"><span class="g-id">P1</span><span>Lighthouse 100</span></div>
+        <div class="gate"><span class="g-id">P2</span><span>Manifest</span></div>
+        <div class="gate"><span class="g-id">P3</span><span>SW navPreload</span></div>
+        <div class="gate"><span class="g-id">P4</span><span>Offline shell</span></div>
+        <div class="gate"><span class="g-id">P5</span><span>OPFS</span></div>
+        <div class="gate"><span class="g-id">P6</span><span>CSP strict</span></div>
+        <div class="gate"><span class="g-id">P7</span><span>Vitals + INP + LoAF</span></div>
+        <div class="gate"><span class="g-id">P8</span><span>AVIF primary</span></div>
+        <div class="gate"><span class="g-id">P9</span><span>Sharp corners</span></div>
+        <div class="gate"><span class="g-id">P10</span><span>Passkeys</span></div>
+        <div class="gate"><span class="g-id">P11</span><span>OKLCH only</span></div>
+        <div class="gate"><span class="g-id">P12</span><span>light-dark()</span></div>
+        <div class="gate"><span class="g-id">P13</span><span>size-adjust</span></div>
+        <div class="gate"><span class="g-id">P14</span><span>No title case</span></div>
+        <div class="gate"><span class="g-id">P15</span><span>Springs default</span></div>
+        <div class="gate"><span class="g-id">P16</span><span>View Transitions</span></div>
+        <div class="gate"><span class="g-id">P17</span><span>Anchor + Popover</span></div>
+        <div class="gate"><span class="g-id">P18</span><span>Container queries</span></div>
+        <div class="gate"><span class="g-id">P19</span><span>Canvas for art</span></div>
+        <div class="gate"><span class="g-id">P20</span><span>CV in worker</span></div>
+        <div class="gate"><span class="g-id">P21</span><span>OPFS binaries</span></div>
+        <div class="gate"><span class="g-id">P22</span><span>OTel prod</span></div>
+        <div class="gate"><span class="g-id">P23</span><span>A11y floor</span></div>
+        <div class="gate"><span class="g-id">P24</span><span>Token discipline</span></div>
+      </div>
+    </div>
+
+    <div class="gate-section">
+      <h3><span>AI gates</span><span class="rule"></span><span class="count">23 of 47</span></h3>
+      <div class="gate-grid">
+        <div class="gate a"><span class="g-id">A1</span><span>No JSON.parse</span></div>
+        <div class="gate a"><span class="g-id">A2</span><span>Tool use + Zod</span></div>
+        <div class="gate a"><span class="g-id">A3</span><span>Runtime validation</span></div>
+        <div class="gate a"><span class="g-id">A4</span><span>Voice seed</span></div>
+        <div class="gate a"><span class="g-id">A5</span><span>Banned vocab</span></div>
+        <div class="gate a"><span class="g-id">A6</span><span>Prompt caching</span></div>
+        <div class="gate a"><span class="g-id">A7</span><span>CaMeL dual-LLM</span></div>
+        <div class="gate a"><span class="g-id">A8</span><span>Untrusted&lt;T&gt;</span></div>
+        <div class="gate a"><span class="g-id">A9</span><span>XML-delimited</span></div>
+        <div class="gate a"><span class="g-id">A10</span><span>OTel GenAI spans</span></div>
+        <div class="gate a"><span class="g-id">A11</span><span>Rate limits</span></div>
+        <div class="gate a"><span class="g-id">A12</span><span>Files 24h TTL</span></div>
+        <div class="gate a"><span class="g-id">A13</span><span>≥ 10 t/s stream</span></div>
+        <div class="gate a"><span class="g-id">A14</span><span>Confidence UI</span></div>
+        <div class="gate a"><span class="g-id">A15</span><span>Diff primitive</span></div>
+        <div class="gate a"><span class="g-id">A16</span><span>TUS queue</span></div>
+        <div class="gate a"><span class="g-id">A17</span><span>PII redaction</span></div>
+        <div class="gate a"><span class="g-id">A18</span><span>Per-agent budgets</span></div>
+        <div class="gate a"><span class="g-id">A19</span><span>Model pinning</span></div>
+        <div class="gate a"><span class="g-id">A20</span><span>Batch API</span></div>
+        <div class="gate a"><span class="g-id">A21</span><span>Retry policy</span></div>
+        <div class="gate a"><span class="g-id">A22</span><span>Eval corpus</span></div>
+        <div class="gate a"><span class="g-id">A23</span><span>Cost cap</span></div>
+      </div>
+    </div>
+
+    <div class="one-test">
+      <div class="ot-eyebrow">§ The one test</div>
+      <div class="ot-body">
+        If Laura picks up PANG via the gallery's link and uses it for five minutes without being told what it does, she should feel she walked into <em>a collection</em>, not that she opened an app.
+      </div>
+      <div class="ot-foot">— PANG_Spine.md · non-negotiable</div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════
+     APPENDICES — machine layer
+     Ship-ready reference for Claude Code.
+     ════════════════════════════════════════════════════════════════ -->
+
+<section class="appendix" id="apx-a" data-screen-label="A Tokens">
+  <div class="page">
+    <div class="apx-runner">
+      <div class="ar-title">Appendix <em>A</em> — Tokens</div>
+      <div class="ar-meta">
+        COPY → PASTE<br>
+        FILE → src/styles/tokens.css<br>
+        GATE → P11 · P24
+      </div>
+    </div>
+
+    <p class="sec-lede">
+      Every value the system exposes, in the exact form the code expects. Paste <code class="inline">tokens.css</code> into <code class="inline">src/styles/</code> and import once from <code class="inline">globals.css</code>. The JSON block mirrors the same values for build tools, Tailwind plugins, or Figma sync. Any hex, any HSL, any value not referenced from this file fails <code class="inline">P24</code>.
+    </p>
+
+    <div class="apx-eyebrow"><strong>A.1</strong> CSS custom properties <span class="apx-pagenum">tokens.css</span></div>
+<pre class="code-block" data-lang="CSS"><button class="copy-btn" data-copy="tokens-css">Copy</button><code id="tokens-css">:root {
+  <span class="c-comment">/* ── Paper &amp; ink — perceptual scale in OKLCH ── */</span>
+  --paper:      oklch(0.975 0.004 80);   <span class="c-comment">/* page ground */</span>
+  --paper-5:    oklch(0.950 0.005 80);   <span class="c-comment">/* one step down, surface lift */</span>
+  --paper-10:   oklch(0.900 0.006 78);   <span class="c-comment">/* two steps down, recessed fields */</span>
+  --hairline:   oklch(0.820 0.008 78);   <span class="c-comment">/* 1px dividers only */</span>
+  --ink-muted:  oklch(0.520 0.012 80);   <span class="c-comment">/* body, secondary */</span>
+  --ink-ai:     oklch(0.420 0.012 75);   <span class="c-comment">/* AI-generated text — warm grey */</span>
+  --ink:        oklch(0.140 0.010 80);   <span class="c-comment">/* user text, headlines */</span>
+
+  <span class="c-comment">/* ── Pigment — swappable via Tweaks. Default: Minium. ── */</span>
+  --warm:       oklch(0.74 0.16 38);     <span class="c-comment">/* lamp — pill bg, selection */</span>
+  --warm-deep:  oklch(0.54 0.19 32);     <span class="c-comment">/* deep — italic, numerals, links */</span>
+  --warm-glow:  oklch(0.68 0.22 34);     <span class="c-comment">/* glow — chromatic halo on Night */</span>
+  --cool:       oklch(0.66 0.13 230);    <span class="c-comment">/* verification tone only */</span>
+
+  <span class="c-comment">/* ── Night (dark surface) ── */</span>
+  --night:       oklch(0.11  0.008 260);
+  --night-5:     oklch(0.17  0.010 260);
+  --night-10:    oklch(0.24  0.012 258);
+  --night-hair:  oklch(0.32  0.012 255);
+  --night-muted: oklch(0.62  0.015 255);
+  --night-ink:   oklch(0.96  0.005 80);
+
+  <span class="c-comment">/* ── Spacing — 8px base, mechanical ── */</span>
+  --u:    8px;      <span class="c-comment">/* unit */</span>
+  --s-1:  4px;  --s-2:  8px;  --s-3:  12px;
+  --s-4:  16px; --s-5:  20px; --s-6:  24px;
+  --s-8:  32px; --s-10: 40px; --s-12: 48px;
+  --s-16: 64px; --s-20: 80px; --s-24: 96px; --s-32: 128px;
+
+  <span class="c-comment">/* ── Corners — two tiers, gate P9 ── */</span>
+  --r-chrome: 2px;   <span class="c-comment">/* interactive chrome: buttons, pills, fields, panel */</span>
+  <span class="c-comment">/* all containers, art surfaces, wall labels: radius 0, no variable */</span>
+
+  <span class="c-comment">/* ── Typography stacks — P13 size-adjust tuned ── */</span>
+  --serif: "Instrument Serif", ui-serif, Georgia, serif;
+  --sans:  "Geist", ui-sans-serif, system-ui, sans-serif;
+  --mono:  "Geist Mono", ui-monospace, "SF Mono", monospace;
+
+  <span class="c-comment">/* ── Knobs (9) — @property-registered ── */</span>
+  --knob-time-warmth:        0.5;    <span class="c-comment">/* 0.00 – 1.00 */</span>
+  --knob-warmth-multiplier:  0.7;    <span class="c-comment">/* 0.00 – 1.50 */</span>
+  --knob-wall-gap:          24px;    <span class="c-comment">/* 16 – 48 px */</span>
+  --knob-density:            1.0;    <span class="c-comment">/* 0.85 – 1.25 */</span>
+  --knob-motion:             1.0;    <span class="c-comment">/* 0 | 0.5 | 1 */</span>
+  --knob-confidence-visibility: 1.0; <span class="c-comment">/* 0 – 1 */</span>
+  --knob-serif-weight:       400;    <span class="c-comment">/* 300 – 500 */</span>
+  --knob-label-case:         upper;  <span class="c-comment">/* upper | sentence */</span>
+  --knob-radii:              on;     <span class="c-comment">/* on | flat */</span>
+}
+
+<span class="c-comment">/* Dark surface — triggered by section.dark OR @media dark */</span>
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper:     var(--night);
+    --paper-5:   var(--night-5);
+    --paper-10:  var(--night-10);
+    --hairline:  var(--night-hair);
+    --ink-muted: var(--night-muted);
+    --ink:       var(--night-ink);
+  }
+}
+</code></pre>
+
+    <div class="apx-eyebrow" style="margin-top: var(--s-10);"><strong>A.2</strong> Structured export <span class="apx-pagenum">tokens.json</span></div>
+<pre class="code-block" data-lang="JSON"><button class="copy-btn" data-copy="tokens-json">Copy</button><code id="tokens-json">{
+  <span class="c-key">"color"</span>: {
+    <span class="c-key">"paper"</span>:     { <span class="c-key">"value"</span>: <span class="c-str">"oklch(0.975 0.004 80)"</span>, <span class="c-key">"role"</span>: <span class="c-str">"page-ground"</span> },
+    <span class="c-key">"paper-5"</span>:   { <span class="c-key">"value"</span>: <span class="c-str">"oklch(0.950 0.005 80)"</span>, <span class="c-key">"role"</span>: <span class="c-str">"surface-lift"</span> },
+    <span class="c-key">"paper-10"</span>:  { <span class="c-key">"value"</span>: <span class="c-str">"oklch(0.900 0.006 78)"</span>, <span class="c-key">"role"</span>: <span class="c-str">"recessed"</span> },
+    <span class="c-key">"hairline"</span>:  { <span class="c-key">"value"</span>: <span class="c-str">"oklch(0.820 0.008 78)"</span>, <span class="c-key">"role"</span>: <span class="c-str">"divider"</span> },
+    <span class="c-key">"ink-muted"</span>: { <span class="c-key">"value"</span>: <span class="c-str">"oklch(0.520 0.012 80)"</span>, <span class="c-key">"role"</span>: <span class="c-str">"body"</span> },
+    <span class="c-key">"ink-ai"</span>:    { <span class="c-key">"value"</span>: <span class="c-str">"oklch(0.420 0.012 75)"</span>, <span class="c-key">"role"</span>: <span class="c-str">"ai-output"</span>,  <span class="c-key">"gate"</span>: <span class="c-str">"A14"</span> },
+    <span class="c-key">"ink"</span>:       { <span class="c-key">"value"</span>: <span class="c-str">"oklch(0.140 0.010 80)"</span>, <span class="c-key">"role"</span>: <span class="c-str">"text"</span> },
+    <span class="c-key">"warm"</span>:      { <span class="c-key">"value"</span>: <span class="c-str">"oklch(0.74 0.16 38)"</span>,  <span class="c-key">"role"</span>: <span class="c-str">"accent-lamp"</span> },
+    <span class="c-key">"warm-deep"</span>: { <span class="c-key">"value"</span>: <span class="c-str">"oklch(0.54 0.19 32)"</span>,  <span class="c-key">"role"</span>: <span class="c-str">"accent-ink"</span> },
+    <span class="c-key">"warm-glow"</span>: { <span class="c-key">"value"</span>: <span class="c-str">"oklch(0.68 0.22 34)"</span>,  <span class="c-key">"role"</span>: <span class="c-str">"accent-halo"</span> },
+    <span class="c-key">"cool"</span>:      { <span class="c-key">"value"</span>: <span class="c-str">"oklch(0.66 0.13 230)"</span>, <span class="c-key">"role"</span>: <span class="c-str">"verification"</span> }
+  },
+  <span class="c-key">"space"</span>: {
+    <span class="c-key">"unit"</span>: <span class="c-num">8</span>,
+    <span class="c-key">"scale"</span>: [<span class="c-num">4</span>, <span class="c-num">8</span>, <span class="c-num">12</span>, <span class="c-num">16</span>, <span class="c-num">20</span>, <span class="c-num">24</span>, <span class="c-num">32</span>, <span class="c-num">40</span>, <span class="c-num">48</span>, <span class="c-num">64</span>, <span class="c-num">80</span>, <span class="c-num">96</span>, <span class="c-num">128</span>],
+    <span class="c-key">"gate"</span>: <span class="c-str">"P24"</span>
+  },
+  <span class="c-key">"radii"</span>: {
+    <span class="c-key">"container"</span>: <span class="c-num">0</span>,
+    <span class="c-key">"chrome"</span>:    <span class="c-num">2</span>,
+    <span class="c-key">"gate"</span>:      <span class="c-str">"P9"</span>
+  },
+  <span class="c-key">"type"</span>: {
+    <span class="c-key">"serif"</span>: { <span class="c-key">"family"</span>: <span class="c-str">"Instrument Serif"</span>, <span class="c-key">"role"</span>: <span class="c-str">"display"</span> },
+    <span class="c-key">"sans"</span>:  { <span class="c-key">"family"</span>: <span class="c-str">"Geist"</span>,             <span class="c-key">"role"</span>: <span class="c-str">"ui-body"</span> },
+    <span class="c-key">"mono"</span>:  { <span class="c-key">"family"</span>: <span class="c-str">"Geist Mono"</span>,        <span class="c-key">"role"</span>: <span class="c-str">"data-label"</span> },
+    <span class="c-key">"gate"</span>:  <span class="c-str">"P13 · P14"</span>
+  },
+  <span class="c-key">"knobs"</span>: [
+    { <span class="c-key">"id"</span>: <span class="c-str">"time-warmth"</span>,        <span class="c-key">"range"</span>: [<span class="c-num">0</span>, <span class="c-num">1</span>],     <span class="c-key">"default"</span>: <span class="c-num">0.5</span> },
+    { <span class="c-key">"id"</span>: <span class="c-str">"warmth-multiplier"</span>,  <span class="c-key">"range"</span>: [<span class="c-num">0</span>, <span class="c-num">1.5</span>],   <span class="c-key">"default"</span>: <span class="c-num">0.7</span> },
+    { <span class="c-key">"id"</span>: <span class="c-str">"wall-gap"</span>,           <span class="c-key">"range"</span>: [<span class="c-num">16</span>, <span class="c-num">48</span>],   <span class="c-key">"default"</span>: <span class="c-num">24</span>,  <span class="c-key">"unit"</span>: <span class="c-str">"px"</span> },
+    { <span class="c-key">"id"</span>: <span class="c-str">"density"</span>,            <span class="c-key">"range"</span>: [<span class="c-num">0.85</span>, <span class="c-num">1.25</span>],<span class="c-key">"default"</span>: <span class="c-num">1.0</span> },
+    { <span class="c-key">"id"</span>: <span class="c-str">"motion"</span>,             <span class="c-key">"enum"</span>: [<span class="c-num">0</span>, <span class="c-num">0.5</span>, <span class="c-num">1</span>], <span class="c-key">"default"</span>: <span class="c-num">1.0</span> },
+    { <span class="c-key">"id"</span>: <span class="c-str">"confidence-visibility"</span>, <span class="c-key">"range"</span>: [<span class="c-num">0</span>, <span class="c-num">1</span>], <span class="c-key">"default"</span>: <span class="c-num">1.0</span> },
+    { <span class="c-key">"id"</span>: <span class="c-str">"serif-weight"</span>,       <span class="c-key">"range"</span>: [<span class="c-num">300</span>, <span class="c-num">500</span>], <span class="c-key">"default"</span>: <span class="c-num">400</span> },
+    { <span class="c-key">"id"</span>: <span class="c-str">"label-case"</span>,         <span class="c-key">"enum"</span>: [<span class="c-str">"upper"</span>, <span class="c-str">"sentence"</span>], <span class="c-key">"default"</span>: <span class="c-str">"upper"</span> },
+    { <span class="c-key">"id"</span>: <span class="c-str">"radii"</span>,              <span class="c-key">"enum"</span>: [<span class="c-str">"on"</span>, <span class="c-str">"flat"</span>], <span class="c-key">"default"</span>: <span class="c-str">"on"</span> }
+  ]
+}
+</code></pre>
+  </div>
+</section>
+
+<section class="appendix" id="apx-b" data-screen-label="B Gates">
+  <div class="page">
+    <div class="apx-runner">
+      <div class="ar-title">Appendix <em>B</em> — The forty-seven gates.</div>
+      <div class="ar-meta">
+        FAIL → BLOCK MERGE<br>
+        AUTHORITY → CI · NOT HUMANS<br>
+        FILE → .pang/gates.yaml
+      </div>
+    </div>
+
+    <p class="sec-lede">
+      Every gate names the exact condition that fails the build. <strong>Auto</strong> gates are fixed by CI; <strong>manual</strong> gates require a code change. A gate is never removed without naming what replaced it. Adding a gate shrinks the space of permissible code — this is the point.
+    </p>
+
+    <!-- PWA + primitives -->
+    <div class="gate-family">
+      <div class="gate-family-head">
+        <div class="gf-name">PWA &amp; primitives</div>
+        <div class="gf-desc">Platform floor. What a 2026 web app ships as table stakes — anything less is a regression.</div>
+        <div class="gf-count">P1 — P12 · 12</div>
+      </div>
+      <div class="gate-table">
+        <div class="gt-head">ID</div>
+        <div class="gt-head">Gate</div>
+        <div class="gt-head">Fails when</div>
+        <div class="gt-head">Folder</div>
+        <div class="gt-head">Auto</div>
+
+        <div class="gt-id">P1</div>
+        <div class="gt-name">Lighthouse 100</div>
+        <div class="gt-fail">Any category below 100 on preview deploy. Run on mid-tier Moto G throttle, not desktop.</div>
+        <div class="gt-folder">.pang/ci/lh.yml</div>
+        <div class="gt-auto">manual</div>
+
+        <div class="gt-id">P2</div>
+        <div class="gt-name">Manifest</div>
+        <div class="gt-fail">Missing <code>manifest.webmanifest</code>, icons &lt; 512, or <code>display: minimal-ui</code> not standalone.</div>
+        <div class="gt-folder">public/</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">P3</div>
+        <div class="gt-name">SW navPreload</div>
+        <div class="gt-fail"><code>navigationPreload</code> not enabled, or TTFB &gt; 100ms from cached shell.</div>
+        <div class="gt-folder">src/sw/</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">P4</div>
+        <div class="gt-name">Offline shell</div>
+        <div class="gt-fail">Any route renders a blank page without network. Shell must paint in &lt; 300ms offline.</div>
+        <div class="gt-folder">src/sw/shell.ts</div>
+        <div class="gt-auto">manual</div>
+
+        <div class="gt-id">P5</div>
+        <div class="gt-name">OPFS</div>
+        <div class="gt-fail">Any state written to <code>localStorage</code>. User prefs and work drafts persist to OPFS only.</div>
+        <div class="gt-folder">src/lib/storage/</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">P6</div>
+        <div class="gt-name">CSP strict</div>
+        <div class="gt-fail"><code>unsafe-inline</code> or <code>unsafe-eval</code> in any header. Nonces required for inline style.</div>
+        <div class="gt-folder">next.config.ts</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">P7</div>
+        <div class="gt-name">Vitals + INP + LoAF</div>
+        <div class="gt-fail">p75 INP &gt; 200ms, LoAF entries &gt; 50ms unreported, or LCP &gt; 2.5s on mid-tier.</div>
+        <div class="gt-folder">src/lib/perf/</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">P8</div>
+        <div class="gt-name">AVIF primary</div>
+        <div class="gt-fail">Any <code>&lt;img&gt;</code> serving JPEG or PNG without an AVIF source above it in <code>&lt;picture&gt;</code>.</div>
+        <div class="gt-folder">src/components/img/</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">P9</div>
+        <div class="gt-name">Sharp corners</div>
+        <div class="gt-fail"><code>border-radius</code> &gt; 2px outside <code>src/components/chrome/</code>. Containers must be 0.</div>
+        <div class="gt-folder">any</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">P10</div>
+        <div class="gt-name">Passkeys</div>
+        <div class="gt-fail">Password field present. Auth is passkeys + magic link only.</div>
+        <div class="gt-folder">src/auth/</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">P11</div>
+        <div class="gt-name">OKLCH only</div>
+        <div class="gt-fail">Any <code>#xxx</code>, <code>rgb()</code>, or <code>hsl()</code> literal in CSS. Use OKLCH, or reference a token.</div>
+        <div class="gt-folder">any</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">P12</div>
+        <div class="gt-name">light-dark()</div>
+        <div class="gt-fail">Theme switching via class flips or prop drilling. Use <code>light-dark()</code> with <code>color-scheme</code>.</div>
+        <div class="gt-folder">src/styles/</div>
+        <div class="gt-auto yes">auto</div>
+      </div>
+    </div>
+
+    <!-- Type, space, motion -->
+    <div class="gate-family">
+      <div class="gate-family-head">
+        <div class="gf-name">Type, space, motion</div>
+        <div class="gf-desc">Craft layer. What separates an app from a product — the habits the reader feels before they name them.</div>
+        <div class="gf-count">P13 — P18 · 6</div>
+      </div>
+      <div class="gate-table">
+        <div class="gt-head">ID</div>
+        <div class="gt-head">Gate</div>
+        <div class="gt-head">Fails when</div>
+        <div class="gt-head">Folder</div>
+        <div class="gt-head">Auto</div>
+
+        <div class="gt-id">P13</div>
+        <div class="gt-name">size-adjust</div>
+        <div class="gt-fail">Fallback font stack not tuned — measurable CLS on first paint from font swap.</div>
+        <div class="gt-folder">src/styles/fonts.css</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">P14</div>
+        <div class="gt-name">No title case</div>
+        <div class="gt-fail">String matches Title Case pattern. Sentence case for body; MONO-CAP-SPACED for labels.</div>
+        <div class="gt-folder">any JSX string</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">P15</div>
+        <div class="gt-name">Springs default</div>
+        <div class="gt-fail">Component writes its own <code>duration:</code> or cubic-bezier without a preset exception comment.</div>
+        <div class="gt-folder">src/lib/motion/</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">P16</div>
+        <div class="gt-name">View Transitions</div>
+        <div class="gt-fail">Framer Motion <code>AnimatePresence</code> used for arrival/detail nav. Use VT API.</div>
+        <div class="gt-folder">src/app/**</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">P17</div>
+        <div class="gt-name">Anchor + Popover</div>
+        <div class="gt-fail">Tooltip or menu uses portals, <code>position: fixed</code> math, or third-party popper.</div>
+        <div class="gt-folder">src/components/chrome/</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">P18</div>
+        <div class="gt-name">Container queries</div>
+        <div class="gt-fail">Component reads viewport <code>@media</code> for layout instead of <code>@container</code>.</div>
+        <div class="gt-folder">src/components/</div>
+        <div class="gt-auto yes">auto</div>
+      </div>
+    </div>
+
+    <!-- Canvas, data, observability -->
+    <div class="gate-family">
+      <div class="gate-family-head">
+        <div class="gf-name">Canvas, data, observability</div>
+        <div class="gf-desc">The room of the collection. Rendering, binaries, and what the system tells you about itself in production.</div>
+        <div class="gf-count">P19 — P24 · 6</div>
+      </div>
+      <div class="gate-table">
+        <div class="gt-head">ID</div>
+        <div class="gt-head">Gate</div>
+        <div class="gt-head">Fails when</div>
+        <div class="gt-head">Folder</div>
+        <div class="gt-head">Auto</div>
+
+        <div class="gt-id">P19</div>
+        <div class="gt-name">Canvas for art</div>
+        <div class="gt-fail">Art renders in a DOM grid with CSS transforms. Use WebGPU → WebGL 2 → DOM as low-end fallback.</div>
+        <div class="gt-folder">src/room/</div>
+        <div class="gt-auto">manual</div>
+
+        <div class="gt-id">P20</div>
+        <div class="gt-name">CV in worker</div>
+        <div class="gt-fail">OCR, perceptual hash, or colour extraction running on main thread.</div>
+        <div class="gt-folder">src/workers/cv/</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">P21</div>
+        <div class="gt-name">OPFS binaries</div>
+        <div class="gt-fail">Images, audio, or document blobs in IndexedDB. Binary &gt; 64KB goes to OPFS.</div>
+        <div class="gt-folder">src/lib/storage/</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">P22</div>
+        <div class="gt-name">OTel prod</div>
+        <div class="gt-fail">Production build without OpenTelemetry exporter. Every request carries a trace-id.</div>
+        <div class="gt-folder">src/lib/otel/</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">P23</div>
+        <div class="gt-name">A11y floor</div>
+        <div class="gt-fail">Lighthouse a11y &lt; 98 or any axe-core serious/critical violation. Tap targets &lt; 24×24.</div>
+        <div class="gt-folder">any</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">P24</div>
+        <div class="gt-name">Token discipline</div>
+        <div class="gt-fail">Any length, colour, or font-family literal not resolving to a token in <code>tokens.css</code>.</div>
+        <div class="gt-folder">any</div>
+        <div class="gt-auto yes">auto</div>
+      </div>
+    </div>
+
+    <!-- AI safety + contracts -->
+    <div class="gate-family">
+      <div class="gate-family-head">
+        <div class="gf-name">AI — safety &amp; contracts</div>
+        <div class="gf-desc">The model is a liquid you do not swallow raw. Validation, isolation, and structured output — before trust.</div>
+        <div class="gf-count">A1 — A10 · 10</div>
+      </div>
+      <div class="gate-table">
+        <div class="gt-head">ID</div>
+        <div class="gt-head">Gate</div>
+        <div class="gt-head">Fails when</div>
+        <div class="gt-head">Folder</div>
+        <div class="gt-head">Auto</div>
+
+        <div class="gt-id">A1</div>
+        <div class="gt-name">No JSON.parse</div>
+        <div class="gt-fail"><code>JSON.parse</code> applied directly to model output. Use structured outputs API, never trust free text.</div>
+        <div class="gt-folder">src/ai/</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">A2</div>
+        <div class="gt-name">Tool use + Zod</div>
+        <div class="gt-fail">Tool definition without a Zod schema, or schema not shared between prompt and runtime.</div>
+        <div class="gt-folder">src/ai/tools/</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">A3</div>
+        <div class="gt-name">Runtime validation</div>
+        <div class="gt-fail">Model output passed to a caller without <code>schema.parse()</code>. Validation is non-optional.</div>
+        <div class="gt-folder">src/ai/</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">A4</div>
+        <div class="gt-name">Voice seed</div>
+        <div class="gt-fail">Prompt to any user-facing agent missing the PANG voice seed — the ten lines from Chapter 01.</div>
+        <div class="gt-folder">src/ai/prompts/</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">A5</div>
+        <div class="gt-name">Banned vocab</div>
+        <div class="gt-fail">Output contains "dive", "unlock", "seamless", "leverage", "journey", or any banned token.</div>
+        <div class="gt-folder">src/ai/post/</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">A6</div>
+        <div class="gt-name">Prompt caching</div>
+        <div class="gt-fail">Long stable prefix (&gt; 1024 tokens) not marked for cache breakpoint. Costs blow up in load test.</div>
+        <div class="gt-folder">src/ai/prompts/</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">A7</div>
+        <div class="gt-name">CaMeL dual-LLM</div>
+        <div class="gt-fail">Untrusted user content flows into privileged tool calls without a quarantined-LLM pass.</div>
+        <div class="gt-folder">src/ai/camel/</div>
+        <div class="gt-auto">manual</div>
+
+        <div class="gt-id">A8</div>
+        <div class="gt-name">Untrusted&lt;T&gt;</div>
+        <div class="gt-fail">Data from a model call not wrapped in <code>Untrusted&lt;T&gt;</code> type at the boundary.</div>
+        <div class="gt-folder">src/ai/types/</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">A9</div>
+        <div class="gt-name">XML-delimited</div>
+        <div class="gt-fail">Prompt uses markdown headers or loose prose to structure input. Use XML tags.</div>
+        <div class="gt-folder">src/ai/prompts/</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">A10</div>
+        <div class="gt-name">OTel GenAI spans</div>
+        <div class="gt-fail">Model call not wrapped in a <code>gen_ai.*</code> OTel span. Tokens, cost, and latency must export.</div>
+        <div class="gt-folder">src/ai/telemetry/</div>
+        <div class="gt-auto yes">auto</div>
+      </div>
+    </div>
+
+    <!-- AI operations -->
+    <div class="gate-family">
+      <div class="gate-family-head">
+        <div class="gf-name">AI — operations</div>
+        <div class="gf-desc">Runtime discipline. Rate limits, retries, budgets, pinning — the boring floor that keeps cost and quality predictable.</div>
+        <div class="gf-count">A11 — A17 · 7</div>
+      </div>
+      <div class="gate-table">
+        <div class="gt-head">ID</div>
+        <div class="gt-head">Gate</div>
+        <div class="gt-head">Fails when</div>
+        <div class="gt-head">Folder</div>
+        <div class="gt-head">Auto</div>
+
+        <div class="gt-id">A11</div>
+        <div class="gt-name">Rate limits</div>
+        <div class="gt-fail">Per-user rate limit missing on any AI surface. Burst and sustained limits required.</div>
+        <div class="gt-folder">src/ai/limits/</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">A12</div>
+        <div class="gt-name">Files 24h TTL</div>
+        <div class="gt-fail">Uploaded binary to AI provider kept longer than 24h. Cleanup job or TTL tag required.</div>
+        <div class="gt-folder">src/ai/files/</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">A13</div>
+        <div class="gt-name">≥ 10 t/s stream</div>
+        <div class="gt-fail">Streaming surface delivers &lt; 10 tokens/sec sustained to UI. Below 5 t/s triggers tonal breath.</div>
+        <div class="gt-folder">src/ai/stream/</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">A14</div>
+        <div class="gt-name">Confidence UI</div>
+        <div class="gt-fail">Low-confidence AI field rendered identically to high-confidence. Use dotted underline + warm-grey ink.</div>
+        <div class="gt-folder">src/components/ai/</div>
+        <div class="gt-auto">manual</div>
+
+        <div class="gt-id">A15</div>
+        <div class="gt-name">Diff primitive</div>
+        <div class="gt-fail">AI replaces a field via modal confirm. Must use Diff — original + proposed + accept/amend inline.</div>
+        <div class="gt-folder">src/components/ai/diff/</div>
+        <div class="gt-auto">manual</div>
+
+        <div class="gt-id">A16</div>
+        <div class="gt-name">TUS queue</div>
+        <div class="gt-fail">Upload to AI pipeline without resumable TUS protocol. Offline-created work must queue.</div>
+        <div class="gt-folder">src/lib/upload/</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">A17</div>
+        <div class="gt-name">PII redaction</div>
+        <div class="gt-fail">User note or prompt sent to model without PII-redaction pass. Names, emails, addresses hashed.</div>
+        <div class="gt-folder">src/ai/redact/</div>
+        <div class="gt-auto yes">auto</div>
+      </div>
+    </div>
+
+    <!-- AI economics -->
+    <div class="gate-family">
+      <div class="gate-family-head">
+        <div class="gf-name">AI — economics</div>
+        <div class="gf-desc">Cost is a design constraint. Budgets, caps, batches, and the eval corpus that proves regressions before ship.</div>
+        <div class="gf-count">A18 — A23 · 6</div>
+      </div>
+      <div class="gate-table">
+        <div class="gt-head">ID</div>
+        <div class="gt-head">Gate</div>
+        <div class="gt-head">Fails when</div>
+        <div class="gt-head">Folder</div>
+        <div class="gt-head">Auto</div>
+
+        <div class="gt-id">A18</div>
+        <div class="gt-name">Per-agent budgets</div>
+        <div class="gt-fail">Agent without a per-invocation token ceiling. Runaway loops caught by budget, not logs.</div>
+        <div class="gt-folder">src/ai/agents/</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">A19</div>
+        <div class="gt-name">Model pinning</div>
+        <div class="gt-fail">Model name contains "latest" or major version without a date suffix. Pin exact snapshot.</div>
+        <div class="gt-folder">src/ai/</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">A20</div>
+        <div class="gt-name">Batch API</div>
+        <div class="gt-fail">Offline bulk job (provenance re-scan, catalogue enrich) uses real-time API. Use Batch.</div>
+        <div class="gt-folder">src/ai/batch/</div>
+        <div class="gt-auto">manual</div>
+
+        <div class="gt-id">A21</div>
+        <div class="gt-name">Retry policy</div>
+        <div class="gt-fail">AI call without exponential backoff + max-attempts. Default 3 attempts, 250ms base.</div>
+        <div class="gt-folder">src/ai/retry.ts</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">A22</div>
+        <div class="gt-name">Eval corpus</div>
+        <div class="gt-fail">Prompt edit landed without running eval corpus. Regression &gt; 2% on any metric blocks merge.</div>
+        <div class="gt-folder">evals/</div>
+        <div class="gt-auto yes">auto</div>
+
+        <div class="gt-id">A23</div>
+        <div class="gt-name">Cost cap</div>
+        <div class="gt-fail">Daily per-user cost &gt; ceiling without explicit tier upgrade. Soft-degrade to cheaper model.</div>
+        <div class="gt-folder">src/ai/cost/</div>
+        <div class="gt-auto yes">auto</div>
+      </div>
+    </div>
+
+    <!-- Violation examples -->
+    <div class="apx-eyebrow" style="margin-top: var(--s-16);"><strong>B.1</strong> Canonical violations <span class="apx-pagenum">lint fixtures</span></div>
+
+    <div class="example-pair">
+      <div class="ex bad">
+        <div class="ex-head">✕ Fails P11 · OKLCH only</div>
+<pre>.pill {
+  background: #d97757;
+  color: hsl(24 80% 50%);
+}</pre>
+      </div>
+      <div class="ex good">
+        <div class="ex-head">✓ Resolves to tokens</div>
+<pre>.pill {
+  background: var(--warm);
+  color: var(--ink);
+}</pre>
+      </div>
+    </div>
+
+    <div class="example-pair">
+      <div class="ex bad">
+        <div class="ex-head">✕ Fails P9 · Sharp corners</div>
+<pre>.card {
+  border-radius: 12px;
+  padding: 16px;
+}</pre>
+      </div>
+      <div class="ex good">
+        <div class="ex-head">✓ Container is sharp</div>
+<pre>.card {
+  border-radius: 0;
+  padding: var(--s-4);
+}</pre>
+      </div>
+    </div>
+
+    <div class="example-pair">
+      <div class="ex bad">
+        <div class="ex-head">✕ Fails A1 · No JSON.parse</div>
+<pre>const response = await claude.messages.create({...});
+const data = JSON.parse(response.content[0].text);</pre>
+      </div>
+      <div class="ex good">
+        <div class="ex-head">✓ Structured + validated</div>
+<pre>const { parsed } = await claude.tools.invoke({
+  schema: ArtworkSchema,
+  messages,
+});
+return ArtworkSchema.parse(parsed); // A3</pre>
+      </div>
+    </div>
+
+    <div class="example-pair">
+      <div class="ex bad">
+        <div class="ex-head">✕ Fails A15 · Diff primitive</div>
+<pre>if (await confirm('Replace title with "Studio, evening"?')) {
+  artwork.title = suggestion;
+}</pre>
+      </div>
+      <div class="ex good">
+        <div class="ex-head">✓ Inline diff, amendable</div>
+<pre>&lt;Diff
+  original={artwork.title}
+  proposed={suggestion}
+  onAccept={apply}
+  onAmend={edit}
+/&gt;</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="appendix" id="apx-c" data-screen-label="C Components">
+  <div class="page">
+    <div class="apx-runner">
+      <div class="ar-title">Appendix <em>C</em> — Component inventory.</div>
+      <div class="ar-meta">
+        COUNT → 18<br>
+        FOLDER → src/components/<br>
+        IMPORT → by path, never barrel
+      </div>
+    </div>
+
+    <p class="sec-lede">
+      The full canonical component set. Each row names the folder, the signature, the gates it must satisfy, and the knobs it reads. Components not on this list require a doctrine edit before they can be introduced. Barrel imports (<code class="inline">from '@/components'</code>) fail <code class="inline">P24</code>.
+    </p>
+
+    <div class="comp-grid">
+
+      <!-- Chrome -->
+      <div class="comp-card">
+        <div class="c-head">
+          <div class="c-name">VerifyPill</div>
+          <div class="c-path">chrome/verify-pill/</div>
+        </div>
+        <div class="c-desc">Floating chrome that marks a work as verified by an institution. Lives over the canvas, never inside it. One of the three sanctioned glass surfaces.</div>
+        <div class="c-signature">&lt;VerifyPill source="galerie-droste" tone="warm" /&gt;</div>
+        <div class="c-refs">
+          <span class="ref gate">P9</span><span class="ref gate">P17</span><span class="ref knob">radii</span>
+        </div>
+      </div>
+
+      <div class="comp-card">
+        <div class="c-head">
+          <div class="c-name">OfflineBanner</div>
+          <div class="c-path">chrome/offline-banner/</div>
+        </div>
+        <div class="c-desc">Quiet glass strip that narrates network state. Does not block. Slides in from the top edge when the connection drops; retires itself on reconnection.</div>
+        <div class="c-signature">&lt;OfflineBanner queueCount={3} /&gt;</div>
+        <div class="c-refs">
+          <span class="ref gate">P4</span><span class="ref gate">A16</span>
+        </div>
+      </div>
+
+      <div class="comp-card">
+        <div class="c-head">
+          <div class="c-name">InstallHint</div>
+          <div class="c-path">chrome/install-hint/</div>
+        </div>
+        <div class="c-desc">Subtle prompt to install the PWA. Shows once per user, dismissed to OPFS. Never interrupts a flow.</div>
+        <div class="c-signature">&lt;InstallHint dismissKey="v1" /&gt;</div>
+        <div class="c-refs">
+          <span class="ref gate">P2</span><span class="ref gate">P5</span>
+        </div>
+      </div>
+
+      <div class="comp-card">
+        <div class="c-head">
+          <div class="c-name">Popover</div>
+          <div class="c-path">chrome/popover/</div>
+        </div>
+        <div class="c-desc">Anchor-positioned popover using native Popover API + Anchor Positioning. No portals, no arrow math, no Radix.</div>
+        <div class="c-signature">&lt;Popover anchor={ref} placement="below"&gt;...&lt;/&gt;</div>
+        <div class="c-refs">
+          <span class="ref gate">P17</span>
+        </div>
+      </div>
+
+      <!-- Room + art -->
+      <div class="comp-card">
+        <div class="c-head">
+          <div class="c-name">Room</div>
+          <div class="c-path">room/</div>
+        </div>
+        <div class="c-desc">The home surface. A WebGPU space that hangs works at their real relative sizes. Breathes with <code>--knob-time-warmth</code>. DOM grid as low-end fallback.</div>
+        <div class="c-signature">&lt;Room works={works} light={now} /&gt;</div>
+        <div class="c-refs">
+          <span class="ref gate">P19</span><span class="ref knob">time-warmth</span><span class="ref knob">wall-gap</span>
+        </div>
+      </div>
+
+      <div class="comp-card">
+        <div class="c-head">
+          <div class="c-name">Wall</div>
+          <div class="c-path">room/wall/</div>
+        </div>
+        <div class="c-desc">A hanging group within the Room. Enforces <code>--knob-wall-gap</code> between works; refuses to auto-tile.</div>
+        <div class="c-signature">&lt;Wall works={set} gap="var(--knob-wall-gap)" /&gt;</div>
+        <div class="c-refs">
+          <span class="ref gate">P19</span><span class="ref knob">wall-gap</span>
+        </div>
+      </div>
+
+      <div class="comp-card">
+        <div class="c-head">
+          <div class="c-name">WorkCard</div>
+          <div class="c-path">room/work-card/</div>
+        </div>
+        <div class="c-desc">A single work rendered at true size with AVIF primary, subtle halo when "alive" (<code>--warm-glow</code>). Sharp corners, hairline border only on hover.</div>
+        <div class="c-signature">&lt;WorkCard work={w} alive={isAlive} /&gt;</div>
+        <div class="c-refs">
+          <span class="ref gate">P8</span><span class="ref gate">P9</span><span class="ref gate">P19</span>
+        </div>
+      </div>
+
+      <div class="comp-card">
+        <div class="c-head">
+          <div class="c-name">WallLabel</div>
+          <div class="c-path">room/wall-label/</div>
+        </div>
+        <div class="c-desc">Artist · title · year · medium — set in serif, anchored beside the work. Sentence case, never title case.</div>
+        <div class="c-signature">&lt;WallLabel artist title year medium /&gt;</div>
+        <div class="c-refs">
+          <span class="ref gate">P14</span>
+        </div>
+      </div>
+
+      <!-- AI -->
+      <div class="comp-card">
+        <div class="c-head">
+          <div class="c-name">Diff</div>
+          <div class="c-path">ai/diff/</div>
+        </div>
+        <div class="c-desc">The canonical AI-to-user mutation primitive. Original on left, proposed on right, Accept button; value itself is editable to amend. Never a modal.</div>
+        <div class="c-signature">&lt;Diff original proposed onAccept onAmend /&gt;</div>
+        <div class="c-refs">
+          <span class="ref gate">A14</span><span class="ref gate">A15</span>
+        </div>
+      </div>
+
+      <div class="comp-card">
+        <div class="c-head">
+          <div class="c-name">StreamingText</div>
+          <div class="c-path">ai/streaming-text/</div>
+        </div>
+        <div class="c-desc">Word-boundary streaming output. Contracts at ≥ 10 t/s; drops below 5 t/s trigger a tonal breath indicator rather than a spinner.</div>
+        <div class="c-signature">&lt;StreamingText source={asyncIterator} /&gt;</div>
+        <div class="c-refs">
+          <span class="ref gate">A13</span>
+        </div>
+      </div>
+
+      <div class="comp-card">
+        <div class="c-head">
+          <div class="c-name">ConfidenceField</div>
+          <div class="c-path">ai/confidence-field/</div>
+        </div>
+        <div class="c-desc">A field whose value is low-confidence AI output. Dotted underline, warm-grey ink (<code>--ink-ai</code>). Tap to amend inline.</div>
+        <div class="c-signature">&lt;ConfidenceField value confidence /&gt;</div>
+        <div class="c-refs">
+          <span class="ref gate">A14</span><span class="ref knob">confidence-visibility</span>
+        </div>
+      </div>
+
+      <div class="comp-card">
+        <div class="c-head">
+          <div class="c-name">AgentScope</div>
+          <div class="c-path">ai/agent-scope/</div>
+        </div>
+        <div class="c-desc">Wrapper that enforces per-agent token budgets, rate limits, retries, and OTel spans. All agent calls route through it.</div>
+        <div class="c-signature">&lt;AgentScope agent="provenance" budget={2_000}&gt;</div>
+        <div class="c-refs">
+          <span class="ref gate">A10</span><span class="ref gate">A11</span><span class="ref gate">A18</span><span class="ref gate">A21</span>
+        </div>
+      </div>
+
+      <!-- Editorial -->
+      <div class="comp-card">
+        <div class="c-head">
+          <div class="c-name">Provenance</div>
+          <div class="c-path">editorial/provenance/</div>
+        </div>
+        <div class="c-desc">The history of a work. Dated entries, sentence case, no timeline iconography. Tap a year to open the record in a popover, never a modal.</div>
+        <div class="c-signature">&lt;Provenance entries={records} /&gt;</div>
+        <div class="c-refs">
+          <span class="ref gate">P17</span>
+        </div>
+      </div>
+
+      <div class="comp-card">
+        <div class="c-head">
+          <div class="c-name">FieldRow</div>
+          <div class="c-path">editorial/field-row/</div>
+        </div>
+        <div class="c-desc">The label + value row used in About-the-artist, lot sheets, and catalogue pages. Label is mono-cap-spaced, value is serif italic when literal, sans when enumerated.</div>
+        <div class="c-signature">&lt;FieldRow label="Title" value="Studio, evening" /&gt;</div>
+        <div class="c-refs">
+          <span class="ref gate">P14</span>
+        </div>
+      </div>
+
+      <!-- Input -->
+      <div class="comp-card">
+        <div class="c-head">
+          <div class="c-name">Input</div>
+          <div class="c-path">input/input/</div>
+        </div>
+        <div class="c-desc">Single-line text field. Sharp corners except for the chrome 2px. Uses native <code>:user-invalid</code>; no error ring until the user has left the field.</div>
+        <div class="c-signature">&lt;Input name label value onChange /&gt;</div>
+        <div class="c-refs">
+          <span class="ref gate">P9</span><span class="ref gate">P23</span>
+        </div>
+      </div>
+
+      <div class="comp-card">
+        <div class="c-head">
+          <div class="c-name">Button</div>
+          <div class="c-path">input/button/</div>
+        </div>
+        <div class="c-desc">One button. Mono-cap-spaced label, chrome radii, ink or paper tone. No "variants" API — tone is the only knob.</div>
+        <div class="c-signature">&lt;Button tone="ink"&gt;Accept&lt;/Button&gt;</div>
+        <div class="c-refs">
+          <span class="ref gate">P9</span><span class="ref gate">P14</span>
+        </div>
+      </div>
+
+      <div class="comp-card">
+        <div class="c-head">
+          <div class="c-name">Segmented</div>
+          <div class="c-path">input/segmented/</div>
+        </div>
+        <div class="c-desc">Two or three mutually-exclusive options. Keyboard-navigable with arrow keys, roving tabindex. No toggle, no tabs — Segmented is the one shape.</div>
+        <div class="c-signature">&lt;Segmented value options onChange /&gt;</div>
+        <div class="c-refs">
+          <span class="ref gate">P9</span><span class="ref gate">P23</span>
+        </div>
+      </div>
+
+      <div class="comp-card">
+        <div class="c-head">
+          <div class="c-name">TweaksPanel</div>
+          <div class="c-path">chrome/tweaks-panel/</div>
+        </div>
+        <div class="c-desc">The nine-knob control surface. Ships with PANG; the user opens it with <kbd>T</kbd>. Writes to OPFS, never localStorage.</div>
+        <div class="c-signature">&lt;TweaksPanel knobs={KNOB_MANIFEST} /&gt;</div>
+        <div class="c-refs">
+          <span class="ref gate">P5</span><span class="ref gate">P24</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section class="appendix" id="apx-d" data-screen-label="D Repo">
+  <div class="page">
+    <div class="apx-runner">
+      <div class="ar-title">Appendix <em>D</em> — Repo layout.</div>
+      <div class="ar-meta">
+        ROOT → pang/<br>
+        PATHS → stable<br>
+        GATE → P24
+      </div>
+    </div>
+
+    <p class="sec-lede">
+      The shape a fresh <code class="inline">npx create-pang</code> produces. Paths in this tree are stable — gates reference them by name. Adding a top-level folder requires a doctrine edit.
+    </p>
+
+<pre class="tree">pang/
+├── <span class="t-dir">.pang/</span>                        <span class="t-note">doctrine &amp; CI config</span>
+│   ├── gates.yaml              <span class="t-note">the 47 — <span class="t-gate">authority for CI</span></span>
+│   ├── doctrine.md             <span class="t-note">manifesto + appendices mirror</span>
+│   └── ci/
+│       ├── lh.yml              <span class="t-note"><span class="t-gate">P1</span></span>
+│       ├── axe.yml             <span class="t-note"><span class="t-gate">P23</span></span>
+│       └── tokens-lint.ts      <span class="t-note"><span class="t-gate">P11 · P24</span></span>
+├── <span class="t-dir">evals/</span>                        <span class="t-note"><span class="t-gate">A22</span> · regression blockers</span>
+│   ├── voice/
+│   ├── provenance/
+│   └── redaction/
+├── <span class="t-dir">public/</span>
+│   ├── manifest.webmanifest    <span class="t-note"><span class="t-gate">P2</span></span>
+│   ├── icon-512.png
+│   └── icon-512-maskable.png
+├── <span class="t-dir">src/</span>
+│   ├── <span class="t-dir">app/</span>                      <span class="t-note">Next.js routes — one directory per surface</span>
+│   │   ├── page.tsx            <span class="t-note">the Room (home)</span>
+│   │   ├── work/[id]/          <span class="t-note">detail — View Transitions arrival</span>
+│   │   └── layout.tsx
+│   ├── <span class="t-dir">components/</span>
+│   │   ├── chrome/             <span class="t-note">only folder that may import backdrop-filter utilities · <span class="t-gate">P9</span></span>
+│   │   ├── room/               <span class="t-note">canvas, wall, work-card, wall-label · <span class="t-gate">P19</span></span>
+│   │   ├── ai/                 <span class="t-note">diff, streaming-text, confidence-field, agent-scope</span>
+│   │   ├── editorial/          <span class="t-note">provenance, field-row</span>
+│   │   └── input/              <span class="t-note">input, button, segmented</span>
+│   ├── <span class="t-dir">ai/</span>
+│   │   ├── prompts/            <span class="t-note">XML-delimited · voice seed baked · <span class="t-gate">A4 · A9</span></span>
+│   │   ├── tools/              <span class="t-note">Zod schemas shared with prompts · <span class="t-gate">A2</span></span>
+│   │   ├── types/              <span class="t-note">Untrusted&lt;T&gt; · <span class="t-gate">A8</span></span>
+│   │   ├── camel/              <span class="t-note">dual-LLM quarantine · <span class="t-gate">A7</span></span>
+│   │   ├── agents/             <span class="t-note">per-agent budgets · <span class="t-gate">A18</span></span>
+│   │   ├── batch/              <span class="t-note">offline jobs · <span class="t-gate">A20</span></span>
+│   │   ├── redact/             <span class="t-note">PII pass · <span class="t-gate">A17</span></span>
+│   │   ├── retry.ts            <span class="t-note"><span class="t-gate">A21</span></span>
+│   │   ├── cost/               <span class="t-note">daily caps · <span class="t-gate">A23</span></span>
+│   │   └── telemetry/          <span class="t-note">gen_ai.* OTel spans · <span class="t-gate">A10</span></span>
+│   ├── <span class="t-dir">room/</span>                     <span class="t-note">WebGPU render core (separate from components/room for bundling)</span>
+│   │   ├── gpu/
+│   │   ├── gl2/                <span class="t-note">fallback</span>
+│   │   └── dom/                <span class="t-note">low-end fallback</span>
+│   ├── <span class="t-dir">lib/</span>
+│   │   ├── motion/
+│   │   │   └── presets.ts      <span class="t-note">9 presets · duration is not a prop · <span class="t-gate">P15</span></span>
+│   │   ├── storage/            <span class="t-note">OPFS wrapper · <span class="t-gate">P5 · P21</span></span>
+│   │   ├── perf/               <span class="t-note">INP · LoAF · <span class="t-gate">P7</span></span>
+│   │   ├── otel/               <span class="t-note"><span class="t-gate">P22</span></span>
+│   │   └── upload/             <span class="t-note">TUS client · <span class="t-gate">A16</span></span>
+│   ├── <span class="t-dir">workers/</span>
+│   │   └── cv/                 <span class="t-note"><span class="t-gate">P20</span></span>
+│   ├── <span class="t-dir">auth/</span>                     <span class="t-note">passkeys only · <span class="t-gate">P10</span></span>
+│   ├── <span class="t-dir">sw/</span>                       <span class="t-note">service worker · <span class="t-gate">P3 · P4</span></span>
+│   │   ├── index.ts
+│   │   └── shell.ts
+│   └── <span class="t-dir">styles/</span>
+│       ├── tokens.css          <span class="t-note">Appendix A · <span class="t-gate">authority for P24</span></span>
+│       ├── globals.css         <span class="t-note">@property knob declarations · size-adjust</span>
+│       └── fonts.css           <span class="t-note"><span class="t-gate">P13</span></span>
+├── CLAUDE.md                   <span class="t-note">top-of-context rules for Claude Code</span>
+├── PANG_DS.html                <span class="t-note">this document — manifesto + appendices</span>
+├── next.config.ts              <span class="t-note">CSP nonces · <span class="t-gate">P6</span></span>
+├── package.json
+└── pnpm-lock.yaml</pre>
+  </div>
+</section>
+
+<section class="appendix" id="apx-e" data-screen-label="E Boot">
+  <div class="page">
+    <div class="apx-runner">
+      <div class="ar-title">Appendix <em>E</em> — First-boot checklist.</div>
+      <div class="ar-meta">
+        TIME → 20 MIN<br>
+        OUTPUT → PASSES P1<br>
+        AUDIENCE → CLAUDE CODE
+      </div>
+    </div>
+
+    <p class="sec-lede">
+      The sequence a clean checkout should run through on day zero. At the end of step 09, <code class="inline">pnpm ci</code> passes all 47 gates on an empty app. Everything else is feature work.
+    </p>
+
+    <ol class="boot-list">
+      <li>
+        <h4>Scaffold the repo layout from Appendix D.</h4>
+        <p>Create every directory listed in the tree, empty. Gates reference paths by name — if the folder does not exist, the linter cannot run. This is the only step that is manual; the rest are <code class="inline">pnpm</code> tasks.</p>
+        <div class="cmd">pnpm dlx create-pang . --template 2026</div>
+      </li>
+      <li>
+        <h4>Write <code>src/styles/tokens.css</code> from Appendix A.1.</h4>
+        <p>Copy the CSS block verbatim. Do not edit values without a doctrine edit. <code class="inline">tokens-lint.ts</code> reads this file as the authority — if a property is renamed here, every token site auto-fixes.</p>
+      </li>
+      <li>
+        <h4>Register the 9 knobs as <code>@property</code>.</h4>
+        <p>In <code class="inline">src/styles/globals.css</code>, declare each knob with <code class="inline">@property</code> so it participates in animation and interpolation. This is what lets <code>--knob-time-warmth</code> breathe across the Room.</p>
+        <div class="cmd">pnpm run knobs:register</div>
+      </li>
+      <li>
+        <h4>Install <code>.pang/gates.yaml</code>.</h4>
+        <p>Drop Appendix B into a machine-readable YAML file. Pre-commit hook + CI both read it. No gate runs independently — they are all declared in one place.</p>
+        <div class="cmd">pnpm run gates:install</div>
+      </li>
+      <li>
+        <h4>Wire CI — Lighthouse, axe, tokens, vitals, eval.</h4>
+        <p>GitHub Actions from <code class="inline">.pang/ci/</code>. Every PR runs on mid-tier Moto G throttle for <code class="inline">P1</code> and <code class="inline">P7</code>. Desktop runs are informational only; the floor is mobile.</p>
+        <div class="cmd">pnpm run ci:local   # preview the run</div>
+      </li>
+      <li>
+        <h4>Mount the Room at <code>app/page.tsx</code>.</h4>
+        <p>The home route imports <code class="inline">&lt;Room /&gt;</code> and nothing else. No hero, no onboarding, no nav bar. The first surface a user sees is the collection.</p>
+      </li>
+      <li>
+        <h4>Wire passkeys + magic link.</h4>
+        <p>Auth ships enabled at boot — no password field can enter the repo (gate <code class="inline">P10</code> will refuse the commit). Magic link is for first sign-in on a new device; passkey is the default.</p>
+        <div class="cmd">pnpm run auth:init</div>
+      </li>
+      <li>
+        <h4>Seed the voice in <code>src/ai/prompts/voice.xml</code>.</h4>
+        <p>The ten lines from Chapter 01 go verbatim into the voice seed. Every user-facing agent's system prompt imports this file — <code class="inline">A4</code> refuses prompts that do not.</p>
+      </li>
+      <li>
+        <h4>Run <code>pnpm ci</code> and confirm all 47 gates pass on an empty app.</h4>
+        <p>If any gate fails at boot, the scaffold is wrong — fix the scaffold, never loosen the gate. A boot that skips a gate becomes a PR that skips a gate.</p>
+        <div class="cmd">pnpm ci</div>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section class="appendix" id="apx-f" data-screen-label="F Doctrine">
+  <div class="page">
+    <div class="apx-runner">
+      <div class="ar-title">Appendix <em>F</em> — Doctrine edit protocol.</div>
+      <div class="ar-meta">
+        AUTHORITY → HUMAN<br>
+        FILE → .pang/doctrine.md<br>
+        CADENCE → MONTHLY REVIEW
+      </div>
+    </div>
+
+    <p class="sec-lede">
+      This document is living but not loose. Adding a knob, removing a gate, introducing a component, changing a token — all are doctrine edits. They follow a fixed protocol so the system does not drift.
+    </p>
+
+    <div class="doctrine-protocol">
+      <div class="dp-card">
+        <h4>What counts as a doctrine edit</h4>
+        <p>If the change affects what passes CI on an empty app, it is a doctrine edit and follows this protocol. If it is a feature inside an existing component with no new token, it is ordinary work.</p>
+        <ul>
+          <li>Adding or removing a gate</li>
+          <li>Adding, renaming, or changing the range of a knob</li>
+          <li>Introducing a new component to Appendix C</li>
+          <li>Adding a new top-level folder in Appendix D</li>
+          <li>Changing a token value in Appendix A</li>
+          <li>Changing a voice rule, banned vocab list, or AI primitive</li>
+        </ul>
+      </div>
+
+      <div class="dp-card">
+        <h4>Where the doctrine lives</h4>
+        <p>Two mirrors, intentionally. One is human, one is machine. Both move together in the same commit.</p>
+        <ul>
+          <li><code>PANG_DS.html</code> — this document, the editorial source</li>
+          <li><code>.pang/doctrine.md</code> — extracted appendices, markdown, CI-readable</li>
+          <li><code>.pang/gates.yaml</code> — the 47, structured</li>
+          <li><code>src/styles/tokens.css</code> — the tokens, canonical values</li>
+          <li><code>CLAUDE.md</code> — the two-page summary Claude Code loads first</li>
+        </ul>
+      </div>
+
+      <div class="dp-card">
+        <h4>The protocol</h4>
+        <p>A doctrine edit is a single PR touching all five mirrors. Reviewed by one of the stewards. No partial landings.</p>
+        <ul>
+          <li>01 — Open a PR titled <code>doctrine: &lt;change&gt;</code></li>
+          <li>02 — Update <code>PANG_DS.html</code> prose first</li>
+          <li>03 — Mirror into <code>.pang/doctrine.md</code> and <code>gates.yaml</code></li>
+          <li>04 — Land the code change in the same PR</li>
+          <li>05 — Name what was replaced — gates and knobs are never removed silently</li>
+          <li>06 — Bump <code>PANG_DS</code> version in the masthead</li>
+        </ul>
+      </div>
+
+      <div class="dp-card">
+        <h4>When code and doctrine disagree</h4>
+        <p>The code wins. Always. A mismatch is not ambiguity — it is a bug in the doctrine, and the doctrine is updated the same day. This inverts the usual relationship; it is deliberate.</p>
+        <ul>
+          <li>The code is what ships; the doctrine describes what ships</li>
+          <li>A doctrine that contradicts the code mis-guides Claude Code</li>
+          <li>Same-day correction is a gate, not a norm</li>
+          <li>Stewards rotate quarterly; no one owns the doctrine alone</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="one-test" style="margin-top: var(--s-16);">
+      <div class="ot-eyebrow">§ The signing clause</div>
+      <div class="ot-body">
+        PANG ships under this doctrine. A commit that cannot cite a gate, a token, a knob, a component, or a chapter of <em>this document</em> is a commit that has not arrived yet. The system holds because the rules are small, named, and the same for every pull request.
+      </div>
+      <div class="ot-foot">— PANG_Doctrine · Spring 2026</div>
+    </div>
+  </div>
+</section>
+
+<!-- Colophon -->
+<footer class="colophon">
+  <div class="page" style="display: contents;">
+    <div>
+      <h5>Colophon</h5>
+      <p class="big">Set in Instrument Serif and Geist. Printed to screen at 1440 × infinity. Spring 2026.</p>
+    </div>
+    <div>
+      <h5>Companion files</h5>
+      <p>
+        PANG_DS.html — <em>this document</em><br>
+        .pang/doctrine.md<br>
+        .pang/gates.yaml<br>
+        src/styles/tokens.css<br>
+        src/ai/prompts/voice.xml<br>
+        CLAUDE.md
+      </p>
+    </div>
+    <div>
+      <h5>Authority</h5>
+      <p>Subordinate to <code>CLAUDE.md</code>. When this document and the code disagree, <strong>the code wins</strong> — and the doc is updated the same day. Press <kbd>T</kbd> to open Tweaks.</p>
+    </div>
+  </div>
+</footer>
+
+<!-- Tweaks panel -->
+<div class="tweaks" id="tweaks">
+  <h4>Tweaks <span>nine knobs</span></h4>
+  <div class="t-row">
+    <label>Theme</label>
+    <div class="seg" data-knob="theme">
+      <button data-val="auto" aria-pressed="true">Auto</button>
+      <button data-val="light">Light</button>
+      <button data-val="dark">Night</button>
+    </div>
+  </div>
+  <div class="t-row accent-row">
+    <label>Pigment</label>
+    <div class="accent-swatches" data-knob="accent">
+      <button data-val="minium"  aria-pressed="true" title="Minium — the lead-red of illuminated manuscripts. Reserved for initials, rubrics, and marks of importance. Warm enough for Gen Z, old enough for the dealer."><span style="background: oklch(0.62 0.20 32)"></span><em>Minium</em></button>
+      <button data-val="paynes"  title="Payne's Grey — chromeless. The accent appears only where it is earned."><span style="background: oklch(0.46 0.03 245)"></span><em>Payne's</em></button>
+      <button data-val="lapis"   title="Lapis — ground ultramarine. Historically more expensive than gold; Vermeer's sky."><span style="background: oklch(0.40 0.18 265)"></span><em>Lapis</em></button>
+      <button data-val="naples"  title="Naples Yellow — lead-tin pigment. Vermeer and Turner's buttery highlight. Warm without being loud."><span style="background: oklch(0.82 0.13 85)"></span><em>Naples</em></button>
+      <button data-val="verdigris" title="Verdigris — oxidised copper. Unstable, historical, the green of bronze patinas and Florentine domes."><span style="background: oklch(0.58 0.11 175)"></span><em>Verdigris</em></button>
+      <button data-val="tyrian"  title="Tyrian — murex purple. Imperial dye, harvested from sea snails; the colour of reserved authority."><span style="background: oklch(0.36 0.14 350)"></span><em>Tyrian</em></button>
+      <button data-val="indian"  title="Indian Yellow — saffron pigment from Bengal. A warm amber that reads as late-afternoon light."><span style="background: oklch(0.74 0.17 70)"></span><em>Indian</em></button>
+      <button data-val="acid"    title="Acid — chartreuse highlighter. The colour of a Post-it on a studio wall; young, present-tense, loud."><span style="background: oklch(0.88 0.22 125)"></span><em>Acid</em></button>
+      <button data-val="electric" title="Electric — fuchsia neon. Club-flyer magenta; the accent of a Gen-Alpha collection built on screenshots."><span style="background: oklch(0.70 0.28 325)"></span><em>Electric</em></button>
+      <button data-val="signal"  title="Signal — digital vermillion. The red of a record light and a verified tick. Loud, contemporary, unambiguous."><span style="background: oklch(0.64 0.24 28)"></span><em>Signal</em></button>
+    </div>
+  </div>
+  <div class="t-row">
+    <label>Time-warmth</label>
+    <input type="range" min="0" max="1" step="0.01" value="0.5" data-knob="time-warmth">
+  </div>
+  <div class="t-row">
+    <label>Warmth ×</label>
+    <input type="range" min="0" max="1.5" step="0.05" value="0.7" data-knob="warmth-multiplier">
+  </div>
+  <div class="t-row">
+    <label>Wall gap</label>
+    <input type="range" min="16" max="48" step="4" value="24" data-knob="wall-gap">
+  </div>
+  <div class="t-row">
+    <label>Motion</label>
+    <div class="seg" data-knob="motion">
+      <button data-val="1" aria-pressed="true">On</button>
+      <button data-val="0">Reduced</button>
+    </div>
+  </div>
+  <div class="tweaks-foot">PRESS <kbd>T</kbd> TO HIDE · PREFS → OPFS</div>
+</div>
+
+<script>
+/*EDITMODE-BEGIN*/
+const TWEAK_DEFAULTS = {
+  "theme": "auto",
+  "accent": "minium",
+  "timeWarmth": 0.5,
+  "warmthMultiplier": 0.7,
+  "wallGap": 24,
+  "motion": 1
+};
+/*EDITMODE-END*/
+
+// ── Pigment set — named historical pigments, each a lamp / deep / glow triplet.
+//    lamp: soft form on paper (pill backgrounds, selection)
+//    deep: saturated ink accent (italics, numerals, links, :hover)
+//    glow: chromatic halo on Night (alive-work aura in the Room)
+// Historical pigments tuned as lamp / deep / glow triplets, plus three contemporary
+// signals (Acid, Electric, Signal) for Gen Z / Alpha collectors who grew up digital.
+const ACCENTS = {
+  minium:    { lamp: 'oklch(0.74 0.16 38)',  deep: 'oklch(0.54 0.19 32)',  glow: 'oklch(0.68 0.22 34)',   label: 'Minium' },
+  paynes:    { lamp: 'oklch(0.72 0.03 245)', deep: 'oklch(0.42 0.04 248)', glow: 'oklch(0.60 0.06 245)',  label: "Payne's Grey" },
+  lapis:     { lamp: 'oklch(0.58 0.14 265)', deep: 'oklch(0.38 0.17 265)', glow: 'oklch(0.55 0.20 262)',  label: 'Lapis' },
+  naples:    { lamp: 'oklch(0.86 0.11 88)',  deep: 'oklch(0.64 0.14 78)',  glow: 'oklch(0.82 0.15 82)',   label: 'Naples Yellow' },
+  verdigris: { lamp: 'oklch(0.68 0.10 175)', deep: 'oklch(0.46 0.11 178)', glow: 'oklch(0.64 0.14 172)',  label: 'Verdigris' },
+  tyrian:    { lamp: 'oklch(0.50 0.14 348)', deep: 'oklch(0.32 0.15 350)', glow: 'oklch(0.48 0.19 345)',  label: 'Tyrian' },
+  indian:    { lamp: 'oklch(0.80 0.14 75)',  deep: 'oklch(0.58 0.17 65)',  glow: 'oklch(0.74 0.19 70)',   label: 'Indian Yellow' },
+  acid:      { lamp: 'oklch(0.88 0.22 125)', deep: 'oklch(0.68 0.26 128)', glow: 'oklch(0.86 0.28 125)',  label: 'Acid' },
+  electric:  { lamp: 'oklch(0.70 0.28 325)', deep: 'oklch(0.50 0.30 322)', glow: 'oklch(0.68 0.32 325)',  label: 'Electric' },
+  signal:    { lamp: 'oklch(0.64 0.24 28)',  deep: 'oklch(0.48 0.26 25)',  glow: 'oklch(0.64 0.28 28)',   label: 'Signal' }
+};
+
+// ── Stamp clock ────────────────────────────────────
+const stampEl = document.getElementById('stamp');
+function tickStamp() {
+  const d = new Date();
+  const p = n => String(n).padStart(2,'0');
+  stampEl.textContent = `${d.getFullYear()}.${p(d.getMonth()+1)}.${p(d.getDate())} · ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+tickStamp(); setInterval(tickStamp, 1000);
+
+// ── Motion lanes ───────────────────────────────────
+document.querySelectorAll('[data-lane]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const lane = document.getElementById(btn.dataset.lane);
+    lane.classList.remove('running');
+    void lane.offsetWidth;
+    lane.classList.add('running');
+    setTimeout(() => lane.classList.remove('running'), 1200);
+  });
+});
+
+// ── Streaming text ─────────────────────────────────
+const STREAM_TEXT = "Danish painter based in Copenhagen. His figurative work draws on Nordic folk iconography and recent painting from Leipzig.";
+const streamEl = document.getElementById('stream-demo');
+function runStream() {
+  if (!streamEl) return;
+  streamEl.innerHTML = '';
+  const words = STREAM_TEXT.split(' ');
+  let i = 0;
+  const tick = () => {
+    if (i >= words.length) {
+      streamEl.innerHTML = STREAM_TEXT + ' <span class="caret"></span>';
+      setTimeout(runStream, 3500);
+      return;
+    }
+    streamEl.innerHTML = words.slice(0, i + 1).join(' ') + ' <span class="caret"></span>';
+    i++;
+    setTimeout(tick, 80 + Math.random() * 70);
+  };
+  tick();
+}
+runStream();
+
+// ── Tweaks ─────────────────────────────────────────
+const tweaks = document.getElementById('tweaks');
+
+function applyAccent(name) {
+  const a = ACCENTS[name];
+  if (!a) return;
+  const root = document.documentElement;
+  root.style.setProperty('--warm', a.lamp);
+  root.style.setProperty('--warm-deep', a.deep);
+  root.style.setProperty('--warm-glow', a.glow);
+}
+// Seed default pigment on load
+applyAccent('minium');
+
+function applyKnob(key, val) {
+  const root = document.documentElement;
+  if (key === 'accent') {
+    applyAccent(val);
+    return;
+  }
+  if (key === 'theme') {
+    if (val === 'auto') root.style.colorScheme = 'light dark';
+    else if (val === 'light') root.style.colorScheme = 'light';
+    else root.style.colorScheme = 'dark';
+  } else if (key === 'time-warmth') {
+    document.querySelectorAll('.room-box').forEach(b => b.style.setProperty('--knob-time-warmth', val));
+  } else if (key === 'warmth-multiplier') {
+    document.querySelectorAll('.room-box').forEach(b => b.style.setProperty('--knob-warmth-multiplier', val));
+  } else if (key === 'wall-gap') {
+    root.style.setProperty('--knob-wall-gap', val + 'px');
+  } else if (key === 'motion') {
+    root.style.setProperty('--knob-motion', val);
+    if (val === '0') root.style.setProperty('scroll-behavior', 'auto');
+  }
+}
+
+document.querySelectorAll('.seg, .accent-swatches').forEach(seg => {
+  const knob = seg.dataset.knob;
+  seg.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      seg.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false'));
+      btn.setAttribute('aria-pressed', 'true');
+      applyKnob(knob, btn.dataset.val);
+      persist(knob, btn.dataset.val);
+    });
+  });
+});
+
+document.querySelectorAll('input[type="range"][data-knob]').forEach(inp => {
+  inp.addEventListener('input', e => {
+    applyKnob(inp.dataset.knob, e.target.value);
+    persist(inp.dataset.knob, e.target.value);
+  });
+});
+
+function persist(key, val) {
+  const map = { 'theme': 'theme', 'accent': 'accent', 'time-warmth': 'timeWarmth', 'warmth-multiplier': 'warmthMultiplier', 'wall-gap': 'wallGap', 'motion': 'motion' };
+  const k = map[key];
+  if (k) {
+    try {
+      window.parent.postMessage({ type: '__edit_mode_set_keys', edits: { [k]: isNaN(+val) ? val : +val } }, '*');
+    } catch(_) {}
+  }
+}
+
+// Edit-mode protocol — register listener BEFORE announcing
+window.addEventListener('message', e => {
+  if (e.data?.type === '__activate_edit_mode') tweaks.classList.add('on');
+  if (e.data?.type === '__deactivate_edit_mode') tweaks.classList.remove('on');
+});
+try { window.parent.postMessage({ type: '__edit_mode_available' }, '*'); } catch(_) {}
+
+// Keyboard toggle
+document.addEventListener('keydown', e => {
+  if (e.key.toLowerCase() === 't' && !e.metaKey && !e.ctrlKey && !e.altKey && document.activeElement.tagName !== 'INPUT') {
+    tweaks.classList.toggle('on');
+  }
+});
+
+// Smooth scroll for TOC
+document.querySelectorAll('.toc-item').forEach(a => {
+  a.addEventListener('click', e => {
+    const id = a.getAttribute('href');
+    if (!id || id[0] !== '#') return;
+    e.preventDefault();
+    const el = document.querySelector(id);
+    if (el) window.scrollTo({ top: el.offsetTop - 60, behavior: 'smooth' });
+  });
+});
+
+// Copy-to-clipboard for code blocks
+document.querySelectorAll('.copy-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const id = btn.dataset.copy;
+    const el = document.getElementById(id);
+    if (!el) return;
+    try {
+      await navigator.clipboard.writeText(el.innerText);
+      const prev = btn.textContent;
+      btn.textContent = 'Copied';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = prev; btn.classList.remove('copied'); }, 1400);
+    } catch(_) {
+      btn.textContent = 'Select all ↓';
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+  });
+});
+
+// APX jump button — cycles through appendix sections
+let apxIdx = 0;
+const apxSections = ['apx-a', 'apx-b', 'apx-c', 'apx-d', 'apx-e', 'apx-f'];
+document.querySelector('.apx-jump')?.addEventListener('click', () => {
+  const el = document.getElementById(apxSections[apxIdx]);
+  if (el) window.scrollTo({ top: el.offsetTop - 60, behavior: 'smooth' });
+  apxIdx = (apxIdx + 1) % apxSections.length;
+});
+</script>
+</body>
+</html>

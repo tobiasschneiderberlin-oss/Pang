@@ -1,0 +1,28 @@
+# PANG workspace — root .gitignore.
+#
+# The app (`pang-2026/`) carries its own `.gitignore` with every
+# Next.js / Turbopack / Vercel exclusion (node_modules, .next,
+# .env*.local, fonts, OPFS scratch). This file covers the workspace
+# wrapper: doctrine docs, the archive, and local tooling state.
+#
+# Philosophy: we version the nine doctrine docs + the app. We do NOT
+# version the 696M `_archive/` (legacy prototypes, reference HTML,
+# gallery-page scrapes) — it's read-only local reference; if anything
+# there ever earns its way back in, it gets absorbed into one of the
+# nine docs per CLAUDE.md § 3, not merged wholesale.
+
+# --- Workspace wrapper --------------------------------------------
+
+# Editor-agent session state (per-machine).
+.claude/
+
+# Legacy prototypes + reference scrapes. Kept locally for lookups.
+_archive/
+
+# macOS metadata.
+.DS_Store
+
+# Editor swap / index / idea / vscode dumps.
+*.swp
+.vscode/
+.idea/

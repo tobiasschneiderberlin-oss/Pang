@@ -1,0 +1,390 @@
+# PANG — the 48 gates
+#
+# Authority for CI. Source: docs/PANG_DS.html, Appendix B (P1–P24, A1–A23)
+#   + keeper-doc codification 2026-04-22 (P25 — zero-tap review, from
+#   iteration #1 findings; see PANG_Gates.md + PANG_Spine.md operating
+#   rule #8). DS HTML is read-only authority; the P25 row lands here
+#   ahead of the next DS revision and is flagged for the DS author.
+# Fail → block merge. "auto" gates are fixed by CI; "manual" gates require a code change.
+# A gate is never removed without naming what replaced it (doctrine edit — Appendix F).
+#
+# Shape:
+#   id         — stable short identifier referenced from code + commits
+#   name       — short human label
+#   family     — grouping in Appendix B
+#   folder     — canonical path the gate watches ("any" = repo-wide)
+#   auto       — true if CI fails the build mechanically, false if manual review
+#   fails_when — the exact condition that trips the gate
+
+version: 1
+source: docs/PANG_DS.html#apx-b + PANG_Gates.md#p25
+total: 48
+
+families:
+  pwa_primitives:
+    label: PWA & primitives
+    desc: Platform floor — what a 2026 web app ships as table stakes. Anything less is a regression.
+    range: [P1, P12]
+  type_space_motion:
+    label: Type, space, motion
+    desc: Craft layer — what separates an app from a product.
+    range: [P13, P18]
+  canvas_data_observability:
+    label: Canvas, data, observability
+    desc: The room of the collection. Rendering, binaries, and what the system tells you about itself in production. Extended with P25 (zero-tap review) 2026-04-22 — the scanner surface's shape is part of the canvas contract.
+    range: [P19, P25]
+  ai_safety:
+    label: AI — safety & contracts
+    desc: The model is a liquid you do not swallow raw. Validation, isolation, structured output — before trust.
+    range: [A1, A10]
+  ai_operations:
+    label: AI — operations
+    desc: Runtime discipline. Rate limits, retries, budgets, pinning.
+    range: [A11, A17]
+  ai_economics:
+    label: AI — economics
+    desc: Cost is a design constraint. Budgets, caps, batches, eval corpus.
+    range: [A18, A23]
+
+gates:
+  # ---- PWA & primitives (P1–P12) ----
+  - id: P1
+    name: Lighthouse 100
+    family: pwa_primitives
+    folder: .pang/ci/lh.yml
+    auto: false
+    fails_when: "Any Lighthouse category below 100 on preview deploy. Run on mid-tier Moto G throttle, not desktop."
+
+  - id: P2
+    name: Manifest
+    family: pwa_primitives
+    folder: public/
+    auto: true
+    fails_when: "Missing manifest.webmanifest, icons < 512, or display set to anything other than standalone."
+
+  - id: P3
+    name: SW navPreload
+    family: pwa_primitives
+    folder: src/sw/
+    auto: true
+    fails_when: "navigationPreload not enabled, or TTFB > 100ms from cached shell."
+
+  - id: P4
+    name: Offline shell
+    family: pwa_primitives
+    folder: src/sw/shell.ts
+    auto: false
+    fails_when: "Any route renders a blank page without network. Shell must paint in < 300ms offline."
+
+  - id: P5
+    name: OPFS
+    family: pwa_primitives
+    folder: src/lib/storage/
+    auto: true
+    fails_when: "Any state written to localStorage. User prefs and work drafts persist to OPFS only."
+
+  - id: P6
+    name: CSP strict
+    family: pwa_primitives
+    folder: next.config.ts
+    auto: true
+    fails_when: "unsafe-inline or unsafe-eval in any header. Nonces required for inline style."
+
+  - id: P7
+    name: Vitals + INP + LoAF
+    family: pwa_primitives
+    folder: src/lib/perf/
+    auto: true
+    fails_when: "p75 INP > 200ms, LoAF entries > 50ms unreported, or LCP > 2.5s on mid-tier."
+
+  - id: P8
+    name: AVIF primary
+    family: pwa_primitives
+    folder: src/components/img/
+    auto: true
+    fails_when: "Any <img> serving JPEG or PNG without an AVIF source above it in <picture>."
+
+  - id: P9
+    name: Sharp corners
+    family: pwa_primitives
+    folder: any
+    auto: true
+    fails_when: "border-radius > 2px outside src/components/chrome/. Containers must be 0."
+
+  - id: P10
+    name: Passkeys
+    family: pwa_primitives
+    folder: src/auth/
+    auto: true
+    fails_when: "Password field present. Auth is passkeys + magic link only."
+
+  - id: P11
+    name: OKLCH only
+    family: pwa_primitives
+    folder: any
+    auto: true
+    fails_when: "Any #xxx, rgb(), or hsl() literal in CSS. Use OKLCH, or reference a token."
+
+  - id: P12
+    name: light-dark()
+    family: pwa_primitives
+    folder: src/styles/
+    auto: true
+    fails_when: "Theme switching via class flips or prop drilling. Use light-dark() with color-scheme."
+
+  # ---- Type, space, motion (P13–P18) ----
+  - id: P13
+    name: size-adjust
+    family: type_space_motion
+    folder: src/styles/fonts.css
+    auto: true
+    fails_when: "Fallback font stack not tuned — measurable CLS on first paint from font swap."
+
+  - id: P14
+    name: No title case
+    family: type_space_motion
+    folder: any JSX string
+    auto: true
+    fails_when: "String matches Title Case pattern. Sentence case for body; MONO-CAP-SPACED for labels."
+
+  - id: P15
+    name: Springs default
+    family: type_space_motion
+    folder: src/lib/motion/
+    auto: true
+    fails_when: "Component writes its own duration: or cubic-bezier without a preset exception comment."
+
+  - id: P16
+    name: View Transitions
+    family: type_space_motion
+    folder: src/app/**
+    auto: true
+    fails_when: "Framer Motion AnimatePresence used for arrival/detail nav. Use the View Transitions API."
+
+  - id: P17
+    name: Anchor + Popover
+    family: type_space_motion
+    folder: src/components/chrome/
+    auto: true
+    fails_when: "Tooltip or menu uses portals, position: fixed math, or a third-party popper."
+
+  - id: P18
+    name: Container queries
+    family: type_space_motion
+    folder: src/components/
+    auto: true
+    fails_when: "Component reads viewport @media for layout instead of @container."
+
+  # ---- Canvas, data, observability (P19–P24) ----
+  - id: P19
+    name: Canvas for art
+    family: canvas_data_observability
+    folder: src/room/
+    auto: false
+    fails_when: "Art renders in a DOM grid with CSS transforms. Use WebGPU → WebGL 2 → DOM as low-end fallback."
+
+  - id: P20
+    name: CV in worker
+    family: canvas_data_observability
+    folder: src/workers/cv/
+    auto: true
+    fails_when: "OCR, perceptual hash, or colour extraction running on the main thread."
+
+  - id: P21
+    name: OPFS binaries
+    family: canvas_data_observability
+    folder: src/lib/storage/
+    auto: true
+    fails_when: "Images, audio, or document blobs in IndexedDB. Binary > 64KB goes to OPFS."
+
+  - id: P22
+    name: OTel prod
+    family: canvas_data_observability
+    folder: src/lib/otel/
+    auto: true
+    fails_when: "Production build without OpenTelemetry exporter. Every request carries a trace-id."
+
+  - id: P23
+    name: A11y floor
+    family: canvas_data_observability
+    folder: any
+    auto: true
+    fails_when: "Lighthouse a11y < 98 or any axe-core serious/critical violation. Tap targets < 24×24."
+
+  - id: P24
+    name: Token discipline
+    family: canvas_data_observability
+    folder: any
+    auto: true
+    fails_when: "Any length, colour, or font-family literal not resolving to a token in tokens.css."
+
+  - id: P25
+    name: Zero-tap review
+    family: canvas_data_observability
+    folder: src/app/scan/**
+    auto: true
+    fails_when: "Text input, textarea, select, or required combobox renders between capture and arrival. End-to-end Playwright trace records any field interaction before arrival entry. AI-derived field on detail surface renders without <Confidence>. Arrival-budget overrun (capture bytes → arrival entry > 500ms p75)."
+
+  # ---- AI — safety & contracts (A1–A10) ----
+  - id: A1
+    name: No JSON.parse
+    family: ai_safety
+    folder: src/ai/
+    auto: true
+    fails_when: "JSON.parse applied directly to model output. Use structured outputs API, never trust free text."
+
+  - id: A2
+    name: Tool use + Zod
+    family: ai_safety
+    folder: src/ai/tools/
+    auto: true
+    fails_when: "Tool definition without a Zod schema, or schema not shared between prompt and runtime."
+
+  - id: A3
+    name: Runtime validation
+    family: ai_safety
+    folder: src/ai/
+    auto: true
+    fails_when: "Model output passed to a caller without schema.parse(). Validation is non-optional."
+
+  - id: A4
+    name: Voice seed
+    family: ai_safety
+    folder: src/ai/prompts/
+    auto: true
+    fails_when: "Prompt to any user-facing agent missing the PANG voice seed — the ten lines from Chapter 01."
+
+  - id: A5
+    name: Banned vocab
+    family: ai_safety
+    folder: src/ai/post/
+    auto: true
+    fails_when: 'Output contains "dive", "unlock", "seamless", "leverage", "journey", or any banned token.'
+
+  - id: A6
+    name: Prompt caching
+    family: ai_safety
+    folder: src/ai/prompts/
+    auto: true
+    fails_when: "Long stable prefix (> 1024 tokens) not marked for cache breakpoint. Costs blow up in load test."
+
+  - id: A7
+    name: CaMeL dual-LLM
+    family: ai_safety
+    folder: src/ai/camel/
+    auto: false
+    fails_when: "Untrusted user content flows into privileged tool calls without a quarantined-LLM pass."
+
+  - id: A8
+    name: Untrusted<T>
+    family: ai_safety
+    folder: src/ai/types/
+    auto: true
+    fails_when: "Data from a model call not wrapped in Untrusted<T> type at the boundary."
+
+  - id: A9
+    name: XML-delimited
+    family: ai_safety
+    folder: src/ai/prompts/
+    auto: true
+    fails_when: "Prompt uses markdown headers or loose prose to structure input. Use XML tags."
+
+  - id: A10
+    name: OTel GenAI spans
+    family: ai_safety
+    folder: src/ai/telemetry/
+    auto: true
+    fails_when: "Model call not wrapped in a gen_ai.* OTel span. Tokens, cost, and latency must export."
+
+  # ---- AI — operations (A11–A17) ----
+  - id: A11
+    name: Rate limits
+    family: ai_operations
+    folder: src/ai/limits/
+    auto: true
+    fails_when: "Per-user rate limit missing on any AI surface. Burst and sustained limits required."
+
+  - id: A12
+    name: Files 24h TTL
+    family: ai_operations
+    folder: src/ai/files/
+    auto: true
+    fails_when: "Uploaded binary to AI provider kept longer than 24h. Cleanup job or TTL tag required."
+
+  - id: A13
+    name: ">= 10 t/s stream"
+    family: ai_operations
+    folder: src/ai/stream/
+    auto: true
+    fails_when: "Streaming surface delivers < 10 tokens/sec sustained to UI. Below 5 t/s triggers tonal breath."
+
+  - id: A14
+    name: Confidence UI
+    family: ai_operations
+    folder: src/components/ai/
+    auto: false
+    fails_when: "Low-confidence AI field rendered identically to high-confidence. Use dotted underline + warm-grey ink."
+
+  - id: A15
+    name: Diff primitive
+    family: ai_operations
+    folder: src/components/ai/diff/
+    auto: false
+    fails_when: "AI replaces a field via modal confirm. Must use Diff — original + proposed + accept/amend inline."
+
+  - id: A16
+    name: TUS queue
+    family: ai_operations
+    folder: src/lib/upload/
+    auto: true
+    fails_when: "Upload to AI pipeline without resumable TUS protocol. Offline-created work must queue."
+
+  - id: A17
+    name: PII redaction
+    family: ai_operations
+    folder: src/ai/redact/
+    auto: true
+    fails_when: "User note or prompt sent to model without PII-redaction pass. Names, emails, addresses hashed."
+
+  # ---- AI — economics (A18–A23) ----
+  - id: A18
+    name: Per-agent budgets
+    family: ai_economics
+    folder: src/ai/agents/
+    auto: true
+    fails_when: "Agent without a per-invocation token ceiling. Runaway loops caught by budget, not logs."
+
+  - id: A19
+    name: Model pinning
+    family: ai_economics
+    folder: src/ai/
+    auto: true
+    fails_when: 'Model name contains "latest" or a major version without a date suffix. Pin an exact snapshot.'
+
+  - id: A20
+    name: Batch API
+    family: ai_economics
+    folder: src/ai/batch/
+    auto: false
+    fails_when: "Offline bulk job (provenance re-scan, catalogue enrich) uses real-time API. Use Batch."
+
+  - id: A21
+    name: Retry policy
+    family: ai_economics
+    folder: src/ai/retry.ts
+    auto: true
+    fails_when: "AI call without exponential backoff + max-attempts. Default 3 attempts, 250ms base."
+
+  - id: A22
+    name: Eval corpus
+    family: ai_economics
+    folder: evals/
+    auto: true
+    fails_when: "Prompt edit landed without running eval corpus. Regression > 2% on any metric blocks merge."
+
+  - id: A23
+    name: Cost cap
+    family: ai_economics
+    folder: src/ai/cost/
+    auto: true
+    fails_when: "Daily per-user cost > ceiling without explicit tier upgrade. Soft-degrade to cheaper model."

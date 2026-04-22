@@ -1,0 +1,53 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gates:
+    name: PANG gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # Strict mode: skip → fail. Every gate must land pass or fail.
+      PANG_STRICT: "1"
+      # Supabase host used by next.config CSP construction. CI does
+      # not hit Supabase; the placeholder keeps the config typeable.
+      NEXT_PUBLIC_SUPABASE_HOST: "example.supabase.co"
+    defaults:
+      run:
+        working-directory: pang-2026
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: pang-2026/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Manifest check (P1)
+        run: npm run check:manifest
+
+      - name: String audit (voice doctrine)
+        run: npm run check:strings
+
+      - name: Gate runner (P1\u2013P10, P23, P24 + A1\u2013A4, A7, A8, A16, A21)
+        run: npm run check:gates
+
+      - name: Build
+        run: npm run build
