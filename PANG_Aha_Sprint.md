@@ -648,6 +648,75 @@ No new gates. No doctrine revisions. No spine moves.
 
 ---
 
+## Iteration #1 — tail (2026-04-22)
+
+Two items from the §7/§8 "iterate once" list landed alongside the
+iteration #2 work, because they were static fixes that didn't need
+Laura's hands to confirm and they unblock the next device walk.
+
+### §8 — mobile button layout (Viewfinder)
+
+**What landed.** A manual capture affordance and a relocated torch
+control. Both on the WCAG 2.5.8 target floor (44×44 minimum), both
+on the SPACING_PX scale, both sharp-cornered per the corners rule.
+
+- **Manual capture**, bottom-centre,
+  `bottom-[max(env(safe-area-inset-bottom),1.5rem)]`, 64×64 outer
+  ring + 48×48 inner square, flat concentric squares (no circle, no
+  radius). The inner square transitions to `var(--warm-deep)` on
+  active — the record's sole OKLCH warm accent, used nowhere else
+  in the viewfinder. Shares the module-local `capture()` path with
+  auto-capture and respects the same `capturingRef` lock, so
+  double-firing is not possible.
+- **Torch**, top-right,
+  `top-[max(env(safe-area-inset-top),1rem)] right-4`, `h-11
+  min-w-11` (44×44 floor on the short axis), out of the thumb
+  drum-fingers zone. Label stays lowercase.
+
+Why flat concentric squares and not the platform shutter-circle:
+the sharp-corners rule in `PANG_Primitives_2026.md` is load-bearing
+for the "a collection, not an app" test. A platform-looking
+shutter would read "you opened an app." Two concentric squares
+read "viewfinder, the work is framed."
+
+### §7 — mobile scan→review→arrival pipeline completion
+
+**What landed.** `app/scan/page.tsx` now fences the `/api/intake`
+round-trip with (a) a `navigator.onLine === false` pre-check,
+(b) an `AbortController` with a 30-second budget, (c) a `finally`
+that clears the timer regardless of branch. Classification:
+
+- `AbortError` → `upload/timeout` ("the record did not arrive. the
+  work waits.") — the corpus line the voice doctrine authored for
+  this exact shape.
+- Anything else the `fetch()` throws → `upload/offline`.
+- `response.ok === false` keeps the existing `keyFromUploadStatus`
+  mapping (5xx → `agent/unreachable`, 422 → `agent/refused`, 4xx →
+  `upload/rejected`).
+
+30 s is the chosen budget because typical intake lands in 6–12 s on
+broadband; a stalled pipeline on cellular should surface as a named
+failure long before the OS-level socket timeout (minutes) —
+otherwise Laura sits with no acknowledgement and the relationship
+to the record frays. The value isn't tokenised because it's a
+one-site time budget, not a motion or spacing scale.
+
+### Codify / iterate / drop
+
+- **Codify:** none new. Both fixes are executions of rules already
+  in the keeper docs (sharp corners, WCAG target, OKLCH accent,
+  named failure keys, voice-authored prose).
+- **Iterate once:** Laura's next device walk confirms the capture
+  affordance reads correctly at 360 px and the timeout line surfaces
+  when the record stalls.
+- **Drop:** nothing.
+
+Static checks: `typecheck`, `lint`, `test`, and `check:gates`
+(P1–P11, P15, P19, P20, P23–P25, A1–A4, A7, A8, A10, A16, A21 —
+26/26) all green after both fixes.
+
+---
+
 ## Archived iterations
 
 The pre-reset sprint family (A1–A11, iterations #1–#13 of the old

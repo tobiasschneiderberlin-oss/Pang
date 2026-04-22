@@ -248,6 +248,28 @@ export function Viewfinder(props: ViewfinderProps): React.ReactElement {
     void cam.setTorch(next);
   }, [torchOn]);
 
+  // ---- Manual capture --------------------------------------
+  // Primary capture is auto — stability crossed its gate, we fire.
+  // The manual button is a fallback for: hands that can't hold
+  // steady, works behind glass where stability never settles, a11y
+  // users who need an explicit activation. It routes through the
+  // same `capture()` helper as auto, so the bytes+sha contract is
+  // identical; the parent `/scan` doesn't branch on trigger source.
+  //
+  // Iteration #1 finding §8 — torch and capture must not overlap on
+  // narrow viewports. Torch moves to top-right (out of the thumb
+  // zone, consistent with system camera chrome); capture owns the
+  // bottom-centre thumb zone uncontested.
+  const onManualCapture = useCallback(() => {
+    const cam = cameraRef.current;
+    if (!cam || capturingRef.current) return;
+    capturingRef.current = true;
+    heldSinceRef.current = null;
+    void capture(cam, onCaptureRef.current, onErrorRef.current).finally(() => {
+      capturingRef.current = false;
+    });
+  }, []);
+
   return (
     <div className="relative h-dvh w-full overflow-hidden bg-ink">
       <video
@@ -261,17 +283,36 @@ export function Viewfinder(props: ViewfinderProps): React.ReactElement {
         onPointerDown={onTap}
         aria-label="viewfinder"
       />
+
+      {/* Torch — top-right, out of the thumb zone. 44×44 minimum
+          tap target (P23 a11y floor). Paper-on-ink-at-40% for the
+          resting surface, inverts on pressed. */}
       {cameraSupports?.torch && (
         <button
           type="button"
           onClick={onTorchToggle}
-          className="absolute bottom-8 right-8 rounded-none border border-paper bg-ink/40 px-4 py-2 text-paper"
+          className="absolute right-4 top-[max(env(safe-area-inset-top),1rem)] grid h-11 min-w-11 place-items-center border border-paper/60 bg-ink/40 px-3 text-xs uppercase tracking-wide text-paper"
           aria-pressed={torchOn}
           aria-label={torchOn ? "torch off" : "torch on"}
         >
           {torchOn ? "torch off" : "torch on"}
         </button>
       )}
+
+      {/* Manual capture — bottom-centre, thumb zone. Sharp-cornered
+          concentric squares (doctrine: containers have radius 0,
+          chrome at most 2px, nothing between). 64px target — comfortably
+          above the 44×44 a11y floor, on the SPACING_PX scale (P24).
+          The outer ring is paper; the inner square is paper at rest,
+          warm-deep on active press — the press *is* the feedback. */}
+      <button
+        type="button"
+        onClick={onManualCapture}
+        className="absolute bottom-[max(env(safe-area-inset-bottom),1.5rem)] left-1/2 grid h-16 w-16 -translate-x-1/2 place-items-center border-2 border-paper bg-transparent active:bg-paper/20"
+        aria-label="capture"
+      >
+        <span className="block h-12 w-12 bg-paper transition-[background-color] active:bg-[var(--warm-deep)]" />
+      </button>
     </div>
   );
 }

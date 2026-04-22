@@ -57,6 +57,23 @@ export default function ScanPage(): ReactElement {
     const blobUrl = URL.createObjectURL(blob);
     setStage({ kind: "uploading", blobUrl });
 
+    // Offline check first — cheap and unambiguous. `navigator.onLine`
+    // is only definitive when false; true still means "could fail on
+    // the next hop". The AbortController below handles that case.
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      setStage({ kind: "failed", failureKey: "upload/offline" });
+      URL.revokeObjectURL(blobUrl);
+      return;
+    }
+
+    // Budget: 30s. Claude Vision intake typically lands in 6–12s on
+    // broadband; a stalled pipeline on cellular should surface as a
+    // named failure long before the OS-level socket timeout (minutes).
+    // 30s is generous enough to cover a tail-case re-enrichment round
+    // without inviting the thumb-drum-fingers zone.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+
     try {
       const form = new FormData();
       form.set(
@@ -75,6 +92,7 @@ export default function ScanPage(): ReactElement {
         method: "POST",
         body: form,
         credentials: "same-origin",
+        signal: controller.signal,
       });
       if (!response.ok) {
         // 422 → agent/refused (the model ran, the output failed
@@ -101,12 +119,21 @@ export default function ScanPage(): ReactElement {
         setStage({ kind: "review", output, blobUrl });
       }
     } catch (err) {
-      // fetch() throws on network failure (status 0 territory) and
-      // on CORS / abort. Classify conservatively as upload/offline —
-      // the corpus line observes, doesn't accuse.
-      void err;
-      setStage({ kind: "failed", failureKey: "upload/offline" });
+      // Three reasons fetch() throws here: (1) AbortError after the
+      // 30s budget elapsed — classify as upload/timeout (the record
+      // did not arrive; we can't know whether it was the wire or the
+      // reading room); (2) TypeError "Failed to fetch" on dropped
+      // connection — upload/offline; (3) anything else — conservative
+      // upload/offline. The corpus line observes, doesn't accuse;
+      // specificity is for telemetry, not copy.
+      const key: FailureKey =
+        err instanceof DOMException && err.name === "AbortError"
+          ? "upload/timeout"
+          : "upload/offline";
+      setStage({ kind: "failed", failureKey: key });
       URL.revokeObjectURL(blobUrl);
+    } finally {
+      clearTimeout(timeout);
     }
   }, []);
 
