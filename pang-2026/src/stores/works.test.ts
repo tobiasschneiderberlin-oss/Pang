@@ -94,6 +94,36 @@ describe("useWorks (Zustand store)", () => {
     useWorks.getState().clear();
     assert.equal(useWorks.getState().entries.length, 0);
   });
+
+  it("setFocusedId writes and clears focus", () => {
+    useWorks.getState().setFocusedId("e1");
+    assert.equal(useWorks.getState().focusedId, "e1");
+    useWorks.getState().setFocusedId(null);
+    assert.equal(useWorks.getState().focusedId, null);
+  });
+
+  it("removeEntry clears focus if the removed id was focused", () => {
+    useWorks.getState().addEntry(E1);
+    useWorks.getState().addEntry(E2);
+    useWorks.getState().setFocusedId("e1");
+    useWorks.getState().removeEntry("e1");
+    assert.equal(useWorks.getState().focusedId, null);
+  });
+
+  it("removeEntry leaves focus alone when a different id is removed", () => {
+    useWorks.getState().addEntry(E1);
+    useWorks.getState().addEntry(E2);
+    useWorks.getState().setFocusedId("e1");
+    useWorks.getState().removeEntry("e2");
+    assert.equal(useWorks.getState().focusedId, "e1");
+  });
+
+  it("clear resets focus to null", () => {
+    useWorks.getState().addEntry(E1);
+    useWorks.getState().setFocusedId("e1");
+    useWorks.getState().clear();
+    assert.equal(useWorks.getState().focusedId, null);
+  });
 });
 
 // ---------- layoutEntries ---------------------------------------

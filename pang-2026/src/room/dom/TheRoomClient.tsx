@@ -4,11 +4,12 @@
  *
  * Subscribes to the works store, projects entries into wall
  * positions via `layoutEntries()`, and renders the canvas + DOM
- * twin side by side. Focus is a shared piece of state: canvas
- * taps flow into React via `onFocusChange`; twin activations flow
- * into the canvas via the imperative handle. Either path updates
- * the single `focusedId` state, and either path feels the same
- * to the collector.
+ * twin side by side. Focus is shared state in the works store:
+ * canvas taps flow into the store via `onFocusChange`, twin
+ * activations write to the store directly, and the arrival
+ * chapter writes to the store on mount — all three paths end at
+ * the same `focusedId` slice, and the canvas's imperative handle
+ * is the single write point that drives the gesture state.
  *
  * This component is intentionally small — composition only. The
  * GL lifetime, RAF loop, gestures, and scene graph all live in
@@ -16,7 +17,7 @@
  * and § 1.5 of the architecture doc).
  */
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { ReactElement } from "react";
 import { TheRoomCanvas } from "@/room/dom/TheRoomCanvas";
 import type { TheRoomCanvasHandle } from "@/room/dom/TheRoomCanvas";
@@ -25,10 +26,20 @@ import { layoutEntries, useWorks } from "@/stores/works";
 
 export function TheRoomClient(): ReactElement {
   const entries = useWorks((s) => s.entries);
+  const focusedId = useWorks((s) => s.focusedId);
+  const setFocusedId = useWorks((s) => s.setFocusedId);
   const works = useMemo(() => layoutEntries(entries), [entries]);
 
   const canvasRef = useRef<TheRoomCanvasHandle | null>(null);
-  const [focusedId, setFocusedId] = useState<string | null>(null);
+
+  // Push the store's focus into the canvas whenever it changes.
+  // The canvas's internal gesture state is the source of truth for
+  // the RAF loop; this effect keeps it synchronised with store
+  // writes (arrival chapter, twin, programmatic reveal) without
+  // requiring every caller to know about the imperative handle.
+  useEffect(() => {
+    canvasRef.current?.focusWork(focusedId);
+  }, [focusedId]);
 
   return (
     <div className="relative h-full w-full">
@@ -41,12 +52,10 @@ export function TheRoomClient(): ReactElement {
         entries={entries}
         focusedId={focusedId}
         onFocus={(id) => {
-          canvasRef.current?.focusWork(id);
-          // Mirror into React state immediately so the twin's
-          // `aria-pressed` reflects the request without waiting
-          // for the RAF loop's next `onFocusChange`. The loop
-          // will re-announce the same value shortly after; the
-          // React reconciler deduplicates.
+          // Writing to the store is enough — the effect above
+          // pushes the new value into the canvas. Keeping the
+          // twin write on the store side (not the imperative
+          // handle) keeps the one-way-data-flow story intact.
           setFocusedId(id);
         }}
       />

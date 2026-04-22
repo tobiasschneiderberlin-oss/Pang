@@ -25,7 +25,6 @@ import { Viewfinder } from "@/components/scanner/Viewfinder";
 import { IntakeReview } from "@/components/intake/IntakeReview";
 import { ArrivalChapter } from "@/components/intake/ArrivalChapter";
 import type { IntakeOutput } from "@/ai/tools/artwork";
-import { entryFromIntake, useWorks } from "@/stores/works";
 import {
   failureLine,
   keyFromUploadStatus,
@@ -162,13 +161,16 @@ export default function ScanPage(): ReactElement {
 
   const onArrivalDone = useCallback(() => {
     if (stage.kind !== "arrival") return;
-    // The new work lands on Laura's wall. The works store owns
-    // the blob URL for the rest of the session — so we do *not*
-    // revoke it here; doing so would blank the texture on the
-    // Room canvas. OPFS rehydration (P5 persistence) replaces
-    // the blob URL with a durable handle in a later iteration.
-    useWorks.getState().addEntry(entryFromIntake(stage.output, stage.blobUrl));
-    // Client-side navigation: keeps the blob URL alive and lets
+    // The work has already been added to the store + focused by
+    // `ArrivalChapter` on its mount (so the Room renders with it
+    // on the wall while the arrival overlay settles). All this
+    // callback does is navigate home. We do *not* revoke the blob
+    // URL; the works store owns it for the rest of the session and
+    // doing so here would blank the texture on the Room canvas.
+    // OPFS rehydration (P5 persistence) replaces the blob URL with
+    // a durable handle in a later iteration.
+    //
+    // Client-side navigation keeps the blob URL alive and lets
     // Next's same-document View Transition (enabled in
     // next.config) animate the arrival surface into the Room.
     router.push("/");

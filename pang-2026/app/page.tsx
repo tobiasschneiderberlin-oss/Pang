@@ -17,7 +17,7 @@
  */
 
 import type { ReactElement } from "react";
-import { TheRoomClient } from "./_the-room/TheRoomClient";
+import { TheRoomClient } from "@/room/dom/TheRoomClient";
 
 export default function TheRoom(): ReactElement {
   return (

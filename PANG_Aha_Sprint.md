@@ -648,6 +648,62 @@ No new gates. No doctrine revisions. No spine moves.
 
 ---
 
+## Iteration #2 — findings, step 3 (2026-04-22)
+
+Step 3 was scoped as three pieces: DOM twin + canvas-DOM focus
+handoff, works-store diff into the live scene, and arrival-chapter
+integration. Steps 1 and 2 had already landed during the step-2
+polish pass (the twin lives at `src/room/dom/RoomDOMTwin.tsx` and
+`TheRoomCanvas`'s diff effect wires `addWork`/`removeWork`).
+This pass lands the third piece and centralises focus state so
+arrival can drive it.
+
+### What landed
+
+- **Focus is now store-owned.** `useWorks` carries `focusedId` and
+  `setFocusedId`; `removeEntry` clears focus if the removed id was
+  focused. Previously the focused id lived in `TheRoomClient` as
+  local React state, which worked for the home route but could
+  not be written from outside (e.g. arrival chapter) without
+  prop-drilling.
+- **`TheRoomCanvas` tolerates pre-mount focus writes.** The
+  imperative handle stashes focus requests into `pendingFocusRef`
+  when the async mount hasn't wired the gesture state yet; the
+  mount path applies the pending value once it has. This removes a
+  race where arrival writes focus on its mount and the canvas's
+  capability-detect + renderer-init window (~1–2 RAFs) would drop
+  the request.
+- **Arrival chapter renders the Room behind.** `ArrivalChapter`
+  now mounts `TheRoomClient` as its backdrop, adds the new entry
+  to the store on mount, and writes focus to the new work's id
+  before the captured-still overlay begins its fade. The P-LLM's
+  `arrivalLine` sits as a museum caption below the work; "tap to
+  return" appears after 1400 ms. On dismiss, the client navigates
+  home; focus is preserved, so the home route opens with the
+  camera still on the new work. The iteration #1 single-column
+  placeholder is gone.
+- **`/scan` stops double-writing.** `onArrivalDone` now only
+  navigates — the arrival chapter owns the store write. The
+  "placement, not dismiss" spine line is literal.
+- **`TheRoomClient` moved to `src/room/dom/`.** It was the only
+  component still living in `app/_the-room/`; co-locating it with
+  the Canvas and DOM twin it composes keeps the Room surface one
+  directory deep.
+
+### What this tightens
+
+No new gates. No doctrine revisions. Both mechanics — store-owned
+focus and pre-mount focus stashing — are implementation details of
+the Primitive §35 "React is the adapter" rule, which already
+declares the canvas as the primary surface and React as the
+composition around it.
+
+The fourth step of the iteration (the RAF loop's perf budget at
+tier B, the Tweaks menu, and OPFS texture rehydration) is still
+open. Step 3 as scoped is landed.
+
+---
+
 ## Iteration #1 — tail (2026-04-22)
 
 Two items from the §7/§8 "iterate once" list landed alongside the

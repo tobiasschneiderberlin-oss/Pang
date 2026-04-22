@@ -47,10 +47,23 @@ export interface CollectionEntry {
 
 interface WorksStore {
   readonly entries: readonly CollectionEntry[];
+  /**
+   * The currently focused work id, or `null` when the camera sits in
+   * the wall-overview pose. Shared state — both canvas taps and DOM
+   * twin activations write here, and the arrival chapter writes here
+   * on mount so the home route's Room can open already focused on
+   * the new work when the collector taps to return.
+   *
+   * Persistence: in-memory, like `entries`. A refresh returns to the
+   * wall overview, not to the last-focused work.
+   */
+  readonly focusedId: string | null;
   /** Idempotent on `id` — adding an existing id replaces. */
   addEntry(entry: CollectionEntry): void;
-  /** No-op if the id is not present. */
+  /** No-op if the id is not present. Clears focus if the removed id was focused. */
   removeEntry(id: string): void;
+  /** Set or clear the focused work. */
+  setFocusedId(id: string | null): void;
   /** Reset for testing; not wired to any user action. */
   clear(): void;
 }
@@ -58,6 +71,7 @@ interface WorksStore {
 export const useWorks = create<WorksStore>()(
   subscribeWithSelector((set) => ({
     entries: [],
+    focusedId: null,
     addEntry: (entry) =>
       set((state) => {
         const filtered = state.entries.filter((e) => e.id !== entry.id);
@@ -66,8 +80,10 @@ export const useWorks = create<WorksStore>()(
     removeEntry: (id) =>
       set((state) => ({
         entries: state.entries.filter((e) => e.id !== id),
+        focusedId: state.focusedId === id ? null : state.focusedId,
       })),
-    clear: () => set({ entries: [] }),
+    setFocusedId: (id) => set({ focusedId: id }),
+    clear: () => set({ entries: [], focusedId: null }),
   })),
 );
 

@@ -163,6 +163,13 @@ export function TheRoomCanvas({
   // go through the same mutation point — the RAF loop doesn't care
   // which path wrote the id.
   const gestureStateRef = useRef<GestureState | null>(null);
+  // Pending focus request stash. `focusWork()` can be called before
+  // the async mount() finishes wiring the gesture state (the arrival
+  // chapter writes focus into the store on mount, and the Room's
+  // capability detection + renderer init typically takes 1–2 RAFs).
+  // `undefined` means "no request stashed"; `null` is a valid stash
+  // meaning "clear focus on ready".
+  const pendingFocusRef = useRef<string | null | undefined>(undefined);
 
   useImperativeHandle(
     ref,
@@ -170,6 +177,7 @@ export function TheRoomCanvas({
       focusWork(id) {
         const state = gestureStateRef.current;
         if (state) state.focusWorkId = id;
+        else pendingFocusRef.current = id;
       },
     }),
     [],
@@ -253,6 +261,15 @@ export function TheRoomCanvas({
       // drive focus from outside. Cleared on effect teardown below.
       gestureStateRef.current = gesture.state;
 
+      // Apply any focus requested before the gesture state existed
+      // (see `pendingFocusRef` — arrival chapter writes focus on
+      // mount; the canvas's async init typically lands 1–2 RAFs
+      // later, so the request must survive that window).
+      if (pendingFocusRef.current !== undefined) {
+        gesture.state.focusWorkId = pendingFocusRef.current;
+        pendingFocusRef.current = undefined;
+      }
+
       // Emit focus changes to the parent (for DOM twin sync later).
       let lastFocus: string | null = null;
 
@@ -308,6 +325,7 @@ export function TheRoomCanvas({
       sceneRef.current = null;
       worksSnapshotRef.current = new Map();
       gestureStateRef.current = null;
+      pendingFocusRef.current = undefined;
     };
     // `works` intentionally excluded — it seeds the scene on mount
     // but subsequent changes are handled by the diff effect below,
