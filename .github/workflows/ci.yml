@@ -9,6 +9,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Least-privilege default: jobs can read the checkout and nothing
+# more. Individual jobs opt in to extra scopes (e.g. the Claude
+# review job, if added later, needs `pull-requests: write`). Metadata
+# is always readable regardless of this block.
+permissions:
+  contents: read
+
 jobs:
   gates:
     name: PANG gates
@@ -61,6 +68,19 @@ jobs:
       - name: Gate runner (P1\u2013P10, P23\u2013P25 + A1\u2013A4, A7, A8, A16, A21)
         run: npm run check:gates
 
+      # Next.js build cache, per the official CI-caching guide.
+      # Key: lockfile hash (deps) + source hash (code). Source change
+      # → new key but `restore-keys` falls back to the last cache
+      # with the same lockfile, so unchanged chunks stay cached.
+      # Lockfile change → full miss (intentional — upstream changed).
+      - name: Cache Next.js build
+        uses: actions/cache@v4
+        with:
+          path: pang-2026/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('pang-2026/package-lock.json') }}-${{ hashFiles('pang-2026/src/**/*.{js,jsx,ts,tsx,css}', 'pang-2026/app/**/*.{js,jsx,ts,tsx,css}') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('pang-2026/package-lock.json') }}-
+
       - name: Build
         run: npm run build
 
@@ -96,12 +116,23 @@ jobs:
             lightningcss-linux-x64-gnu \
             @tailwindcss/oxide-linux-x64-gnu
 
+      # Shared `.next/cache` with the gates job — same cache key
+      # means both jobs benefit from the other's warm cache on
+      # subsequent runs. Big win on unchanged-code PRs.
+      - name: Cache Next.js build
+        uses: actions/cache@v4
+        with:
+          path: pang-2026/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('pang-2026/package-lock.json') }}-${{ hashFiles('pang-2026/src/**/*.{js,jsx,ts,tsx,css}', 'pang-2026/app/**/*.{js,jsx,ts,tsx,css}') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('pang-2026/package-lock.json') }}-
+
       # Build standalone. Earlier revisions tried sharing `.next/`
       # from the gates job via upload/download-artifact to skip this
-      # ~2-minute rebuild, but the download-side extraction ran into
-      # the upload-artifact-v4 hidden-files default and later a
-      # webServer boot issue that wasn't worth chasing on CI
-      # hardware. Re-introduce the share when we have a reason to.
+      # ~2-minute rebuild, but that path hit an upload-artifact-v4
+      # hidden-files issue and a later webServer boot issue that
+      # wasn't worth chasing on CI hardware. The shared `.next/cache`
+      # above recovers most of the speedup safely.
       - name: Build
         run: npm run build
 

@@ -11,6 +11,11 @@ on:
     # Sunday 04:00 UTC — cheap off-hours.
     - cron: "0 4 * * 0"
 
+# Least-privilege — the eval job only needs to read the checkout;
+# the ANTHROPIC_API_KEY comes from secrets, not GITHUB_TOKEN scope.
+permissions:
+  contents: read
+
 jobs:
   eval:
     name: A22 intake eval (live)
