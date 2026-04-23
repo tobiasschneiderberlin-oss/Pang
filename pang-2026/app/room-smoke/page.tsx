@@ -14,12 +14,19 @@
  */
 
 import type { ReactElement } from "react";
-import { RoomSmokeClient } from "./RoomSmokeClient";
+// Client-only mount: `RoomSmokeClient` imports `TheRoomCanvas` which
+// transitively pulls `three/webgpu`. The latter touches `self` at
+// module load and crashes Node. The intermediate
+// `RoomSmokeClientDynamic` wraps the client in
+// `next/dynamic({ ssr: false })` — Next 16 forbids that call from a
+// Server Component, so the wrapper file is itself `"use client"`.
+// Same pattern as the home route's `TheRoomClientDynamic`.
+import { RoomSmokeClientDynamic } from "./RoomSmokeClientDynamic";
 
 export default function RoomSmokePage(): ReactElement {
   return (
     <main className="h-dvh w-full bg-paper">
-      <RoomSmokeClient />
+      <RoomSmokeClientDynamic />
     </main>
   );
 }

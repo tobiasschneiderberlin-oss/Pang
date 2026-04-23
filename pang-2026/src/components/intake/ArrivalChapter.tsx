@@ -36,7 +36,13 @@
 import { useEffect, useRef, useState, type ReactElement } from "react";
 import type { IntakeOutput } from "@/ai/tools/artwork";
 import { entryFromIntake, useWorks, type CollectionEntry } from "@/stores/works";
-import { TheRoomClient } from "@/room/dom/TheRoomClient";
+// Client-only mount: `TheRoomClient` transitively imports
+// `three/webgpu`, which touches `self` at module load and crashes Node.
+// `"use client"` marks the hydration boundary but not the SSR boundary;
+// `next/dynamic({ ssr: false })` (inside `TheRoomClientDynamic`) is the
+// SSR boundary that keeps `/scan` server-renderable. See
+// `src/room/dom/TheRoomClientDynamic.tsx`.
+import { TheRoomClientDynamic as TheRoomClient } from "@/room/dom/TheRoomClientDynamic";
 
 export interface ArrivalChapterProps {
   readonly output: IntakeOutput;

@@ -17,7 +17,14 @@
  */
 
 import type { ReactElement } from "react";
-import { TheRoomClient } from "@/room/dom/TheRoomClient";
+// `TheRoomClientDynamic` wraps `TheRoomClient` in
+// `next/dynamic({ ssr: false })`. The reason lives in that file's
+// header: `src/room/scene.ts` imports `three/webgpu` at module top
+// level, which touches `self` and is fatal in Node. `"use client"`
+// marks the hydration boundary but not the SSR boundary; `dynamic`
+// with `ssr: false` is the SSR boundary. This route is the only
+// place `TheRoomClient` is reached from a Server Component.
+import { TheRoomClientDynamic } from "@/room/dom/TheRoomClientDynamic";
 
 export default function TheRoom(): ReactElement {
   return (
@@ -25,7 +32,7 @@ export default function TheRoom(): ReactElement {
       className="relative h-dvh w-full bg-paper"
       aria-label="Your collection"
     >
-      <TheRoomClient />
+      <TheRoomClientDynamic />
     </main>
   );
 }
