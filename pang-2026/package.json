@@ -37,6 +37,7 @@
     "@tanstack/react-query-persist-client": "^5.80.0",
     "motion": "^12.0.0",
     "next": "^16.2.4",
+    "pdfjs-dist": "^4.10.38",
     "react": "19.2.5",
     "react-dom": "19.2.5",
     "three": "^0.170.0",

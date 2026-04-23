@@ -131,7 +131,16 @@ export interface EnrichmentStore {
   clear(): void;
 }
 
-const NONE: EnrichmentState = { kind: "none" };
+/**
+ * Module-scoped singleton "none" state. Exported so external
+ * consumers (the Panel, any other store reader) can reuse the same
+ * reference as a fallback inside Zustand selectors — a freshly
+ * allocated `{ kind: "none" }` on every call would hand React an
+ * unstable snapshot and trigger the `getServerSnapshot should be
+ * cached to avoid an infinite loop` warning under `useSyncExternalStore`.
+ */
+export const ENRICHMENT_NONE: EnrichmentState = { kind: "none" };
+const NONE: EnrichmentState = ENRICHMENT_NONE;
 
 export const useEnrichment = create<EnrichmentStore>()(
   subscribeWithSelector((set, get) => ({

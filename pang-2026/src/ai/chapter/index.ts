@@ -26,6 +26,7 @@ export type {
   ChapterPlan,
   ChapterPlanBase,
   ChapterShape,
+  DocumentsChapterPlan,
   OutcomeChapterPlan,
 } from "./types";
 export { BEAT_KIND_ORDER } from "./types";
@@ -34,6 +35,7 @@ export {
   planChapter,
   planConfirmationChapter,
   planDeclineChapter,
+  planDocumentsChapter,
 } from "./plan";
 
 export {
@@ -69,4 +71,7 @@ export {
   SURFACE_LABEL,
   ARIA_ANNOUNCE,
   OUTCOME_NARRATION,
+  DOCUMENTS_CONTEXT_LINE,
+  DOCUMENTS_VIEWER,
+  DOCUMENTS_LABEL,
 } from "./voice";

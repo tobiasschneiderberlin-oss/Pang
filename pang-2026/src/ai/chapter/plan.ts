@@ -27,14 +27,20 @@
  */
 
 import type { IntakeOutput } from "@/ai/tools/artwork";
+import type { DocumentRecord } from "@/stores/works";
 import type {
   Beat,
   ChapterArtifact,
   ChapterPlan,
   ChapterShape,
+  DocumentsChapterPlan,
   OutcomeChapterPlan,
 } from "./types";
-import { ARTIFACT_LABELS, OUTCOME_NARRATION } from "./voice";
+import {
+  ARTIFACT_LABELS,
+  DOCUMENTS_CONTEXT_LINE,
+  OUTCOME_NARRATION,
+} from "./voice";
 
 // ---- Timing table (ms) -------------------------------------------
 //
@@ -437,6 +443,11 @@ function planOutcomeChapter(
  * `MAX_ARTIFACTS`. Field ordering is preserved from the model output;
  * we pick the first three fields so the card reads as a tag, not a
  * table.
+ *
+ * `fileRef`/`mime` are null here — arrival-chapter artifacts are the
+ * field-only preview (the scan isn't clickable yet; the documents
+ * chapter iteration #6 ships the tap-to-view surface). The type
+ * narrows consumers; the null clarifies the contract.
  */
 function pickArtifacts(output: IntakeOutput): readonly ChapterArtifact[] {
   const docs = output.documents.slice(0, MAX_ARTIFACTS);
@@ -447,6 +458,143 @@ function pickArtifacts(output: IntakeOutput): readonly ChapterArtifact[] {
       kind: doc.type,
       label: ARTIFACT_LABELS[doc.type],
       fields: entries.map(([k, v]) => [k, v] as const),
+      fileRef: null,
+      mime: null,
     };
   });
+}
+
+// ---- Documents-chapter timing table (ms) -------------------------
+//
+// Iteration #6 extends the chapter primitive to evidence. Timings
+// chosen so totalMs lands in the brief's [6000, 12000] band across
+// document counts n ∈ [1, 8]:
+//
+//   settle        [0, 600)                   opening breath
+//   artifact/i    [600 + i·800, ... +3000)   staggered reveal
+//   context       [after last artifact, +2500)   closing line
+//   ready         [..., ∞)                   terminal
+//
+// For n=1: totalMs ≈ 6100 ms (floor).
+// For n=8: totalMs ≈ 11700 ms (just under ceiling).
+//
+// The stagger (800 ms) plus the per-artifact duration (3000 ms)
+// keeps the procession legible on low-end devices — a card has
+// ~800 ms alone on stage before the next arrives, then overlaps in
+// hold. Fade-in/out mirror the arrival chapter's rate-6 curve.
+
+const DOC_SETTLE_MS = 600;
+const DOC_ARTIFACT_STAGGER_MS = 800;
+const DOC_ARTIFACT_DURATION_MS = 3000;
+const DOC_CONTEXT_MS = 2500;
+const DOC_FADE_IN_MS = 600;
+const DOC_FADE_OUT_MS = 900;
+const MAX_DOCUMENT_ARTIFACTS = 8;
+
+/**
+ * Plan the *documents* chapter — the staggered-reveal procession
+ * played when Laura focuses a work with attached documents. Pure.
+ * Same `(documents, workId, focusedAt)` input produces byte-identical
+ * output across calls — safe for `useState(() => planDocumentsChapter(...))`.
+ *
+ * A work with no documents is still a legal input: the plan has
+ * `settle → context → ready` (no artifact beats) and `totalMs` sits
+ * on the floor. The renderer (`DocumentsChapter.tsx`) short-circuits
+ * on an empty artifact list and renders nothing — the plan's
+ * null-safety keeps the consumer branch-free.
+ */
+export function planDocumentsChapter(
+  documents: readonly DocumentRecord[],
+  workId: string,
+  focusedAt: string,
+): DocumentsChapterPlan {
+  const beats: Beat[] = [];
+
+  // --- Settle: opening breath -------------------------------------
+  beats.push({
+    id: "settle/open",
+    kind: "settle",
+    startMs: 0,
+    durationMs: DOC_SETTLE_MS,
+    fadeInMs: DOC_FADE_IN_MS,
+    fadeOutMs: DOC_FADE_OUT_MS,
+  });
+
+  // --- Artifacts: staggered reveal --------------------------------
+  const capped = documents.slice(0, MAX_DOCUMENT_ARTIFACTS);
+  const artifacts: ChapterArtifact[] = capped.map((doc, index) => ({
+    id: `${doc.type}/${index}`,
+    kind: doc.type,
+    label: ARTIFACT_LABELS[doc.type],
+    fields: Object.entries(doc.extractedFields)
+      .slice(0, 3)
+      .map(([k, v]) => [k, v] as const),
+    fileRef: doc.fileRef,
+    mime: doc.mime,
+  }));
+
+  let lastArtifactEndMs = DOC_SETTLE_MS;
+  artifacts.forEach((artifact, index) => {
+    const startMs = DOC_SETTLE_MS + index * DOC_ARTIFACT_STAGGER_MS;
+    beats.push({
+      id: `artifact/${index}`,
+      kind: "artifact",
+      startMs,
+      durationMs: DOC_ARTIFACT_DURATION_MS,
+      fadeInMs: DOC_FADE_IN_MS,
+      fadeOutMs: DOC_FADE_OUT_MS,
+      payload: { kind: "artifact", artifact },
+    });
+    lastArtifactEndMs = startMs + DOC_ARTIFACT_DURATION_MS;
+  });
+
+  // --- Context: closing voice-corpus line -------------------------
+  const contextStartMs = lastArtifactEndMs;
+  beats.push({
+    id: "context",
+    kind: "context",
+    startMs: contextStartMs,
+    durationMs: DOC_CONTEXT_MS,
+    fadeInMs: DOC_FADE_IN_MS,
+    fadeOutMs: DOC_FADE_OUT_MS,
+    payload: {
+      kind: "context",
+      label: "Documents.",
+      body: DOCUMENTS_CONTEXT_LINE,
+    },
+  });
+  const contextEndMs = contextStartMs + DOC_CONTEXT_MS;
+
+  // --- Ready: terminal --------------------------------------------
+  beats.push({
+    id: "ready",
+    kind: "ready",
+    startMs: contextEndMs,
+    durationMs: Number.MAX_SAFE_INTEGER - contextEndMs,
+    fadeInMs: DOC_FADE_IN_MS,
+    fadeOutMs: 0,
+  });
+
+  const totalMs = contextEndMs;
+
+  const shape: ChapterShape = {
+    beatCount: beats.length,
+    hasArtifacts: artifacts.length > 0,
+    artifactCount: artifacts.length,
+    hasAttribution: false,
+    hasContext: true,
+    hasNullReflection: false,
+  };
+
+  return {
+    variant: "documents",
+    beats,
+    totalMs,
+    readyAtMs: totalMs,
+    workId,
+    shape,
+    artifacts,
+    contextLine: DOCUMENTS_CONTEXT_LINE,
+    focusedAt,
+  };
 }

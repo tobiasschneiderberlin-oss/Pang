@@ -26,6 +26,9 @@ import type { ReactElement } from "react";
 // place `TheRoomClient` is reached from a Server Component.
 import { TheRoomClientDynamic } from "@/room/dom/TheRoomClientDynamic";
 import { FocusedWorkPanel } from "@/components/verification/FocusedWorkPanel";
+import { DocumentsChapterConnector } from "@/components/documents/DocumentsChapter";
+import { DocumentViewerConnector } from "@/components/documents/DocumentViewer";
+import { EnrichmentPanel } from "@/components/enrichment/EnrichmentPanel";
 
 export default function TheRoom(): ReactElement {
   return (
@@ -40,6 +43,13 @@ export default function TheRoom(): ReactElement {
        *  arrival chapter — which uses its own TheRoomClient — owns
        *  its own chrome without fighting this panel. */}
       <FocusedWorkPanel />
+      {/* Iteration #6 surfaces — the focused-work surface expands to
+       *  include documents as evidence + the enrichment panel beside
+       *  it. Each connector self-guards: no documents, no render; no
+       *  enrichment payload, no render; no activeViewer, no viewer. */}
+      <DocumentsChapterConnector />
+      <EnrichmentPanel />
+      <DocumentViewerConnector />
     </main>
   );
 }
