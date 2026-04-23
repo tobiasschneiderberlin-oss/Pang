@@ -70,6 +70,10 @@ jobs:
       # Share the built app with the downstream `e2e` job instead of
       # rebuilding. `.next/` + generated `public/sw.js` are all
       # `next start` needs. Saves ~2 min per PR.
+      #
+      # `include-hidden-files: true` is load-bearing — upload-artifact
+      # v4 excludes dotfile paths by default, and `.next/` would
+      # silently not ship, leaving e2e with an empty runtime.
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
@@ -77,6 +81,7 @@ jobs:
           path: |
             pang-2026/.next/
             pang-2026/public/sw.js
+          include-hidden-files: true
           retention-days: 1
           if-no-files-found: error
 
