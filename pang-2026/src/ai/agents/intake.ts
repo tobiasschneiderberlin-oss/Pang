@@ -53,10 +53,11 @@ import {
 // ---------- Agent input ------------------------------------------
 
 export interface IntakeAgentInput {
-  /** Rectified PNG bytes (from the scanner worker). User-branded
-   *  because the user held the device; capability graph allows
-   *  this into `agent.intake.pLlm`. */
-  readonly image: Trusted<{ bytes: Uint8Array; mime: "image/png" }, "user">;
+  /** Rectified image bytes (from the scanner worker). Camera captures
+   *  use JPEG; file-picker uploads may use PNG. User-branded because
+   *  the user held the device; capability graph allows this into
+   *  `agent.intake.pLlm`. Both MIME types are accepted by Claude Vision. */
+  readonly image: Trusted<{ bytes: Uint8Array; mime: "image/png" | "image/jpeg" }, "user">;
   /** Optional untrusted document text (email body, scanned PDF
    *  text). Q-LLM reads this; P-LLM never does. */
   readonly untrustedDoc?: Untrusted<{ text: string }>;
@@ -186,7 +187,11 @@ function buildUserContent(
       type: "image",
       source: {
         type: "base64",
-        media_type: "image/png",
+        // Use the actual MIME type from the branded image — camera
+        // captures are JPEG, file-picker uploads may be PNG. Both are
+        // accepted by Claude Vision. The value is narrowed to the two
+        // allowed types by the IntakeAgentInput type above.
+        media_type: input.image.mime,
         data: base64,
       },
     },

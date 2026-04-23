@@ -146,8 +146,9 @@ export const IntakeRequestMetadataSchema = z
   .object({
     /** OPFS key for the rectified image bytes. */
     imageRef: z.string().min(1).max(512),
-    /** Image MIME type. PNG only — we rectify to PNG on-device. */
-    imageMime: z.literal("image/png"),
+    /** Image MIME type. Camera captures use JPEG (smaller); file-picker
+     *  uploads may use PNG. Both are accepted by Claude Vision. */
+    imageMime: z.enum(["image/png", "image/jpeg"]),
     /** SHA-256 of the rectified image, hex. */
     imageSha256: z.string().regex(/^[0-9a-f]{64}$/),
     /** Client-declared capture source. The server does not trust this

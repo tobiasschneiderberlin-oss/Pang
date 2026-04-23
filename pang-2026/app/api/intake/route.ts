@@ -78,7 +78,10 @@ export async function POST(request: Request): Promise<Response> {
     const meta = metaParse.data;
     span.setAttribute("pang.capture.source", meta.source);
 
-    if (image.type !== "image/png") {
+    // Camera captures send JPEG; file-picker paths may send PNG.
+    // Both are accepted by Claude Vision. Any other type is rejected.
+    if (image.type !== "image/png" && image.type !== "image/jpeg") {
+      span.setAttribute("pang.error.kind", "bad_image_mime");
       return NextResponse.json(
         { error: "bad_image_mime" },
         { status: 415 },
@@ -100,9 +103,12 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     // Brand the image as 'user' (the user physically held the device).
+    // mime comes from the validated metadata, not from image.type, so
+    // both PNG and JPEG paths carry the correct media type through to
+    // the Claude Vision call.
     const userImage = acceptUser({
       bytes: imageBytes,
-      mime: "image/png" as const,
+      mime: meta.imageMime,
     });
 
     // Optional untrusted document body. Only text documents enter

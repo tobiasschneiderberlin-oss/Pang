@@ -443,7 +443,11 @@ async function capture(
     // Capture encode is one-off and off the hot path; PNG is fine
     // here. Rectification from detector corners is a follow-up —
     // the intake agent is robust to the full frame in iteration #2.
-    const blob = await canvas.convertToBlob({ type: "image/png" });
+    // JPEG for camera captures: a 1920×1080 real photo as PNG can reach
+    // 4–6 MB (exceeds Vercel's 4.5 MB serverless body limit on Hobby).
+    // JPEG at 0.85 quality produces ~300–700 KB for typical art-wall scenes
+    // while retaining enough detail for Claude Vision to read inscriptions.
+    const blob = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.85 });
     const bytes = new Uint8Array(await blob.arrayBuffer());
     const sha = await sha256Hex(bytes);
     onCapture(bytes, sha);

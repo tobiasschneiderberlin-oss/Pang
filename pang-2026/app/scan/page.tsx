@@ -50,8 +50,10 @@ export default function ScanPage(): ReactElement {
     // TS 5.7 narrows `Uint8Array<ArrayBufferLike>` out of `BlobPart`.
     // Cast at the boundary — the bytes were produced by our own
     // capture helper and are always ArrayBuffer-backed.
+    // Camera captures use JPEG to stay under Vercel's 4.5 MB serverless
+    // body limit. PNG of a real 1920×1080 camera frame can reach 4–6 MB.
     const blob = new Blob([bytes as unknown as BlobPart], {
-      type: "image/png",
+      type: "image/jpeg",
     });
     const blobUrl = URL.createObjectURL(blob);
     setStage({ kind: "uploading", blobUrl });
@@ -78,14 +80,14 @@ export default function ScanPage(): ReactElement {
       form.set(
         "metadata",
         JSON.stringify({
-          imageRef: `intake/staged/${sha}.png`,
-          imageMime: "image/png",
+          imageRef: `intake/staged/${sha}.jpg`,
+          imageMime: "image/jpeg",
           imageSha256: sha,
           source: "camera",
           documents: [],
         }),
       );
-      form.set("image", blob, `${sha}.png`);
+      form.set("image", blob, `${sha}.jpg`);
 
       const response = await fetch("/api/intake", {
         method: "POST",
