@@ -24,11 +24,17 @@ export type {
   BeatPayload,
   ChapterArtifact,
   ChapterPlan,
+  ChapterPlanBase,
   ChapterShape,
+  OutcomeChapterPlan,
 } from "./types";
 export { BEAT_KIND_ORDER } from "./types";
 
-export { planChapter } from "./plan";
+export {
+  planChapter,
+  planConfirmationChapter,
+  planDeclineChapter,
+} from "./plan";
 
 export {
   activeBeats,
@@ -62,4 +68,5 @@ export {
   DISMISS_AFFORDANCE,
   SURFACE_LABEL,
   ARIA_ANNOUNCE,
+  OUTCOME_NARRATION,
 } from "./voice";

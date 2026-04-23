@@ -25,6 +25,7 @@ import type { ReactElement } from "react";
 // with `ssr: false` is the SSR boundary. This route is the only
 // place `TheRoomClient` is reached from a Server Component.
 import { TheRoomClientDynamic } from "@/room/dom/TheRoomClientDynamic";
+import { FocusedWorkPanel } from "@/components/verification/FocusedWorkPanel";
 
 export default function TheRoom(): ReactElement {
   return (
@@ -33,6 +34,12 @@ export default function TheRoom(): ReactElement {
       aria-label="Your collection"
     >
       <TheRoomClientDynamic />
+      {/* Focused-work plaque + ask-gallery affordance. Self-guards
+       *  on focusedId; renders nothing when no work is focused. Lives
+       *  at the surface level (not inside TheRoomClient) so the
+       *  arrival chapter — which uses its own TheRoomClient — owns
+       *  its own chrome without fighting this panel. */}
+      <FocusedWorkPanel />
     </main>
   );
 }

@@ -59,6 +59,18 @@ export type BeatKind =
   | "context"
   /** Voice-corpus reflection for the null state (no artifacts, no gallery). */
   | "null-reflection"
+  /**
+   * The outcome chapter's narration beat for a *confirmed* verification —
+   * the work's emissive has just risen from 0 to the verified rest. The
+   * beat owns the wall-caption prose ("the gallery confirms this work").
+   */
+  | "confirmation"
+  /**
+   * The outcome chapter's narration beat for a *declined* verification —
+   * the work remains dormant. The beat owns the wall-caption prose
+   * ("the gallery did not confirm this work").
+   */
+  | "decline"
   /** Camera breath before the dismiss affordance appears. */
   | "settle"
   /** Terminal — dismiss affordance is present; chapter awaits Laura. */
@@ -75,8 +87,10 @@ export const BEAT_KIND_ORDER: Readonly<Record<BeatKind, number>> = Object.freeze
     attribution: 5,
     context: 6,
     "null-reflection": 7,
-    settle: 8,
-    ready: 9,
+    confirmation: 8,
+    decline: 9,
+    settle: 10,
+    ready: 11,
   },
 );
 
@@ -134,30 +148,60 @@ export interface Beat {
 }
 
 /**
+ * Minimum structural contract every chapter plan satisfies. Driver
+ * functions (`activeBeats`, `findBeatByKind`, `isReady`) read only
+ * these fields — they are variant-agnostic, so the outcome chapters
+ * ride the same selection logic as the arrival chapter without a
+ * second code path.
+ */
+export interface ChapterPlanBase {
+  readonly beats: readonly Beat[];
+  readonly totalMs: number;
+  readonly readyAtMs: number;
+  readonly workId: string;
+  /** Descriptive summary of which branches were taken (for telemetry). */
+  readonly shape: ChapterShape;
+}
+
+/**
  * An immutable chapter plan. Built once per mount by `planChapter()`.
  * The driver reads `beats` in order; the UI reads `totalMs` + payload
  * slots directly.
+ *
+ * This is the **arrival** variant — produced when a freshly-scanned
+ * work lands on the wall. The outcome variants (confirmation /
+ * decline) use `OutcomeChapterPlan`.
  */
-export interface ChapterPlan {
-  readonly beats: readonly Beat[];
-  /** Chapter length in ms — `readyAtMs` alias for readability. */
-  readonly totalMs: number;
-  readonly readyAtMs: number;
-  /** The newly-added work's entry id — used for focus + arrival-factor. */
-  readonly workId: string;
+export interface ChapterPlan extends ChapterPlanBase {
+  readonly variant: "arrival";
   /** The short-lived blob: URL for the captured still — overlay source. */
   readonly workImageUrl: string;
   /** The P-LLM's one-sentence arrival line — renders in the narration beat. */
   readonly arrivalLine: string;
   /** The original intake output, retained for observability + payload access. */
   readonly sourceOutput: IntakeOutput;
-  /**
-   * Descriptive summary of which branches of the plan were taken.
-   * Surfaces in the `chapter.plan` event for observability — lets the
-   * iteration log inspect the beat composition without replaying the
-   * chapter.
-   */
-  readonly shape: ChapterShape;
+}
+
+/**
+ * Outcome chapter — plays when the gallery answers a verification
+ * request. Two shapes share the same plan type:
+ *
+ *   - `variant: "confirmation"` — the gallery confirmed. The work's
+ *     emissive rises from 0 to verified-rest over the narration beat;
+ *     `setWorkVerified(id, true)` is called at `settle`.
+ *   - `variant: "decline"` — the gallery did not confirm. The work
+ *     remains dormant. No emissive change.
+ *
+ * Outcome plans are short (~14s) compared to arrival (~30–45s) — the
+ * work is already on the wall; the chapter is a museum-caption
+ * acknowledgement, not a procession.
+ */
+export interface OutcomeChapterPlan extends ChapterPlanBase {
+  readonly variant: "confirmation" | "decline";
+  /** The voice-corpus narration line rendered during the outcome beat. */
+  readonly narrationLine: string;
+  /** ISO-8601 timestamp of the gallery's decision. */
+  readonly decidedAt: string;
 }
 
 /** Structural summary of the planned chapter. Pure data. */

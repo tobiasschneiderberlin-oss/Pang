@@ -41,7 +41,9 @@ import { opfsRead, opfsWrite } from "@/lib/storage/bootstrap";
 import {
   useWorks,
   type CollectionEntry,
+  type VerificationHint,
 } from "@/stores/works";
+import { ArtworkSnapshotSchema } from "@/verification/schema";
 
 const INDEX_PATH = "works/index.json";
 
@@ -61,15 +63,22 @@ interface PersistedEntry {
   readonly id: string;
   readonly status: CollectionEntry["status"];
   readonly size: readonly [number, number];
+  readonly verificationHint?: VerificationHint;
 }
 
 /** Project an in-memory entry to its durable shape. Pure; testable. */
 export function projectDurable(entry: CollectionEntry): PersistedEntry {
-  return {
+  const base: PersistedEntry = {
     id: entry.id,
     status: entry.status,
     size: [entry.size[0], entry.size[1]] as const,
   };
+  // `exactOptionalPropertyTypes`: only attach the key when we have a
+  // real hint — a `verificationHint: undefined` field would differ
+  // structurally and trip the strict type checker.
+  return entry.verificationHint
+    ? { ...base, verificationHint: entry.verificationHint }
+    : base;
 }
 
 /** Inverse projection — pure; validates shape and drops unknown fields. */
@@ -87,7 +96,60 @@ export function parseDurable(raw: unknown): PersistedEntry | null {
   if (typeof w !== "number" || typeof h !== "number") return null;
   if (!Number.isFinite(w) || !Number.isFinite(h)) return null;
   if (w <= 0 || h <= 0) return null;
-  return { id, status, size: [w, h] as const };
+  const base: PersistedEntry = { id, status, size: [w, h] as const };
+
+  // Verification hint is optional — legacy entries from iteration #3
+  // have no hint and continue to hydrate without one. The submit
+  // affordance is disabled for those entries.
+  const hintRaw = r["verificationHint"];
+  if (hintRaw === undefined) return base;
+  const hint = parseVerificationHint(hintRaw);
+  if (!hint) return base;
+  return { ...base, verificationHint: hint };
+}
+
+function parseVerificationHint(raw: unknown): VerificationHint | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const galleryIdHint = r["galleryIdHint"];
+  const galleryNameHint = r["galleryNameHint"];
+  const galleryFreeText = r["galleryFreeText"];
+  const detectedFrom = r["detectedFrom"];
+  const artworkSnapshotRaw = r["artworkSnapshot"];
+  const photoRef = r["photoRef"];
+  const capturedAt = r["capturedAt"];
+
+  if (!isNullableString(galleryIdHint)) return null;
+  if (!isNullableString(galleryNameHint)) return null;
+  if (!isNullableString(galleryFreeText)) return null;
+  if (
+    detectedFrom !== null &&
+    detectedFrom !== "email" &&
+    detectedFrom !== "certificate" &&
+    detectedFrom !== "visual" &&
+    detectedFrom !== "manual"
+  ) {
+    return null;
+  }
+  if (typeof photoRef !== "string" || photoRef.length === 0) return null;
+  if (typeof capturedAt !== "string" || capturedAt.length === 0) return null;
+
+  const snapshotParse = ArtworkSnapshotSchema.safeParse(artworkSnapshotRaw);
+  if (!snapshotParse.success) return null;
+
+  return {
+    galleryIdHint,
+    galleryNameHint,
+    galleryFreeText,
+    detectedFrom,
+    artworkSnapshot: snapshotParse.data,
+    photoRef,
+    capturedAt,
+  };
+}
+
+function isNullableString(v: unknown): v is string | null {
+  return v === null || typeof v === "string";
 }
 
 /** Serialise the durable index. Pure; testable. */
@@ -189,12 +251,17 @@ export async function hydrateWorks(): Promise<CollectionEntry[]> {
     const img = await opfsRead(imagePath(p.id));
     if (!img) continue; // skip orphans
     const blobUrl = URL.createObjectURL(img);
-    out.push({
+    const base = {
       id: p.id,
       imageUrl: blobUrl,
       status: p.status,
       size: p.size,
-    });
+    } as const;
+    out.push(
+      p.verificationHint
+        ? { ...base, verificationHint: p.verificationHint }
+        : base,
+    );
   }
   return out;
 }

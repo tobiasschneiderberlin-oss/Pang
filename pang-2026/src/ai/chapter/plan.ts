@@ -27,8 +27,14 @@
  */
 
 import type { IntakeOutput } from "@/ai/tools/artwork";
-import type { Beat, ChapterArtifact, ChapterPlan, ChapterShape } from "./types";
-import { ARTIFACT_LABELS } from "./voice";
+import type {
+  Beat,
+  ChapterArtifact,
+  ChapterPlan,
+  ChapterShape,
+  OutcomeChapterPlan,
+} from "./types";
+import { ARTIFACT_LABELS, OUTCOME_NARRATION } from "./voice";
 
 // ---- Timing table (ms) -------------------------------------------
 //
@@ -255,6 +261,7 @@ export function planChapter(
   };
 
   return {
+    variant: "arrival",
     beats,
     totalMs,
     readyAtMs: totalMs,
@@ -262,6 +269,165 @@ export function planChapter(
     workImageUrl,
     arrivalLine: output.arrivalLine,
     sourceOutput: output,
+    shape,
+  };
+}
+
+// ---- Outcome timing table (ms) -----------------------------------
+//
+// Outcome chapters are short. The work is already on the wall — the
+// chapter is a museum-caption acknowledgement, not a procession. The
+// full outcome runs ~14s:
+//
+//   approach/outcome  [   0, 2200)    camera breath toward the work
+//   narration         [ 1500, 7000)   voice-corpus confirm or decline line
+//   place/outcome     [ 2500, 5500)   emissive rise (confirm only; decline is a no-op)
+//   pause             [ 7000, 9000)   silence
+//   settle            [ 9000, 14000)  camera breath
+//   ready             [14000, ∞)
+//
+// The decline variant omits the `place` beat — the work does not
+// change state, so there is no pose change to ride.
+
+const OUTCOME_APPROACH_MS = 2200;
+const OUTCOME_NARRATION_MS = 5500;
+const OUTCOME_NARRATION_DELAY_MS = 1500;
+const OUTCOME_PLACE_DELAY_MS = 2500;
+const OUTCOME_PLACE_MS = 3000;
+const OUTCOME_PAUSE_MS = 2000;
+const OUTCOME_SETTLE_MS = 5000;
+
+/**
+ * Plan the *confirmation* chapter — the wall acknowledgement played
+ * when the gallery confirms a verification request. The work's
+ * emissive is expected to rise 0 → 1 over the `confirmation` beat
+ * (driver: `arrivalFactor(findBeatByKind(plan, "confirmation"), tMs)`),
+ * and `setWorkVerified(id, true)` is called at the tick the chapter
+ * reaches `settle`, pinning the rest state.
+ */
+export function planConfirmationChapter(
+  workId: string,
+  decidedAt: string,
+): OutcomeChapterPlan {
+  return planOutcomeChapter("confirmation", workId, decidedAt);
+}
+
+/**
+ * Plan the *decline* chapter — the wall acknowledgement played when
+ * the gallery does not confirm. The work stays dormant; there is no
+ * pose change. The narration is the observational fact ("the gallery
+ * did not confirm this work"), not an apology.
+ */
+export function planDeclineChapter(
+  workId: string,
+  decidedAt: string,
+): OutcomeChapterPlan {
+  return planOutcomeChapter("decline", workId, decidedAt);
+}
+
+/** Shared planner body for the two outcome variants. Pure. */
+function planOutcomeChapter(
+  variant: "confirmation" | "decline",
+  workId: string,
+  decidedAt: string,
+): OutcomeChapterPlan {
+  const beats: Beat[] = [];
+
+  beats.push({
+    id: "approach",
+    kind: "approach",
+    startMs: 0,
+    durationMs: OUTCOME_APPROACH_MS,
+    fadeInMs: STANDARD_FADE_IN_MS,
+    fadeOutMs: STANDARD_FADE_OUT_MS,
+    payload: { kind: "camera" },
+  });
+
+  // The outcome narration beat carries the voice-corpus line. The
+  // beat's `kind` is the variant itself — "confirmation" or
+  // "decline" — so consumers that want to key on the outcome don't
+  // need a second lookup.
+  const narrationLine = OUTCOME_NARRATION[variant];
+  beats.push({
+    id: "narration",
+    kind: variant,
+    startMs: OUTCOME_NARRATION_DELAY_MS,
+    durationMs: OUTCOME_NARRATION_MS,
+    fadeInMs: STANDARD_FADE_IN_MS,
+    fadeOutMs: NARRATION_FADE_OUT_MS,
+    payload: {
+      kind: "text",
+      text: narrationLine,
+      source: "voice-corpus",
+    },
+  });
+
+  // Confirmation has a `place`-equivalent beat so the arrival-factor
+  // helper (reused across chapters) can drive the GL emissive rise.
+  // Decline omits it — the work stays dormant.
+  if (variant === "confirmation") {
+    beats.push({
+      id: "place",
+      kind: "place",
+      startMs: OUTCOME_PLACE_DELAY_MS,
+      durationMs: OUTCOME_PLACE_MS,
+      fadeInMs: STANDARD_FADE_IN_MS,
+      fadeOutMs: STANDARD_FADE_OUT_MS,
+      payload: { kind: "pose" },
+    });
+  }
+
+  // Pause — lets the narration fade.
+  const pauseStart = OUTCOME_NARRATION_DELAY_MS + OUTCOME_NARRATION_MS;
+  beats.push({
+    id: "pause",
+    kind: "pause",
+    startMs: pauseStart,
+    durationMs: OUTCOME_PAUSE_MS,
+    fadeInMs: STANDARD_FADE_IN_MS,
+    fadeOutMs: STANDARD_FADE_OUT_MS,
+  });
+
+  let cursor = pauseStart + OUTCOME_PAUSE_MS;
+
+  beats.push({
+    id: "settle",
+    kind: "settle",
+    startMs: cursor,
+    durationMs: OUTCOME_SETTLE_MS,
+    fadeInMs: STANDARD_FADE_IN_MS,
+    fadeOutMs: STANDARD_FADE_OUT_MS,
+  });
+  cursor += OUTCOME_SETTLE_MS;
+
+  beats.push({
+    id: "ready",
+    kind: "ready",
+    startMs: cursor,
+    durationMs: Number.MAX_SAFE_INTEGER - cursor,
+    fadeInMs: STANDARD_FADE_IN_MS,
+    fadeOutMs: 0,
+  });
+
+  const totalMs = cursor;
+
+  const shape: ChapterShape = {
+    beatCount: beats.length,
+    hasArtifacts: false,
+    artifactCount: 0,
+    hasAttribution: false,
+    hasContext: false,
+    hasNullReflection: false,
+  };
+
+  return {
+    variant,
+    beats,
+    totalMs,
+    readyAtMs: totalMs,
+    workId,
+    narrationLine,
+    decidedAt,
     shape,
   };
 }

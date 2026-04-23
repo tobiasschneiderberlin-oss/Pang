@@ -16,7 +16,12 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { IntakeOutput } from "@/ai/tools/artwork";
-import { planChapter } from "./plan";
+import {
+  planChapter,
+  planConfirmationChapter,
+  planDeclineChapter,
+} from "./plan";
+import { OUTCOME_NARRATION } from "./voice";
 
 // ---- fixtures ----------------------------------------------------
 
@@ -288,5 +293,115 @@ describe("planChapter — partial states", () => {
       1,
     );
     assert.equal(plan.beats.find((b) => b.kind === "null-reflection"), undefined);
+  });
+});
+
+// ---- outcome planners --------------------------------------------
+
+describe("planConfirmationChapter", () => {
+  const DECIDED_AT = "2026-04-23T11:00:00.000Z";
+
+  it("tags the plan as the confirmation variant", () => {
+    const plan = planConfirmationChapter("w-alpha", DECIDED_AT);
+    assert.equal(plan.variant, "confirmation");
+    assert.equal(plan.workId, "w-alpha");
+    assert.equal(plan.decidedAt, DECIDED_AT);
+  });
+
+  it("carries the voice-corpus confirmation line in the narration beat", () => {
+    const plan = planConfirmationChapter("w-alpha", DECIDED_AT);
+    const narration = plan.beats.find((b) => b.kind === "confirmation");
+    assert.ok(narration, "confirmation beat missing");
+    const p = narration!.payload;
+    assert.ok(p && p.kind === "text");
+    if (p.kind === "text") {
+      assert.equal(p.text, OUTCOME_NARRATION.confirmation);
+      assert.equal(p.source, "voice-corpus");
+    }
+    assert.equal(plan.narrationLine, OUTCOME_NARRATION.confirmation);
+  });
+
+  it("includes a place beat (the GL emissive rise)", () => {
+    const plan = planConfirmationChapter("w-alpha", DECIDED_AT);
+    const place = plan.beats.find((b) => b.kind === "place");
+    assert.ok(place, "place beat missing — emissive rise has no driver");
+  });
+
+  it("ends with a ready beat after settle", () => {
+    const plan = planConfirmationChapter("w-alpha", DECIDED_AT);
+    const last = plan.beats[plan.beats.length - 1]!;
+    assert.equal(last.kind, "ready");
+    const settleIdx = plan.beats.findIndex((b) => b.kind === "settle");
+    const readyIdx = plan.beats.findIndex((b) => b.kind === "ready");
+    assert.ok(settleIdx >= 0 && readyIdx > settleIdx);
+  });
+
+  it("totalMs sits below the arrival ceiling — the outcome is short", () => {
+    const plan = planConfirmationChapter("w-alpha", DECIDED_AT);
+    assert.ok(plan.totalMs > 0 && plan.totalMs < 20_000);
+  });
+
+  it("beats run in non-decreasing startMs order with positive durations", () => {
+    const plan = planConfirmationChapter("w-alpha", DECIDED_AT);
+    let prev = -1;
+    for (const b of plan.beats) {
+      assert.ok(b.startMs >= prev, `${b.id} starts at ${b.startMs}`);
+      prev = b.startMs;
+      if (b.kind !== "ready") {
+        assert.ok(b.durationMs > 0);
+        assert.ok(b.fadeInMs <= b.durationMs);
+        assert.ok(b.fadeOutMs <= b.durationMs);
+      }
+    }
+  });
+
+  it("shape has no artifacts / attribution / context", () => {
+    const plan = planConfirmationChapter("w-alpha", DECIDED_AT);
+    assert.equal(plan.shape.hasArtifacts, false);
+    assert.equal(plan.shape.artifactCount, 0);
+    assert.equal(plan.shape.hasAttribution, false);
+    assert.equal(plan.shape.hasContext, false);
+    assert.equal(plan.shape.hasNullReflection, false);
+  });
+});
+
+describe("planDeclineChapter", () => {
+  const DECIDED_AT = "2026-04-23T11:00:00.000Z";
+
+  it("tags the plan as the decline variant", () => {
+    const plan = planDeclineChapter("w-alpha", DECIDED_AT);
+    assert.equal(plan.variant, "decline");
+    assert.equal(plan.workId, "w-alpha");
+    assert.equal(plan.decidedAt, DECIDED_AT);
+  });
+
+  it("carries the voice-corpus decline line in the narration beat", () => {
+    const plan = planDeclineChapter("w-alpha", DECIDED_AT);
+    const narration = plan.beats.find((b) => b.kind === "decline");
+    assert.ok(narration, "decline beat missing");
+    const p = narration!.payload;
+    assert.ok(p && p.kind === "text");
+    if (p.kind === "text") {
+      assert.equal(p.text, OUTCOME_NARRATION.decline);
+      assert.equal(p.source, "voice-corpus");
+    }
+    assert.equal(plan.narrationLine, OUTCOME_NARRATION.decline);
+  });
+
+  it("omits the place beat — a declined work has no pose change", () => {
+    const plan = planDeclineChapter("w-alpha", DECIDED_AT);
+    const place = plan.beats.find((b) => b.kind === "place");
+    assert.equal(place, undefined);
+  });
+
+  it("ends with a ready beat after settle", () => {
+    const plan = planDeclineChapter("w-alpha", DECIDED_AT);
+    const last = plan.beats[plan.beats.length - 1]!;
+    assert.equal(last.kind, "ready");
+  });
+
+  it("totalMs sits below the arrival ceiling — the outcome is short", () => {
+    const plan = planDeclineChapter("w-alpha", DECIDED_AT);
+    assert.ok(plan.totalMs > 0 && plan.totalMs < 20_000);
   });
 });
