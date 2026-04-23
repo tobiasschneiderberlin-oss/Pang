@@ -30,6 +30,7 @@ import {
   keyFromUploadStatus,
   type FailureKey,
 } from "@/ai/prompts/failure";
+import { reportFailure } from "@/lib/telemetry/beacon";
 
 type Stage =
   | { kind: "viewfinder" }
@@ -62,6 +63,12 @@ export default function ScanPage(): ReactElement {
     // is only definitive when false; true still means "could fail on
     // the next hop". The AbortController below handles that case.
     if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      reportFailure({
+        errorKey: "upload/offline",
+        stage: "uploading",
+        site: "scan/offline-precheck",
+        imageBytesLength: bytes.byteLength,
+      });
       setStage({ kind: "failed", failureKey: "upload/offline" });
       URL.revokeObjectURL(blobUrl);
       return;
@@ -99,10 +106,25 @@ export default function ScanPage(): ReactElement {
         // 422 → agent/refused (the model ran, the output failed
         // validation); 5xx → agent/unreachable; 4xx → upload/rejected.
         // Full mapping lives in `keyFromUploadStatus`.
-        setStage({
-          kind: "failed",
-          failureKey: keyFromUploadStatus(response.status),
+        const failureKey = keyFromUploadStatus(response.status);
+        // Pull the server's error body for the beacon — voice corpus
+        // hides it from Laura on purpose; we need it in the logs.
+        let serverDetail = "";
+        try {
+          const text = await response.text();
+          serverDetail = text.slice(0, 512);
+        } catch {
+          // Body already consumed or unreadable — the status is enough.
+        }
+        reportFailure({
+          errorKey: failureKey,
+          stage: "uploading",
+          site: "scan/response-not-ok",
+          uploadStatus: response.status,
+          imageBytesLength: bytes.byteLength,
+          detail: `${response.status} ${response.statusText}${serverDetail ? ` — ${serverDetail}` : ""}`,
         });
+        setStage({ kind: "failed", failureKey });
         URL.revokeObjectURL(blobUrl);
         return;
       }
@@ -131,6 +153,17 @@ export default function ScanPage(): ReactElement {
         err instanceof DOMException && err.name === "AbortError"
           ? "upload/timeout"
           : "upload/offline";
+      const detail =
+        err instanceof Error
+          ? `${err.name}: ${err.message}`
+          : String(err).slice(0, 512);
+      reportFailure({
+        errorKey: key,
+        stage: "uploading",
+        site: "scan/fetch-catch",
+        imageBytesLength: bytes.byteLength,
+        detail,
+      });
       setStage({ kind: "failed", failureKey: key });
       URL.revokeObjectURL(blobUrl);
     } finally {
@@ -178,8 +211,21 @@ export default function ScanPage(): ReactElement {
     router.push("/");
   }, [stage, router]);
 
-  const onViewfinderError = useCallback((key: FailureKey, _detail?: Error) => {
-    void _detail; // reserved for telemetry wiring in A10
+  const onViewfinderError = useCallback((key: FailureKey, detail?: Error) => {
+    reportFailure(
+      detail
+        ? {
+            errorKey: key,
+            stage: "viewfinder",
+            site: "scan/viewfinder-onError",
+            detail: `${detail.name}: ${detail.message}`,
+          }
+        : {
+            errorKey: key,
+            stage: "viewfinder",
+            site: "scan/viewfinder-onError",
+          },
+    );
     setStage({ kind: "failed", failureKey: key });
   }, []);
 

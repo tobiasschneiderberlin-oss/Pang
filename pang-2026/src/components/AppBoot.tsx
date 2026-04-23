@@ -26,9 +26,19 @@ import {
 } from "@/stores/works.persist";
 import { registerServiceWorker } from "@/sw/register";
 import { detectCapabilityTier } from "@/auth/tier";
+import {
+  installGlobalErrorBeacons,
+  reportFailure,
+} from "@/lib/telemetry/beacon";
 
 export function AppBoot(): null {
   useEffect(() => {
+    // App-wide failure beacons. Installs `window.onerror` +
+    // `onunhandledrejection`; any error that escapes a try/catch
+    // anywhere in the client bundle lands in /api/telemetry and
+    // shows up in Vercel function logs. Idempotent.
+    installGlobalErrorBeacons();
+
     const unbindPrefs = bindPreferencesToRoot();
 
     // Fire-and-observe. Each step is idempotent and logs its own
@@ -42,14 +52,24 @@ export function AppBoot(): null {
     let unsubscribeWorks: (() => void) | null = null;
     let cancelled = false;
     void (async () => {
-      await bootstrapOpfs();
-      if (cancelled) return;
-      const hydrated = await hydrateWorks();
-      if (cancelled) return;
-      for (const entry of hydrated) {
-        useWorks.getState().addEntry(entry);
+      try {
+        await bootstrapOpfs();
+        if (cancelled) return;
+        const hydrated = await hydrateWorks();
+        if (cancelled) return;
+        for (const entry of hydrated) {
+          useWorks.getState().addEntry(entry);
+        }
+        unsubscribeWorks = installWorksPersistence();
+      } catch (err) {
+        reportFailure({
+          errorKey: "persist/bootstrap",
+          stage: "boot",
+          site: "AppBoot/opfs-hydrate",
+          detail:
+            err instanceof Error ? `${err.name}: ${err.message}` : String(err),
+        });
       }
-      unsubscribeWorks = installWorksPersistence();
     })();
 
     const tier = detectCapabilityTier();

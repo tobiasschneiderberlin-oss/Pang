@@ -48,6 +48,7 @@ import {
   keyFromCameraError,
   type FailureKey,
 } from "@/ai/prompts/failure";
+import { reportFailure } from "@/lib/telemetry/beacon";
 
 export interface ViewfinderProps {
   onCapture: (bytes: Uint8Array, sha256: string) => void;
@@ -161,6 +162,16 @@ export function Viewfinder(props: ViewfinderProps): React.ReactElement {
           console.error(
             `[pang] cv worker error (${event.source}): ${event.message}`,
           );
+          // Beacon the crash to /api/telemetry — without this, a
+          // worker error on a real device shows up nowhere. The
+          // scan flow keeps working; the log entry is what lets us
+          // diagnose the degraded capture later.
+          reportFailure({
+            errorKey: `worker/${event.source}`,
+            stage: "worker",
+            site: "viewfinder/dispatcher-error",
+            detail: event.message,
+          });
           latestRectangleRef.current = null;
           latestSegmentRef.current = null;
           return;
