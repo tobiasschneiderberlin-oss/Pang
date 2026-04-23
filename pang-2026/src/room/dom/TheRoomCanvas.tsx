@@ -86,6 +86,17 @@ const EYE_HEIGHT = 1.7;
 export interface TheRoomCanvasHandle {
   /** Request focus on a work, or clear focus when `null`. */
   focusWork(id: string | null): void;
+  /**
+   * Set the arrival factor for a single work — the GL side of the
+   * arrival chapter's `place` beat. 0 = flush to the wall, unlit; 1 =
+   * full stand-off, verified-level emissive. The chapter's RAF loop
+   * writes this off `arrivalFactor(placeBeat, tChapterMs)` so the
+   * pose rides the same rate-6 curve as the DOM overlay.
+   *
+   * Calling with `null` as `id` is a no-op (kept in the signature so
+   * callers with a nullable `arrivalWorkId` don't need a branch).
+   */
+  setArrivalFactor(id: string | null, t: number): void;
 }
 
 export interface TheRoomCanvasProps {
@@ -168,6 +179,12 @@ export function TheRoomCanvas({
   // `undefined` means "no request stashed"; `null` is a valid stash
   // meaning "clear focus on ready".
   const pendingFocusRef = useRef<string | null | undefined>(undefined);
+  // Pending arrival-factor request stash. Same rationale as
+  // `pendingFocusRef` — the chapter's RAF loop starts writing factors
+  // before the scene is mounted in the degenerate "click → arrival"
+  // timing window. We only keep the latest because intermediate
+  // factors are invisible to the user (the scene hasn't drawn yet).
+  const pendingArrivalRef = useRef<{ id: string; t: number } | null>(null);
 
   useImperativeHandle(
     ref,
@@ -176,6 +193,12 @@ export function TheRoomCanvas({
         const state = gestureStateRef.current;
         if (state) state.focusWorkId = id;
         else pendingFocusRef.current = id;
+      },
+      setArrivalFactor(id, t) {
+        if (id == null) return;
+        const scene = sceneRef.current;
+        if (scene) scene.setWorkArrivalFactor(id, t);
+        else pendingArrivalRef.current = { id, t };
       },
     }),
     [],
@@ -303,6 +326,15 @@ export function TheRoomCanvas({
         gesture.state.focusWorkId = pendingFocusRef.current;
         pendingFocusRef.current = undefined;
       }
+      // Same pattern for the arrival factor. The mount effect seeds
+      // the scene with `works`, so the target mesh is already in the
+      // map by the time we reach this branch — the stash never races
+      // with `addWork()`.
+      if (pendingArrivalRef.current) {
+        const { id, t } = pendingArrivalRef.current;
+        roomScene.setWorkArrivalFactor(id, t);
+        pendingArrivalRef.current = null;
+      }
 
       // Emit focus changes to the parent (for DOM twin sync later).
       let lastFocus: string | null = null;
@@ -371,6 +403,7 @@ export function TheRoomCanvas({
       worksSnapshotRef.current = new Map();
       gestureStateRef.current = null;
       pendingFocusRef.current = undefined;
+      pendingArrivalRef.current = null;
     };
     // `works` intentionally excluded — it seeds the scene on mount
     // but subsequent changes are handled by the diff effect below,

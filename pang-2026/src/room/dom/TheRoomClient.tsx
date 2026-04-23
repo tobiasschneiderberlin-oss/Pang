@@ -17,20 +17,51 @@
  * and § 1.5 of the architecture doc).
  */
 
-import { useEffect, useMemo, useRef } from "react";
-import type { ReactElement } from "react";
+import { useEffect, useImperativeHandle, useMemo, useRef } from "react";
+import type { ReactElement, Ref } from "react";
 import { TheRoomCanvas } from "@/room/dom/TheRoomCanvas";
 import type { TheRoomCanvasHandle } from "@/room/dom/TheRoomCanvas";
 import { RoomDOMTwin } from "@/room/dom/RoomDOMTwin";
 import { layoutEntries, useWorks } from "@/stores/works";
 
-export function TheRoomClient(): ReactElement {
+/**
+ * Forwardable handle — parents that need to drive scene-level state
+ * from outside React reconciliation (the arrival chapter's RAF loop
+ * writes the per-frame arrival factor) reach the canvas through this.
+ *
+ * Focus flows through the works store already — no handle method is
+ * needed for it. Only state that would thrash React if it were a prop
+ * (per-frame writes) lives on the handle.
+ */
+export interface TheRoomClientHandle {
+  /**
+   * Drive a work's arrival factor. See `TheRoomCanvas.setArrivalFactor`.
+   * Calls through to the underlying canvas handle.
+   */
+  setArrivalFactor(id: string | null, t: number): void;
+}
+
+export interface TheRoomClientProps {
+  readonly ref?: Ref<TheRoomClientHandle>;
+}
+
+export function TheRoomClient(props: TheRoomClientProps = {}): ReactElement {
   const entries = useWorks((s) => s.entries);
   const focusedId = useWorks((s) => s.focusedId);
   const setFocusedId = useWorks((s) => s.setFocusedId);
   const works = useMemo(() => layoutEntries(entries), [entries]);
 
   const canvasRef = useRef<TheRoomCanvasHandle | null>(null);
+
+  useImperativeHandle(
+    props.ref,
+    () => ({
+      setArrivalFactor(id, t) {
+        canvasRef.current?.setArrivalFactor(id, t);
+      },
+    }),
+    [],
+  );
 
   // Push the store's focus into the canvas whenever it changes.
   // The canvas's internal gesture state is the source of truth for

@@ -43,6 +43,15 @@ export { ROOM, WORK_CENTRE_HEIGHT };
 /** Depth of a work relative to the wall plane (slight stand-off). */
 const WORK_STANDOFF = 0.04;
 
+/**
+ * Emissive scalar applied to verified works at rest. The arrival
+ * chapter ramps its *own* emissive from 0 up to this value over the
+ * place beat so the work reads as igniting as it arrives. Keep this in
+ * sync with `buildWorkEntry`'s verified case — changing one without
+ * the other produces a discontinuity when the arrival factor lands at 1.
+ */
+const VERIFIED_EMISSIVE_SCALAR = 0.08;
+
 export interface RoomScene {
   readonly scene: THREE.Scene;
   readonly camera: THREE.PerspectiveCamera;
@@ -70,6 +79,20 @@ export interface RoomScene {
    * this to compute camera focus targets.
    */
   getWorkCentroid(id: string): [number, number, number] | null;
+  /**
+   * Drive a work's "arrival factor" — the GL side of the arrival
+   * chapter's `place` beat. At `t=0`, the mesh sits flush to the wall
+   * (zero stand-off) with no emissive warmth; at `t=1`, it has settled
+   * into its hanging pose (full stand-off, verified-level emissive).
+   * Intermediate values interpolate both. Safe to call every frame —
+   * no allocations, writes are idempotent.
+   *
+   * Called by `ArrivalChapter` off the `chapter/envelope.ts#arrivalFactor`
+   * curve so the DOM overlay, the ARIA line, and the GL pose all ride
+   * the same rate-6 exponential — the spine's "one hand across chrome,
+   * camera, and motion" made literal.
+   */
+  setWorkArrivalFactor(id: string, t: number): void;
   /** Dispose everything — geometries, materials, textures. */
   dispose(): void;
 }
@@ -79,6 +102,15 @@ interface WorkEntry {
   mesh: THREE.Mesh;
   material: THREE.MeshStandardMaterial;
   texture: THREE.Texture | null;
+  /**
+   * The work's canonical wall Z — the position the layout assigned.
+   * `addWork()` already offsets `mesh.position.z` by `WORK_STANDOFF`,
+   * so we cache the unoffset Z here to drive the arrival animation
+   * without double-counting.
+   */
+  baseWallZ: number;
+  /** `true` for verified works (lit by default at factor=1). */
+  verified: boolean;
 }
 
 export function buildRoomScene(
@@ -157,6 +189,36 @@ export function buildRoomScene(
     return [p.x, p.y, p.z];
   }
 
+  // Scratch colours — avoid per-frame allocation when the arrival
+  // RAF loop calls `setWorkArrivalFactor` every frame.
+  const arrivalEmissiveWarm = new THREE.Color(ROOM_PALETTE.warm);
+  const arrivalEmissiveScratch = new THREE.Color();
+
+  function setWorkArrivalFactor(id: string, t: number): void {
+    const entry = works.get(id);
+    if (!entry) return;
+    // Clamp here so callers don't need to. NaN-guards against dt
+    // glitches on first-frame.
+    const f = Number.isFinite(t)
+      ? t < 0
+        ? 0
+        : t > 1
+          ? 1
+          : t
+      : 1;
+    // Z-offset: 0 → mesh flush to the wall; 1 → full stand-off.
+    entry.mesh.position.z = entry.baseWallZ + WORK_STANDOFF * f;
+    // Emissive: 0 → dark; 1 → verified warmth (or 0 for dormant works
+    // whose rest state is unlit — we still pass through so the
+    // dormant case no-ops gracefully).
+    if (entry.verified) {
+      arrivalEmissiveScratch
+        .copy(arrivalEmissiveWarm)
+        .multiplyScalar(VERIFIED_EMISSIVE_SCALAR * f);
+      entry.material.emissive.copy(arrivalEmissiveScratch);
+    }
+  }
+
   function dispose(): void {
     for (const entry of works.values()) disposeWorkEntry(entry);
     works.clear();
@@ -180,6 +242,7 @@ export function buildRoomScene(
     setLightingByWarmth,
     getWorkMeshes,
     getWorkCentroid,
+    setWorkArrivalFactor,
     dispose,
   };
 }
@@ -364,10 +427,12 @@ function buildWorkEntry(work: Work): WorkEntry {
   // as breathing vs. the quiet dormant planes. Dormant works are
   // slightly recessed in value — the hierarchy is *lit vs. unlit*,
   // not colour vs. colour.
-  const emissive =
-    work.status === "verified"
-      ? new THREE.Color(ROOM_PALETTE.warm).multiplyScalar(0.08)
-      : new THREE.Color(0x000000);
+  const verified = work.status === "verified";
+  const emissive = verified
+    ? new THREE.Color(ROOM_PALETTE.warm).multiplyScalar(
+        VERIFIED_EMISSIVE_SCALAR,
+      )
+    : new THREE.Color(0x000000);
 
   const material = new THREE.MeshStandardMaterial({
     color: ROOM_PALETTE.paperSoft,
@@ -405,7 +470,7 @@ function buildWorkEntry(work: Work): WorkEntry {
     );
   }
 
-  return { mesh, material, texture };
+  return { mesh, material, texture, baseWallZ: pz, verified };
 }
 
 function disposeWorkEntry(entry: WorkEntry): void {

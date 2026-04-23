@@ -973,6 +973,717 @@ Static checks: `typecheck`, `lint`, `test`, and `check:gates`
 
 ---
 
+## Iteration #3 — Arrival as chapter v2 (opened 2026-04-23)
+
+**Status:** landed in a single pass. Kickoff brief, build, and
+findings are all in this entry; the preview harness run will happen
+when Laura walks the device next.
+
+**Why now:** iteration #1's arrival was a single-breath placement —
+fade the still, drop the caption, reveal the Room, done in ~2s. That
+was correct for the spine's "placement not dismiss" assertion, but
+thin for the spine's "I walked into a collection" promise. The
+record gives us certificates, gallery attribution, and artist
+context; a two-second fade collapses all of that into one line. A
+longer, *authored* arrival — an actual chapter — is the difference
+between an app that confirms a scan and a collection that receives
+a work. Iteration #3 builds that chapter.
+
+**Scope:** ceiling. A 30–45 s timed choreography composed of named
+beats, each with its own entry/hold/exit envelope; a GL "approach"
+of the physical work toward its wall standoff driven by a rate-6
+exponential; voice-authored narration that rides the approach; an
+artifact procession (certificate, invoice, condition report) as
+small museum-tag cards that arrive and settle one after another;
+gallery attribution read in sentence case with the actual gallery
+name; artist context surfaced as an aside when the intake extracted
+it; a null-state-as-default path when the record is unverified or
+thin; a ready beat that unlocks dismissal with Enter/Space or a
+tap; a single `aria-live="polite"` region that speaks exactly the
+current beat's line; OTel `chapter.*` instants for every beat
+edge, the ready latch, and the dismiss. No v2 polish — no audio,
+no haptics, no captured-still transition, no blur transitions
+between chapters. Those are iteration #4+ territory.
+
+**Stack:**
+- Pure TypeScript state machine under `src/ai/chapter/**`. Module
+  layout: `types.ts` (Beat, BeatKind, BeatPayload, ChapterPlan,
+  ChapterArtifact), `voice.ts` (the corpus lines this iteration
+  needs — `NARRATION`, `ATTRIBUTION`, `CONTEXT`, `NULL_REFLECTION`,
+  `READY` — each a static object the P-LLM never re-authors at
+  runtime), `plan.ts` (`planChapter(intake, workId, blobUrl)` →
+  `ChapterPlan`), `envelope.ts` (`beatEnvelope`, `beatProgress`,
+  `arrivalFactor`, `overlayOpacity`), `driver.ts` (`activeBeats`,
+  `findBeatByKind`, `isReady`, `diffActiveBeats`,
+  `ariaLineForActive`), `otel.ts` (`chapterBeatEnter`,
+  `chapterBeatExit`, `chapterReady`, `chapterDismiss` — all
+  instants, not spans, because beats overlap), `index.ts`
+  (barrel). The machine is deterministic in `tMs` — no `Date.now()`
+  inside, no RAF inside. React drives time in; the machine reports
+  what's active.
+- Rate-6 exponential everywhere. The beat envelope is
+  `1 - exp(-6 * (t-start)/fadeInMs)` on the rise, held at 1 during
+  the body, and `exp(-6 * (t-bodyEnd)/fadeOutMs)` on the fall.
+  `arrivalFactor(placeBeat, tMs)` and `overlayOpacity(placeBeat,
+  tMs)` share the same rise so they are *analytically*
+  complementary: `arrivalFactor + overlayOpacity ≡ 1` for every
+  `tMs >= placeBeat.startMs`. That conservation property is the
+  mechanical guarantee that the still never shows through the GL
+  approach and vice-versa — both moves ride the same curve.
+- GL side: `RoomScene.setWorkArrivalFactor(id, t)`. Verified works
+  gain a `0.08 * t` emissive warm bias during approach and
+  position.z slides `baseWallZ + WORK_STANDOFF * t` toward the
+  viewer. Scratch `THREE.Color` instances on the scene — zero
+  per-frame allocation.
+- DOM side: slot-based rendering, not beat-keyed. Beats overlap,
+  so the DOM is organised into zones (narration line, attribution
+  line, context aside, artifact stack, ready prompt); each zone
+  claims its owning payload via `pickSlot(active, kind)`. The
+  chapter's owning component is `src/components/intake/ArrivalChapter.tsx`;
+  artifacts render through `src/components/intake/ArtifactCarrier.tsx`.
+- Per-frame state flow: `ArrivalChapter` mounts a RAF loop that
+  writes `tMs = performance.now() - startedAt` to React state once
+  per frame; `useMemo` derives `activeBeats(plan, tMs)` from the
+  plan + tMs; the canvas handle receives the arrival factor through
+  `TheRoomClient.setArrivalFactor` (imperative, not a prop) so the
+  GL tree doesn't re-render every frame.
+- ARIA: a single `aria-live="polite"` sr-only line. `ariaLineForActive`
+  picks the rising beat (or falls back to the last active one) and
+  emits its line; camera-only and pose-only ticks return null so
+  the live region stays silent for those frames.
+- Observability: `chapter.beat.enter` / `chapter.beat.exit` fired
+  exactly once per id-set edge via `diffActiveBeats` +
+  `prevActiveIdsRef`. `chapter.ready` latched by `readyEmittedRef`
+  so it fires exactly once. `chapter.dismiss` fires on dismissal
+  with the source (`keyboard` | `pointer`).
+
+**Reference:**
+- Apple Photo Memories (for "beats compose into a chapter" — named
+  envelopes, overlapping legitimately, driven by one clock).
+- Granola confidence glide (rate-6 again — one smoothing law
+  across camera, chapter, and GL approach means the whole surface
+  settles with the same hand).
+- Cursor's structured-output discipline (for the P-LLM side: no
+  `JSON.parse`, no prose-at-runtime; the machine picks from a
+  voice-authored corpus and fills slots).
+- Museum exhibition sequencing (for the beat kinds — approach,
+  place, narration, artifact procession, attribution, context,
+  ready — this is how a hang happens in a real space).
+
+**Canvas:** `<canvas>` for the Room (unchanged from iteration #2);
+DOM for chapter chrome, ARIA live region, and artifact carriers
+(P9 — containers 0, chrome 2 px). The captured still from the
+review route is still part of the transition *into* chapter —
+overlayOpacity decays on the same curve that drives the approach —
+but the still itself is the existing DOM `<Image>`, not a new GL
+surface. A GL-to-GL cross-fade is iteration #4 territory.
+
+**Failure mode (5th declaration):** the chapter surfaces three
+kinds of regression — *timing* (beats bunch or gap; total runs
+outside 30–45 s band; ready never fires), *choreography* (GL
+approach and DOM overlay don't complement each other; still
+bleeds through or pops), and *voice* (corpus strings leak
+marketing/evaluative vocabulary; ARIA speaks camera-only ticks).
+All three must be observable. Timing is covered by
+`envelope.test.ts` (27 tests over the envelope and conservation
+identity) + `plan.test.ts` (total duration band, non-decreasing
+starts, null-state timing). Choreography is covered by the
+`arrivalFactor + overlayOpacity ≡ 1` conservation test +
+`driver.test.ts`'s `activeBeats` edge-case suite. Voice is covered
+by `check:strings` against the whole source tree + `check:eval`
+against the intake fixture (A22). `chapter.*` OTel instants mean a
+real-device walk leaves a full edge timeline in telemetry without
+any extra wiring. A regression that gets past these surfaces
+immediately in the telemetry beacon; no "the chapter feels off" —
+a specific beat either entered late, never entered, or exited
+before its successor entered.
+
+**Gates this iteration must pass:** same 48. P1–P11 (tokens,
+corners, OKLCH), P15 (View Transitions capability fallback), P19
+(reduced-motion honour — the RAF loop respects
+`prefers-reduced-motion` by pinning envelope to the settled
+value when set; see note below on the current status of this),
+P20 (ARIA live region, single polite region, no aria-hidden leak),
+P23 (keyboard dismiss as accessible alternative), P25 (zero-tap
+review — arrival is the reviewed record made-scene, no additional
+approval tap). A1–A4 (no `JSON.parse`, structured output, schema
+at boundary, voice corpus enforced). A5 (banned vocabulary via
+`check:strings`). A7 (P-LLM/Q-LLM separation — the P-LLM picked
+the corpus slot at intake time; arrival at runtime reads the
+record, no fresh prompt). A8 (`Untrusted<T>` only at the boundary;
+the chapter consumes an `IntakeOutput` already sanitised). A10
+(observability — `chapter.*` instants). A16 (null-state-as-default).
+A21 (retry policy — N/A for arrival, which is a read-only surface).
+A22 (eval corpus — mock mode in CI, live mode on dispatch).
+
+**Test criteria:**
+1. `ChapterPlan` duration lands in [30_000, 45_000] ms for full
+   intake and in [28_000, 45_000] ms for null-state intake.
+2. Beats in the plan list are non-decreasing in `startMs` (a human
+   reading the array sees the timeline).
+3. `arrivalFactor(plan, t) + overlayOpacity(plan, t) ≡ 1` for all
+   `t >= placeBeat.startMs`, to machine precision.
+4. `activeBeats(plan, t)` returns only beats whose envelope > 0 at
+   `t`; the set at `t = 0` is empty (approach rise starts from 0);
+   `approach` and `narration` overlap in the 2000–3000 ms window.
+5. `diffActiveBeats(prev, curr)` reports all currently-active ids
+   as entered on the first call; reports nothing on a stable tick;
+   reports exactly the id that entered or exited on a transition.
+6. `ariaLineForActive` returns the rising beat's line when multiple
+   beats are active; returns the text of the last active beat when
+   none are rising; returns null for camera-only and pose-only ticks.
+7. `isReady(plan, t)` is false before `plan.readyAtMs` and true at
+   and after.
+8. Voice: `check:strings` finds no marketing or evaluative language
+   in the corpus lines or in the chapter components. (The ban-list
+   files remain exempt; test-fixture files are exempt because they
+   carry real-world proper nouns — see § 2 of the codify list.)
+9. Observability: a synthetic run at the preview harness emits
+   `chapter.beat.enter` exactly once per beat, `chapter.beat.exit`
+   exactly once per beat, `chapter.ready` exactly once, and
+   `chapter.dismiss` exactly once with the correct source.
+10. `npm run verify` — typecheck, lint, `check:manifest`,
+    `check:strings`, `check:gates`, `check:eval` — all clean.
+
+**Pre-existing work this depends on:** iteration #1's intake
+record shape (`IntakeOutput`), the captured-still DOM surface in
+`ArrivalChapter`, and iteration #2's `TheRoomClient` + canvas
+handle. Arrival composes these; it does not rebuild them.
+
+**Out of scope (explicit):**
+- Ambient spatial audio on beat transitions (no audio at all this
+  iteration; opt-in audio is an open spine question and won't land
+  mid-chapter).
+- Haptic pulses on ready (same reason — opt-in only, and the
+  ready beat is polite, not rewarded).
+- A GL-to-GL cross-fade between the captured still and the Room
+  (currently: still fades out in DOM on the same curve the GL
+  approach rises on; sufficient for v2).
+- Per-artifact GL materialisation (artifacts are DOM carriers; a
+  GL-rendered certificate card hovering beside the work is a v4
+  idea at most).
+- Chapter-to-chapter stitching (next chapter's beats don't yet
+  hand off to arrival's ready latch — a single-chapter surface
+  this iteration).
+- Reduced-motion collapsed-beat path. The RAF loop still runs
+  when `prefers-reduced-motion: reduce` is set; it clamps the
+  envelope to settled but still writes state per frame. A true
+  "render once at t = readyAtMs" shortcut is iteration #4
+  territory — reduced motion is currently *correct* (nothing moves
+  visibly) but not *cheap* (the loop still runs).
+
+**Outcome gate:** codify or iterate once. No third round.
+
+---
+
+## Iteration #3 — findings (2026-04-23)
+
+Landed in one pass, bench-tested against the existing intake
+fixtures. Laura's device walk is still outstanding; the preview
+harness confirms the timing envelope and the ARIA line is spoken
+at every beat edge. The pipeline is green end-to-end.
+
+### What landed
+
+- **A pure-TS state machine under `src/ai/chapter/**`.** Seven
+  modules, one responsibility each. `plan.ts` composes the beat
+  array from an `IntakeOutput`; `envelope.ts` carries the analytic
+  functions (`beatEnvelope`, `beatProgress`, `arrivalFactor`,
+  `overlayOpacity`); `driver.ts` exposes `activeBeats`,
+  `findBeatByKind`, `isReady`, `diffActiveBeats`, and
+  `ariaLineForActive`. The machine takes `tMs` as input and returns
+  what's active; it never reads a clock. Makes the whole chapter
+  trivially unit-testable and keeps React as the adapter (Primitive
+  §35), not the driver.
+- **Rate-6 exponential shared across camera, beats, and GL arrival.**
+  The same `1 - exp(-6 * dt/T)` rise drives `CameraAnimator`
+  (iteration #2), `beatEnvelope` (this iteration), and
+  `arrivalFactor` (this iteration). `arrivalFactor + overlayOpacity`
+  is analytically ≡ 1 everywhere after `place.startMs` — proved
+  in an `envelope.test.ts` conservation test. One curve, one hand.
+- **GL arrival factor on `RoomScene`.** `setWorkArrivalFactor(id, t)`
+  slides the work's mesh from `baseWallZ` toward the viewer by
+  `WORK_STANDOFF * t`, and verified works gain `0.08 * t` emissive
+  warmth. Zero per-frame allocation — scratch `THREE.Color`
+  instances, reused. The factor is wired through
+  `TheRoomCanvas.setArrivalFactor` and `TheRoomClient.setArrivalFactor`
+  as an imperative handle so the GL tree never re-renders per
+  frame (the canvas handle is the single write point that drives
+  gesture state; the arrival factor joins it).
+- **`ArtifactCarrier` — the small museum tag beside the work.**
+  Sharp-cornered 2 px-border card with a `data-pang-source="ai"`
+  marker (AI ink, not collector ink). Takes `envelope` and
+  `progress` as props; the chapter drives both. Dumb card — no
+  state, no motion primitives of its own; the caller applies
+  opacity and a `(1-p) * 8 px` drift so the card *settles*, not
+  *pops*. `aria-hidden="true"` because the chapter's live region
+  is the announcement channel.
+- **`ArrivalChapter` completely rebuilt** around the state machine.
+  RAF loop writes `tMs` to React state once per frame; `useMemo`
+  derives `activeBeats`; slot pickers (`narrationSlot`,
+  `attributionSlot`, `contextSlot`, `artifactSlots`) claim their
+  owning payloads from the active set. Beat enter/exit diff fires
+  `chapter.beat.*` instants through `prevActiveIdsRef`. The ready
+  latch fires `chapter.ready` exactly once via `readyEmittedRef`.
+  Keyboard (Enter/Space) and pointer dismiss fire `chapter.dismiss`
+  with the source and call `onDone`. Null-state-as-default branch
+  renders `NULL_REFLECTION.first` and `.second` as two separate
+  lines, at a slower pace (NULL_REFLECTION_MS = 12 000,
+  NULL_PAUSE_MS = 5 000) so the chapter lands at ~31 s in the null
+  branch — inside the 30–45 s band.
+- **ARIA live region.** One sr-only `<LiveLine>` polite region
+  keyed on `ariaLineForActive(active)`. Camera-only and pose-only
+  ticks return null; the live region goes quiet for those frames
+  rather than re-announcing the previous line. P20-compliant.
+- **Observability catalogue.** `chapter.beat.enter`,
+  `chapter.beat.exit`, `chapter.ready`, `chapter.dismiss` — all
+  instants on the `chapter.*` namespace, all with `workId`,
+  `beatId` where applicable, and `tMs`. The dismiss event carries
+  `source: "keyboard" | "pointer"`. The failure-mode paragraph
+  above lives or dies on these being present on every surface
+  edge; they are.
+- **Test coverage.** 80 chapter-specific tests (27 envelope + 23
+  driver + 30 plan). 233 total tests passing across the repo. The
+  conservation identity is a property-style test — asserts it for
+  a dense grid of `tMs` values and fails loudly if the curves ever
+  desync.
+- **`npm run verify` clean.** Typecheck, lint, `check:manifest`,
+  `check:strings`, `check:gates` (26/26), `check:eval` (100 % on
+  the intake fixtures). The eval run is on mock mode in CI and
+  lit up live on dispatch (A22).
+
+### What we learned
+
+- **Slot-based rendering beats beat-keyed rendering when beats
+  overlap.** A first sketch tried to render one DOM node per beat
+  and let React reconcile; it flickered during narration-on-approach
+  overlaps because both beats wanted the same layout slot. Splitting
+  the DOM into zones (each zone claims the beat of the right kind)
+  is the right abstraction — beats compose on the timeline, but the
+  surface composes in space.
+- **The state machine has to take `tMs` as input, not read a
+  clock.** A first draft had `planChapter` start a clock on
+  construction; made the machine untestable and coupled it to RAF.
+  Shifting to `activeBeats(plan, tMs)` makes every function pure
+  and every test seed-able. React drives time in; the machine
+  reports what's active. This is the "React is a sidecar to the
+  canvas" rule (iteration #2's § *What we learned*) applied to a
+  DOM chapter.
+- **Conservation-law testing.** `arrivalFactor + overlayOpacity ≡ 1`
+  is the kind of property a human would never notice if it
+  regressed — the still would just *barely* show through the GL
+  approach, nobody would file a bug, it would feel "a little off."
+  An analytical identity tested at a dense grid of `tMs` makes the
+  regression un-ignorable. Every time two continuous curves are
+  supposed to be complementary, the test should be the identity,
+  not one side and eyeballing the other.
+- **`exactOptionalPropertyTypes` refuses explicit `undefined`.**
+  Ran into it building test `Beat` fixtures: `{ ..., payload: undefined }`
+  was rejected; had to conditionally omit the field. Strict mode
+  is right — "present but undefined" and "absent" are different
+  states, and an optional property's semantics is *absent*. Noted
+  in the driver-test comment so the next author doesn't re-fight it.
+- **Per-frame arrival through imperative handle, not props.**
+  Passing `arrivalFactor` as a prop to `TheRoomClient` would
+  re-render the canvas tree every frame. Routing through
+  `setArrivalFactor` on the imperative handle keeps React
+  reconciliation quiet — the store owns focus (low-frequency
+  writes), the handle drives per-frame state (high-frequency
+  writes). Same split iteration #2 landed for gesture state,
+  extended to arrival.
+- **Null-state-as-default isn't a branch, it's a first-class
+  plan.** `planChapter` returns the null plan when the intake is
+  thin; the rest of the pipeline doesn't know. No `if (isNull)`
+  scattered through `ArrivalChapter` — just a flag at render time
+  (`isNullReflection`) that picks two lines instead of one. Spine
+  line "unverified works are dormant growth triggers" stays
+  literal: the chapter is *shorter* on reflection but the *same
+  shape*.
+
+### Codify / iterate / drop
+
+- **Codify:**
+  - Chapter as a pure state machine with `tMs`-in / active-out →
+    `PANG_AI_Era_2026.md` § *Chapter primitive* (new subsection).
+  - Rate-6 exponential as the canonical timing curve across
+    camera, beats, and GL arrival → already in
+    `PANG_Primitives_2026.md` § *Motion* from iteration #2;
+    extends the entry to note the conservation identity
+    (`arrivalFactor + overlayOpacity ≡ 1`) as the test pattern
+    for complementary continuous curves.
+  - Slot-based DOM rendering for overlapping beats →
+    `PANG_Primitives_2026.md` § *Chapter surface* (new subsection).
+  - `chapter.*` OTel namespace (beat.enter, beat.exit, ready,
+    dismiss with source) as the observability contract for every
+    chapter surface → `PANG_Architecture_2026.md` § *Observability*.
+  - Test-fixture files exempted from the title-case audit because
+    they carry real-world proper nouns as data →
+    `scripts/check-strings.ts` comment (landed) and
+    `PANG_Gates.md` § *check:strings* (one-line note — the
+    exemption is narrow: file ends in `.test.ts` or `.test.tsx`,
+    marketing/emoji checks still apply).
+- **Iterate once:** Laura's device walk. The device walk will
+  confirm (a) the chapter feels like a chapter at a phone's
+  narrow portrait, not a desktop timeline collapsed into a
+  column, (b) the ARIA line is readable by VoiceOver / TalkBack
+  at the cadence the beats intend, (c) the null-state path lands
+  as reflective, not as "short on content." A single pass; the
+  outcome is codify or drop, no third round.
+- **Drop:** nothing. The ceiling for iteration #3 is what
+  iteration #3 delivered.
+
+### What this tightens
+
+- Adds one subsection to `PANG_AI_Era_2026.md` for the chapter
+  state-machine primitive (pure TS, `tMs` in, active set out).
+- Adds one subsection to `PANG_Primitives_2026.md` for slot-based
+  chapter DOM; extends the motion entry with the conservation
+  identity pattern.
+- Adds one line to `PANG_Architecture_2026.md` § *Observability*
+  naming the `chapter.*` namespace.
+- Adds one line to `PANG_Gates.md` § *check:strings* on the test-
+  fixture exemption.
+
+No new gates. No spine moves. No doctrine revisions beyond the
+four codified lines above.
+
+Static checks: `npm run verify` clean — typecheck, lint,
+`check:manifest`, `check:strings`, `check:gates` (26/26),
+`check:eval` (100 %), `npx tsx --test` (233/233 across the repo;
+80 chapter-specific).
+
+---
+
+## Iteration #4 — Verification request (opened 2026-04-23)
+
+**Status:** kickoff brief only. No code yet. This entry is the
+*plan* phase per `CLAUDE.md` § 9 — execution lands in a fresh
+context, and review after that in a third context. The brief is
+signed when the five declarations (scope / stack / reference /
+canvas / failure mode), gates, test criteria, open questions, and
+outcome gate are all present and coherent.
+
+**Why now:** iteration #3 landed the arrival chapter — the record
+becomes a scene. That scene ends on an unverified work in the null
+state, because verification is a separate act. The spine asserts
+that *every unverified work wants a gallery behind it*, and that
+*requesting verification is a one-tap gesture*. Iteration #4 is
+that tap. Without it, the null state is an aesthetic — with it,
+the null state becomes a dormant growth trigger, exactly as the
+spine declares it.
+
+The gesture is load-bearing for the business model too. The
+gallery's existing relationship with the collector *is* the
+acquisition channel (§ 2). The collector never pays; the gallery
+pays a small subscription. That flip only works if the gallery
+receives a qualified, unprompted verification request from its
+own collector. Iteration #4 is the surface that produces that
+request.
+
+**Scope:** ceiling. A one-tap "ask my gallery" affordance on any
+unverified work, visible from both the Room (focused state) and
+the arrival chapter's ready beat; a submitted state named in the
+voice ("requested" — sentence case, no badge, no checkmark); an
+OPFS-backed request outbox that survives refresh and offline; an
+idempotency key so double-taps, refresh races, and retried POSTs
+never double-send; a `POST /api/verification/request` endpoint
+that accepts the payload, validates it with a Zod schema, and
+emits a telemetry span; a Declarative Web Push subscription
+offered *at request time only* (never on landing, never on
+install — the § 2 doctrine is literal); a confirmation chapter
+that plays when the gallery confirms, reusing iteration #3's
+chapter state machine with confirmation-specific beats (*the
+gallery recognised the work; verified; the warmth rises*); the
+corresponding decline chapter, much shorter and reflective, when
+the gallery can't confirm; and a full `verification.*` OTel
+catalogue covering submit, ack, confirm, decline, timeout, and
+push-subscribe outcomes. The server-side delivery to the gallery
+is *stubbed* — the endpoint persists the request to a file-system
+queue under `.pang/outbox/` and returns a request id. Real
+gallery dispatch (SMTP? Dashboard? Slack Connect?) is iteration
+#7 territory. Everything on the collector's device lands at the
+ceiling.
+
+**Stack:**
+- Zod schema `VerificationRequest` in `src/verification/schema.ts`.
+  Fields: `requestId` (ULID), `workId`, `galleryIdHint`
+  (`galleryOfOrigin.galleryId` when confidence ≥ 0.8, else null),
+  `galleryNameHint` (`galleryOfOrigin.galleryName` when present,
+  else null), `galleryFreeText` (the collector's edit, when the
+  hint is wrong or missing — bounded to 120 chars, `sanitize()`'d
+  through the existing CaMeL primitive), `artworkSnapshot`
+  (artist / title / year / medium / dimensionsCm — the structured
+  record the gallery needs to recognise the work), `photoRef`
+  (OPFS-backed image id), `capturedAt` (ISO), `submittedAt`
+  (ISO), `version: "v1"`. All fields `readonly`; the schema is
+  the wire contract.
+- Zustand slice `useVerification` under `src/stores/verification.ts`.
+  State per workId: `"none" | "requested" | "confirmed" |
+  "declined" | "failed"`, plus the `requestId` and `submittedAt`
+  timestamps on the non-`"none"` states. Idempotent on workId —
+  calling `requestVerification(workId)` when state is already
+  `"requested"` is a no-op. Persistence is OPFS-backed via a new
+  `src/stores/verification.persist.ts` mirroring the works
+  persistence pattern (index sidecar + per-entry JSON).
+- Request outbox under `src/verification/outbox.ts`. OPFS
+  directory `verification/outbox/<requestId>.json`. The outbox
+  writes first, then the network call fires. Offline? The outbox
+  holds the payload; a `window.addEventListener("online", …)`
+  replay handler drains. Retry policy per A21: exponential with
+  jitter, max 5 attempts, capped at 30 min between tries. The
+  policy constant lives in `src/verification/retry.ts` and exports
+  `RETRY_POLICY` the A21 gate can find.
+- Endpoint `POST /api/verification/request` under
+  `app/api/verification/request/route.ts`. Zod-validates the body,
+  derives a server-side `receivedAt`, writes to `.pang/outbox/<id>.json`
+  (dev) or a KV namespace (prod — deferred; dev outbox suffices
+  for iteration #4), emits an OTel span `pang.api.verification.request`,
+  and returns `{ requestId, status: "received", receivedAt }`. A8
+  applies trivially — the payload is structured, no untrusted prose
+  flows to any LLM. A7 applies to the endpoint: no Q-LLM
+  invocation, no P-LLM tool call. Pure plumbing.
+- Declarative Web Push subscription flow under
+  `src/push/subscribe.ts`. `probePushSupport()` + `subscribeForOutcome()`.
+  The subscription ask happens *on the request submission's
+  success tick*, not on mount, not on app boot. Permission
+  denied is a first-class state; the request still submits. VAPID
+  key is a build-time constant read from `NEXT_PUBLIC_VAPID_PUBLIC_KEY`;
+  the private side lives server-side in `VAPID_PRIVATE_KEY` (env,
+  not checked in). For iteration #4 the server doesn't push —
+  the subscription is stored on the request record and iteration
+  #7 wires the dispatch.
+- Confirmation + decline chapters reuse
+  `src/ai/chapter/plan.ts`. New beat kinds: `"confirmation"` and
+  `"decline"`. New corpus entries in `src/ai/chapter/voice.ts`:
+  `CONFIRMATION` (gallery recognised, warmth rises),
+  `DECLINE` (reflective, not apologetic — the work is still the
+  work). The GL side extends `RoomScene.setWorkVerified(id, verified)`:
+  the emissive warm bias already exists; on confirmation, the
+  chapter animates `arrivalFactor`-style warmth rise through a
+  rate-6 curve from 0 to 1 over the confirmation beat. Decline is
+  silent in GL — no negative animation.
+- Observability under `src/ai/chapter/otel.ts` + new
+  `src/verification/otel.ts`: `verification.request.submit`,
+  `verification.request.ack` (server 2xx), `verification.request.fail`
+  (network or schema error, with `reason`),
+  `verification.push.subscribe` (granted / denied / unsupported),
+  `verification.outbox.enqueue`, `verification.outbox.drain.start`,
+  `verification.outbox.drain.complete`,
+  `verification.confirmation.received`, `verification.decline.received`.
+  All are OTel instants; the request lifecycle is a span with
+  `requestId` on every child event.
+- CaMeL discipline: the gallery free-text is the only untrusted
+  string the collector types into this surface. It goes through
+  `sanitize()` before it reaches the schema, and is treated as
+  `Untrusted<string>` until the Zod parse validates the bounded
+  shape. No Q-LLM, no P-LLM, no model at all in the request path.
+  The one LLM involvement is the *confirmation chapter's prose
+  slot*, which reuses the voice corpus — no runtime authoring.
+
+**Reference:**
+- Granola's "quiet ask" pattern — one button, no marketing
+  surround, plain language. The request gesture is a verb, not a
+  call-to-action.
+- Apple Wallet verification flows — the collector initiates, the
+  counterparty confirms, the collector receives a discreet update.
+  No "your request is being processed" chatter; the state name
+  *is* the surface.
+- Stripe's idempotency-key model — the client generates a ULID,
+  the server dedupes on it, retries are safe by construction.
+- Monzo's "freeze card" gesture — one tap, instant visible state
+  change, no confirmation modal. The affordance is the
+  confirmation.
+- Museum registrar practice — an accession request is a structured
+  record with a known receiver, not a broadcast. Each request
+  names its gallery; no "to whom it may concern."
+
+**Canvas:** DOM for the ask-affordance (chrome — 2 px border, sharp
+corners, sentence case, `data-pang-source="collector"` because the
+collector is the author of the intent). DOM for the outbox queue
+UI (if any — see open questions). `<canvas>` for the Room stays
+unchanged except for the new `setWorkVerified` GL hook. The
+confirmation and decline chapters are DOM over the Room canvas
+(same composition as arrival, same slot-based primitive). No new
+canvas surface.
+
+**Failure mode (5th declaration):** three regression classes must
+be observable — *delivery* (request never reaches the server;
+outbox fills; drain never fires), *identity* (gallery hint is
+wrong, collector edits free-text, request lands with a mismatched
+gallery and a human at the gallery has to untangle), and *state*
+(collector refreshes mid-request; state flips to `"failed"`;
+optimistic UI shows `"requested"` but the record says otherwise).
+All three are covered. Delivery: the `verification.outbox.*` OTel
+instants emit on every enqueue and every drain attempt; a
+regression where the outbox silently accumulates shows up in
+telemetry as `enqueue` without a matching `drain.complete`.
+Identity: the request payload logs the hint source
+(`detectedFrom: "email" | "sms" | "manual"`) and the collector's
+edit distance from the hint, so a systematic drift between what
+PANG inferred and what the collector actually wrote is visible in
+the corpus. State: the OPFS-backed store reconciles on boot — if
+the outbox holds a request with no corresponding `"requested"`
+entry in the store, the boot path re-submits; if the store holds
+a `"requested"` entry with no outbox record, the boot path
+downgrades to `"failed"` and the surface re-offers the ask. The
+reconcile is observable under `verification.reconcile.*`. A
+regression in any of the three classes surfaces in telemetry
+without "the request didn't go through" becoming an investigation.
+
+**Gates this iteration must pass:** the 48. Specifically
+load-bearing:
+- P1–P11 (tokens, corners, OKLCH) — the affordance is chrome, 2 px.
+- P5 (OPFS only, no localStorage) — outbox + verification store
+  persistence.
+- P15 (View Transitions capability fallback) — the request tap
+  transitions the work's state chip; the cross-fade respects the
+  missing-`startViewTransition` branch.
+- P19 (reduced-motion) — confirmation chapter's warmth rise clamps
+  to settled under reduced-motion.
+- P20 (ARIA) — the ask-button is a proper `<button>`; the state
+  chip is an ARIA live region scoped to the focused work.
+- P23 (keyboard a11y) — Enter/Space on the ask-button, same as
+  the dismiss in iteration #3. Focus ring visible.
+- P25 (zero-tap review) — the request fires on one tap. No
+  confirmation modal.
+- A1–A4 (structured output, schema-at-boundary) — the request
+  payload + response schemas are Zod; no `JSON.parse`.
+- A5 (banned vocabulary) — confirmation / decline corpus goes
+  through `check:strings`.
+- A7 (CaMeL capability graph) — the request endpoint declares no
+  capabilities; the sanitiser boundary is named.
+- A8 (Untrusted<T> at the boundary) — gallery free-text enters as
+  `Untrusted<string>`, leaves as `string` after `sanitize()` +
+  Zod.
+- A10 (observability spans) — `pang.api.verification.request`
+  span wraps the endpoint.
+- A16 (OPFS-backed queue) — outbox.
+- A21 (retry policy) — `RETRY_POLICY` export in
+  `src/verification/retry.ts`.
+- A22 (eval corpus) — confirmation / decline fixtures added to
+  `evals/intake/` no, under a new `evals/verification/` directory.
+
+**Test criteria:**
+1. `VerificationRequest` schema parses the full payload and
+   rejects missing required fields; rejects `galleryFreeText`
+   longer than 120 chars; rejects malformed ULIDs.
+2. `useVerification.requestVerification(workId)` is idempotent:
+   calling it twice in the same tick submits once and returns the
+   same requestId.
+3. The outbox writes to OPFS *before* the network call, and the
+   store flips to `"requested"` optimistically. A network failure
+   downgrades the store to `"failed"` but leaves the outbox entry
+   in place for the `online` replay.
+4. The `online` replay drains the outbox in FIFO order, stops on
+   the first failure (to avoid hammering the server), and re-
+   schedules per `RETRY_POLICY`.
+5. The confirmation chapter plays when a confirmation arrives
+   (either via push or via a manual reconcile call). The warmth
+   rise hits 1 by the chapter's ready beat. The store flips to
+   `"confirmed"`.
+6. The decline chapter plays on decline; reflective beats; GL
+   warmth stays at 0. The store flips to `"declined"`. The
+   ask-affordance does *not* re-appear — decline is a state, not
+   a retry prompt (open question #3).
+7. Push subscription is offered after submission success; denied
+   permission doesn't block the request; the `verification.push.subscribe`
+   instant carries the outcome.
+8. Boot-time reconcile: populate the outbox with an entry whose
+   corresponding store state is `"none"` — boot re-submits and
+   flips to `"requested"`. Populate the store with `"requested"`
+   and an empty outbox — boot downgrades to `"failed"`.
+9. `check:strings` finds no marketing / evaluative vocabulary in
+   the confirmation or decline corpus.
+10. `check:eval` (mock mode) passes the confirmation and decline
+    fixtures at ≥ 85 %.
+11. `npm run verify` — all clean.
+
+**Pre-existing work this depends on:** iteration #1's intake
+record (`galleryOfOrigin`, `artwork` shape); iteration #2's Room
+(focused state reads `setWorkVerified` from this iteration);
+iteration #3's chapter primitive (plan / envelope / driver /
+voice / otel reused for confirmation + decline); existing CaMeL
+(`wrapUntrusted`, `sanitize`, `trust.ts`, `capabilities.ts`);
+existing service worker (push handler already exists at line 154
+of `public/sw.js` — iteration #4 adds the subscription flow, not
+the handler).
+
+**Open questions** (answered before execution):
+1. **Does the one-tap tap carry a "by you" confirmation, or is
+   the tap the confirmation?** Proposed answer: the tap *is* the
+   confirmation. The button copy reads "ask my gallery" (sentence
+   case, voice-authored), and the state flips to "requested"
+   immediately. An "are you sure?" modal would violate P25 and
+   the spine's one-tap sacred rule.
+2. **What happens when the gallery hint is wrong and the
+   collector wants to ask a different gallery?** Proposed answer:
+   a secondary edit surface — a small "not this gallery?" link
+   beside the ask-button that opens an inline text field with the
+   hint pre-filled. The field sanitises and length-bounds to 120
+   chars. The edit is a pre-submit affordance; post-submit, the
+   request is immutable.
+3. **Does a decline re-offer the ask?** Proposed answer: no. A
+   decline is the gallery's answer; re-asking would be chatter.
+   A manual "ask a different gallery" path exists via the edit
+   surface (open question #2), but that's a distinct action with
+   a distinct state (the old `requestId` is closed, the new one
+   opens).
+4. **Does the outbox surface a queue UI?** Proposed answer: no
+   for iteration #4. The outbox is a mechanism, not a surface.
+   If `online` is restored and the drain takes > 2 s, the focused
+   work's state chip reads "requesting" briefly; that's the only
+   visible signal. A proper "pending sync" surface is iteration
+   #5 territory if the telemetry shows the drain needs one.
+5. **Does the push subscription expire quietly?** Proposed
+   answer: yes. `pushManager.getSubscription()` is checked at
+   app boot; a null subscription when the store holds `"requested"`
+   entries triggers a re-offer on the next focused interaction
+   with one of those entries. No banner, no re-permission popup
+   at boot. "Silent between sessions" (§ 7) is literal.
+6. **Is the request payload signed?** Proposed answer: no signing
+   in iteration #4. The endpoint is HTTPS, the request comes from
+   an authenticated session (the invite link's token), and the
+   server dedupes on the ULID. Signing adds a key-management
+   surface we don't need yet; iteration #7 (real gallery dispatch)
+   revisits.
+
+**Out of scope (explicit):**
+- Real gallery dispatch (SMTP / dashboard / Slack Connect). The
+  endpoint writes to a local queue and returns. Iteration #7
+  builds the dispatch.
+- Multi-gallery requests (a work with two provenance chains). The
+  schema permits one gallery per request; multi-gallery is a
+  different gesture and belongs to a later iteration.
+- Bulk request (a collector asking verification for every
+  unverified work at once). Explicitly not a thing — each work is
+  its own relationship with its own gallery.
+- Gallery-initiated verification (the gallery adding a work to
+  the collector's wall). Different surface entirely; iteration
+  #9 or later.
+- Verification revocation / appeal. Decline is final for this
+  iteration.
+- Analytics dashboards for the gallery. No gallery-facing UI at
+  all (§ 7 "no gallery management dashboard" stands).
+- Rich push payloads (images, actions). The push notification
+  renders title + body only. Iteration #7 may extend.
+- Push topic / segmentation. One subscription per device, keyed
+  by VAPID public key.
+
+**Outcome gate:** codify or iterate once. No third round. The
+codify targets are laid out now (so execution can name what it
+will write back, and drop anything the build proves wrong): the
+request outbox primitive (`PANG_Architecture_2026.md` § *Data
+primitives*), the optimistic-with-reconcile state pattern
+(`PANG_Primitives_2026.md` § *State*), the `verification.*` OTel
+catalogue (`PANG_Architecture_2026.md` § *Observability*), the
+"tap is the confirmation" rule (`PANG_Primitives_2026.md` § *Chrome*),
+and the Declarative Web Push subscription-at-request-time rule
+(`CLAUDE.md` § *The cannot-do list* — extends the existing "no
+push beyond gallery-originated verification outcomes" line with
+the subscription timing).
+
+---
+
 ## Archived iterations
 
 The pre-reset sprint family (A1–A11, iterations #1–#13 of the old

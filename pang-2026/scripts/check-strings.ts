@@ -174,11 +174,16 @@ async function main(): Promise<void> {
       // known value-context files — the font loader and the locked
       // design-token registry legitimately list proper-noun font
       // families ("Instrument Serif", "Geist Mono", "Times New Roman")
-      // which are CSS identifiers, not UI labels.
+      // which are CSS identifiers, not UI labels. Test fixtures also
+      // carry real-world proper nouns (artist names, gallery names)
+      // as data — a realistic fixture is the point, and the strings
+      // never reach a UI surface.
       const isValueContextFile =
         f.endsWith("fonts.ts") ||
         f.endsWith("fonts.tsx") ||
-        f.endsWith("locked.ts");
+        f.endsWith("locked.ts") ||
+        f.endsWith(".test.ts") ||
+        f.endsWith(".test.tsx");
       if (
         !isValueContextFile &&
         value.length < 40 &&
