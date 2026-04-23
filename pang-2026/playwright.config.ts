@@ -71,6 +71,21 @@ export default defineConfig({
       name: "chromium-desktop",
       use: {
         ...devices["Desktop Chrome"],
+        // Camera flags mirror the mobile project. `scan.spec.ts` runs
+        // on both projects; without the fake device, the viewfinder's
+        // `getUserMedia` rejects on desktop and the test misreads the
+        // camera failure as an upload failure. Headless Chrome respects
+        // these flags identically regardless of desktop-vs-mobile
+        // emulation, so the cost is zero for specs that never touch
+        // `navigator.mediaDevices`.
+        launchOptions: {
+          args: [
+            "--use-fake-ui-for-media-stream",
+            "--use-fake-device-for-media-stream",
+            "--autoplay-policy=no-user-gesture-required",
+          ],
+        },
+        permissions: ["camera"],
       },
     },
   ],
