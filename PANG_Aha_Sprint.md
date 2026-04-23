@@ -2394,6 +2394,378 @@ think about this" leftovers.
 
 ---
 
+## Iteration #6 — Documents as evidence v1 (opened 2026-04-23)
+
+**Status:** kickoff brief. Written in the planning context per
+`CLAUDE.md` § 9; execution will start in a fresh context so the
+compacted-summary path from iter #5 doesn't bleed into the
+implementation. Five declarations present; gates named; test
+criteria named; Laura's hands is the outcome signal (iteration
+cadence table row).
+
+**Why now:** iter #5 produced data with no surface
+(EnrichmentPanel was deferred by design — shipping a placeholder
+twice is waste). Iter #1's intake produced `IntakeOutput.documents`
+up to 8 per work with `type`, `fileRef`, `extractedFields` —
+structured evidence for the CoA / invoice / condition report
+attached to the work at scan time. Neither has a render surface
+that honours the spine's claim: *"documents exist as evidence —
+the CoA with its actual signature, the invoice with its real
+price, condition reports as photographs. Tactile, gesture-accessed,
+not a grid of administrative slots."* (`PANG_Spine.md` § *The
+spine*.) Iter #6 is the render that earns both datasets. It is
+also the second "Laura's hands" cadence in a row after #4 —
+#5 being gates-only — so it's the iteration that most needs
+her signal before shipping.
+
+**Scope:** ceiling. Three surfaces land together, wiring the
+already-produced data to the spine's documents claim:
+
+1. **Documents chapter.** When Laura approaches a verified work
+   (focus transition from wall to work), pre-filed documents
+   arrive as staggered artifacts — same chapter primitive
+   iter #3 built for arrival and iter #4 extended for outcome.
+   Each document settles into its tactile position one by one,
+   not all at once. The last beat is `ready` (chapter primitive
+   contract); the collector's gesture can interrupt at any
+   point and the chapter completes in one frame to its final
+   state. Zero-tap to documents (P25 holds — no review step
+   between focus and evidence).
+
+2. **Enrichment panel.** The iter #5 data gets its first
+   render: a muji `<dl>` of timeline entries + a paragraph
+   card for `artistContext.bioMuji`. Contributor-sourced
+   fields render with the crisp `data-pang-source="intake"` /
+   `"gallery"` ink; the LLM-authored `bioMuji` renders dim
+   under `data-pang-source="ai"`. The panel lives alongside
+   the documents chapter — documents on one side, context on
+   the other — but neither is modal. Taps outside either
+   still dismiss focus (the iter #4 contract holds).
+
+3. **Tactile document viewer.** Tap any document → a
+   `<canvas>`-rendered viewer opens, pinch-zoomable. First
+   pinch reveals scale; deeper pinch reveals the actual
+   signature on the CoA or the actual price on the invoice.
+   Canvas-only for zoom math (no CSS transforms on PDFs —
+   Primitive §21 holds: OpenSeadragon on `<canvas>` for
+   zoomable surfaces). Back gesture (pinch-out, drag-down,
+   Escape key) returns to the documents chapter view. No
+   platform-default toolbar, no page flip chrome; the
+   document is its own object.
+
+Iter #6 lands the **render discipline for evidence** — the same
+way iter #3 landed the chapter primitive and iter #4 extended it
+to outcomes. Everything iter #6 ships is a consumer of data
+iter #1 and iter #5 already produce; no new agents, no new LLM
+calls, no new endpoint work. A rendering iteration, not an
+agent iteration.
+
+**Stack:**
+- Chapter under `src/chapter/documents/plan.ts` + `bundle.ts`
+  — pure plan function `planDocumentsChapter(workId, documents,
+  focusedAt): DocumentsChapterPlan` mirroring
+  `planArrivalChapter` / `planConfirmationChapter`. Beats:
+  `settle → artifact.1 → artifact.2 → … → artifact.n →
+  context → ready`. Budget: `totalMs` between 6000 and
+  12000 (scales with document count; 1 document = ~6 s, 8
+  documents = ~12 s). Every artifact beat has a `payload`
+  with the document's `type`, `fileRef`, `extractedFields`.
+  The beats are pure data — no DOM, no canvas; the renderer
+  reads `tMs` and maps to visual state.
+- Renderer under `src/components/documents/DocumentsChapter.tsx`
+  — DOM chrome consumer of the plan. Each artifact arrives as
+  a small card with the document type (*"certificate of
+  authenticity"*, *"invoice"*, *"condition report"*) plus the
+  extracted fields the intake Q-LLM pulled. `View Transitions`
+  wrap the artifact-in animation; Motion One's compiled
+  `linear()` easings (Primitive §36) drive the settle. Sharp
+  corners, 2 px borders, OKLCH tokens — Primitive §11.
+- Enrichment panel under `src/components/enrichment/
+  EnrichmentPanel.tsx` — DOM chrome, `<dl>` + paragraph
+  card. `data-pang-source` distinguishes `"intake"` (crisp
+  ink), `"gallery"` (crisp ink, contributor brand), `"ai"`
+  (dim ink, muji — the bioMuji only). Suspends on
+  `useEnrichment.stateOf(workId).kind === "enriching"` with
+  a muji line ("enriching…", two-character ellipsis — see
+  `PANG_Voice.md`); hides entirely on `"none"`.
+- Document viewer under `src/components/documents/DocumentViewer.tsx`
+  + `src/documents/viewer.ts` — canvas-only viewport with
+  exponential-smoothing zoom animator (Primitive §39 — not a
+  spring), `PointerEvent` + `touch-action: none` (Primitive §40).
+  PDFs render through a worker (pdf.js 4.x, ~1.5 MB WASM,
+  precached via service worker, same discipline as the
+  MediaPipe segmenter from §38). Images render through
+  `createImageBitmap` on a worker and are drawn to the main
+  canvas as a single `ImageBitmap` source (no CSS transforms).
+  Viewer is opened via the documents chapter's tap on an
+  artifact; closed via pinch-out, drag-down, Escape.
+- OPFS bytes layer under `src/documents/bytes.ts` — thin
+  accessor over `opfsRead(fileRef)` returning
+  `Blob | null`. Null-byte path is honest: the viewer renders
+  a muji "this document is no longer available" state
+  rather than crashing. `documents.bytes.miss` OTel event
+  tags the missing `fileRef` + the `workId` so the reconcile
+  pass can surface orphaned references.
+- Observability under `src/documents/otel.ts`:
+  `documents.chapter.start`, `documents.chapter.complete`,
+  `documents.chapter.abort` (collector interrupted),
+  `documents.viewer.open`, `documents.viewer.close`,
+  `documents.viewer.zoom_depth` (max pinch level reached —
+  a coarse signal for "did she paint into this document"),
+  `documents.bytes.miss`, and — tying back into iter #5 —
+  `enrichment.panel.render` firing when the panel's state
+  flips to `"ready"` for the first time on a work.
+- Voice additions under `src/ai/voice/documents.ts` + corpus
+  under `ai/voice/corpus/documents.md`. Sentence-case labels
+  only: *"certificate of authenticity"*, *"invoice"*, *"condition
+  report"*, *"no longer available"*, *"enriching…"*. Zero
+  marketing vocabulary; every string passes `check:strings`.
+  No generated prose — every string in iter #6 is
+  hand-authored and corpus-sourced.
+
+**Reference:**
+- Rijksmuseum's *Rijksstudio* object page — documents and
+  provenance as tactile layers alongside the work, not as
+  an administrative accordion at the bottom. Zoom into the
+  signature is a first-class gesture.
+- Apple Notes' scanned-document viewer — canvas-rendered,
+  pinch-zoomable to signature, no chrome except the thinnest
+  possible title strip. No page flip; no search bar; no
+  export button mid-view.
+- Figma's comment thread — contextual chrome that appears
+  beside the object, not over it. The object remains
+  untouched.
+- Granola's reveal cadence — content lands in staggered
+  beats (not all-at-once); each beat has its own settle.
+  Same shape the chapter primitive already produces; iter #6
+  is the second surface to borrow it (after outcome
+  chapters in iter #4).
+- Museum CoA framing — the CoA is evidence, not decoration.
+  Rendered muji, at the work's actual scale, with the
+  signature legible. Anti-reference: a PDF viewer with page
+  navigation, zoom controls, and a download button — the
+  chrome that makes a museum object feel like a file.
+
+**Canvas:** split — DOM for chrome, `<canvas>` for the document
+viewport. The documents chapter is DOM (cards settle in via
+View Transitions + compiled-spring easings; no canvas math
+needed). The enrichment panel is DOM (`<dl>` + paragraph).
+The document viewer is `<canvas>` (pinch-zoom math, sub-pixel
+signature readability, no CSS transform blur). The Room's
+existing canvas (iter #2) is untouched; the viewer opens as
+a second canvas *overlay*, not a replacement — iter #2's GL
+layer pauses its RAF loop when the viewer is active (a
+`useWorks((s) => s.activeViewer)` selector gates the tick).
+
+**Failure mode (5th declaration):** four regression classes must be
+observable.
+
+- *Jank under staggered reveal.* A document chapter with 8
+  artifacts on a mid-tier Android must hold 60 fps during the
+  settle; INP p75 ≤ 200 ms through the artifact sequence.
+  Enforcement: `documents.chapter.*` spans include per-frame
+  timing attributes; a Playwright harness scripts a mocked
+  `performance.now()` + 8-document fixture and asserts the
+  frame-time histogram p75 < 16.67 ms. Regression fails CI.
+- *Source confusion.* Bio must render under
+  `data-pang-source="ai"` (dim); intake-extracted fields
+  must render under `data-pang-source="intake"` (crisp);
+  gallery-submitted timeline notes must render under
+  `data-pang-source="gallery"` (crisp). A renderer bug that
+  mis-attributes a source is a voice regression invisible to
+  `check:strings`. Enforcement: a React Testing Library test
+  per render path asserts the `data-pang-source` attribute
+  against the data's branded origin; a Playwright visual
+  regression catches the `text-ink-ai` vs `text-ink` ink
+  swap.
+- *Missing document bytes.* An OPFS quota eviction or a
+  migration path has dropped a document's bytes; the
+  viewer must render a muji "no longer available" state and
+  fire `documents.bytes.miss` — never crash, never render a
+  broken-image icon, never show a raw `fileRef`. Enforcement:
+  a test fixture with a dangling `fileRef` asserts the
+  miss-state string + the OTel event; the chapter does not
+  abort (the rest of the documents still settle).
+- *Viewer-as-escape-hatch.* The back gesture (pinch-out,
+  drag-down, Escape) must always return to the documents
+  chapter view — never to a blank room, never to the wall.
+  A bug in the viewer's unmount path that dismisses focus
+  entirely breaks the spine's "stay with the work" promise.
+  Enforcement: a Playwright walk scripts every back path
+  and asserts `useWorks.getState().focusedId` is unchanged
+  at viewer close.
+
+**Gates this iteration must pass:** the 48. Specifically
+load-bearing:
+- P7 (INP 200 ms p75) — staggered reveal + pinch-zoom are
+  both gesture surfaces that must hold the budget.
+- P9 (Room reserves `<canvas>`) — unchanged; iter #6 adds a
+  *second* canvas for the viewer and gates the Room's RAF
+  via `activeViewer`.
+- P11 (OKLCH only) — the new artifact cards + viewer chrome
+  use token colours only; no literal hex.
+- P15 (springs default / compiled `linear()`) — artifact
+  settles use compiled easings; pinch-zoom uses the
+  exponential-smoothing animator (Primitive §39), not
+  spring primitives.
+- P20 (CV runs in a worker) — unchanged but extended: PDF
+  parse runs in a worker via pdf.js; no main-thread parse.
+- P23 (keyboard a11y) — the viewer is keyboard-dismissable
+  (Escape), the documents chapter is focus-trappable only
+  while the viewer is open, and the enrichment panel's
+  headings are landmark-labelled.
+- P24 (design-token discipline) — zoom rate, settle
+  duration, artifact stagger all live as module-level
+  `const`s, no magic numbers in render files.
+- P25 (zero-tap review) — focus → documents chapter → ready
+  in one gesture; no "confirm opening" prompt.
+- A4 (voice prompt) — not applicable (no LLM calls in
+  iter #6) but the gate still runs to confirm nothing was
+  added inadvertently.
+- A5 (banned vocabulary) — `check:strings` scans the new
+  voice corpus under `ai/voice/corpus/documents.md`.
+- A8 (`wrapUntrusted`) — not applicable for iter #6 (render
+  path only); the gate still runs.
+- A10 (OTel spans) — all chapter + viewer spans wrapped.
+- A21 (retry policy) — not applicable (no agent calls); the
+  gate still passes because no new agent was introduced.
+
+**Test criteria:**
+1. `planDocumentsChapter` is pure: same `(workId, documents,
+   focusedAt)` input produces byte-identical output across
+   calls; no clock reads inside the plan function.
+2. A chapter with `n` documents has exactly `n + 3` beats
+   (`settle` + n artifact beats + `context` + `ready`) and
+   its `totalMs` falls in `[6000, 12000]` across `n ∈ [1, 8]`.
+3. Collector interruption during a documents chapter
+   completes the chapter to its final state in one frame
+   (the same escape hatch iter #3's arrival chapter
+   guarantees).
+4. `DocumentsChapter` renders every artifact with its
+   `data-pang-source` attribute matching the document's
+   branded origin (`"intake"` for Q-LLM extracted,
+   `"gallery"` for enrichment contributor fields, `"ai"`
+   only on `bioMuji`).
+5. `DocumentViewer` opens on artifact tap, zooms via
+   `PointerEvent` pinch, closes via pinch-out / drag-down /
+   Escape. Background `focusedId` is unchanged at viewer
+   close.
+6. A dangling `fileRef` renders the "no longer available"
+   state and fires `documents.bytes.miss`; the chapter
+   continues without aborting.
+7. `EnrichmentPanel` renders `"enriching…"` while the store
+   is `"enriching"`, the `<dl>` of timeline entries when
+   `"ready"`, nothing when `"none"`. State transitions
+   trigger a single re-render (a Zustand selector test).
+8. `check:strings` finds no marketing / evaluative
+   vocabulary in `ai/voice/corpus/documents.md`.
+9. Playwright walk: open a verified work with 3 documents →
+   documents chapter → tap CoA → viewer zoom to signature →
+   back gesture → documents chapter still visible → tap
+   outside focus → back to the Room. No blank frames, no
+   `focusedId = null` mid-walk.
+10. `npm run verify` — all clean. 26/26 gates, 480+/480+ unit
+    tests (10+ new tests expected), 9/9 existing eval
+    fixtures preserved.
+
+**Pre-existing work this depends on:**
+- Iteration #1's `IntakeOutput.documents[]` (already in
+  `CollectionEntry.verificationHint`).
+- Iteration #2's Room + focused-work selector chain
+  (`useWorks.focusedId`).
+- Iteration #3's chapter primitive
+  (`planArrivalChapter`, the `tMs`-driven renderer).
+- Iteration #4's `FocusedWorkPanel` + `AskGallery` layout
+  (documents + enrichment panels live *beside* it, not
+  inside it).
+- Iteration #5's `useEnrichment` store + `readEnrichmentCache`
+  (the enrichment panel reads from both).
+
+**Open questions** (answered before execution):
+1. **Does the documents chapter auto-play on focus, or
+   require a tap?** Proposed answer: auto-play on focus.
+   Laura's gesture to the work *is* the gesture to the
+   documents. The spine says "documents arrive as artifacts,
+   one by one" (§ *The spine*) — an additional tap before
+   that would be chrome.
+2. **What's the viewer's default zoom?** Proposed answer:
+   fit-to-viewport. First pinch reveals scale; no "actual
+   size" toggle, no "fit to width" button. The gesture is
+   the control.
+3. **Do we render contributor (gallery) timeline notes on
+   the artifact cards?** Proposed answer: no. The artifact
+   card shows only the *intake-extracted fields* (signature
+   description, purchase date, etc.). Contributor notes
+   live on the enrichment panel's timeline `<dl>`, not on
+   the document card. The separation preserves the CoA's
+   character as a physical object — the contributor's
+   annotation does not belong on the CoA's face.
+4. **What happens if a document's `fileRef` is null?**
+   Proposed answer: the artifact card still renders (the
+   extracted fields are the information), but tapping the
+   card is a no-op — no viewer opens, no error appears.
+   The fields were legible enough to surface without the
+   scan; the scan is a nice-to-have.
+5. **Does the viewer support multi-page PDFs?** Proposed
+   answer: page 1 only in v1. A 12-page condition report
+   renders page 1 with a muji "+11 more pages" footer.
+   Pagination is iter #7 or later — the ceiling for v1 is
+   the signature on the CoA, not archival browsing.
+
+**Out of scope (explicit):**
+- Collector-uploaded documents. Documents arrive via
+  intake (iter #1) or via gallery/museum enrichment
+  submissions (iter #5 — extended in a later iteration if
+  signal demands). There is no "+" button to upload a
+  document in iter #6.
+- Multi-page PDF pagination. v1 is page 1 only.
+- Document editing / annotation. Evidence, not drafts.
+- Document sharing / export. A download button is chrome
+  that breaks the museum-object register.
+- Full-text search across documents. Iter #7+ territory
+  if it ever lands.
+- New LLM calls. Iter #6 is rendering, not agents. No
+  prompts, no tools, no retry policies, no Q-LLM passes.
+- OPFS quota management. Iter #6 renders the
+  "no longer available" state honestly but does not add
+  proactive eviction logic — that's the OPFS reconcile
+  iteration.
+
+**Outcome gate:** codify or iterate once based on Laura's
+signal. The codify targets:
+- **Chapter primitive as a render discipline, not just an
+  arrival affordance.** Iter #3 + #4 built it, iter #6
+  confirms it extends to evidence. Add to
+  `PANG_Primitives_2026.md` § *Motion* as the "chapter
+  grammar: pure plan + tMs-driven renderer".
+- **Source-attribution ink as a voice primitive.**
+  `data-pang-source` + the ink-vs-ink-ai CSS tokens are
+  now applied across three surfaces (intake result card,
+  enrichment panel, document artifact card). Codify as a
+  first-class primitive: "every string that reaches Laura
+  carries its source".
+- **Pinch-to-signature as the grammar for evidence.**
+  Pinch isn't just "zoom into the paint" (iter #7's deep
+  zoom); it's also "zoom into the signature" (iter #6's
+  viewer). The gesture means *read closer*. Add to
+  `PANG_Spine.md` § *Gestures* as the doctrine edit.
+
+Laura's hands test, specifically:
+
+> *"Open a verified work that has a CoA and an invoice. Watch
+> the arrival chapter, then look at it for ~30 seconds. Do the
+> documents feel like evidence, or like a file manager? Tap the
+> CoA — can you read the signature? Does the back gesture put
+> you back where you expected, or somewhere weird?"*
+
+If the evidence register lands, codify the three above. If
+the register is ambiguous, iterate once on the chapter
+cadence or the viewer chrome. If it lands as "file manager",
+drop iter #6 and ask what the spine actually wants from
+evidence.
+
+---
+
 ## Known debts
 
 Named so they're not invisible. Not iterations in themselves —
