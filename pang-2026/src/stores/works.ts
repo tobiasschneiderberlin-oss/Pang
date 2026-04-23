@@ -143,6 +143,25 @@ interface WorksStore {
    * the viewer — the document is evidence, not the surface.
    */
   readonly activeViewer: string | null;
+  /**
+   * The work currently open in the `<DeepZoom>` overlay, or `null`
+   * when no deep-zoom surface is active. Parallels `activeViewer`:
+   * a composite `${workId}:${fileRef}` — `fileRef` here is the
+   * tile-source identifier (a DZI manifest path for pyramids, or
+   * the flat image URL for simple-image fallback). When non-null,
+   * the Room canvas's RAF loop pauses (see `TheRoomCanvas`'s gate
+   * on this selector) — OSD owns its own canvas, and the scene
+   * behind the overlay has nothing to paint to the collector.
+   *
+   * Persistence: in-memory. A refresh returns to the Room, not to
+   * the deep-zoom surface — the painting is the work, not the
+   * microscope pose we last held on it.
+   *
+   * Codified iter #7: overlay canvases gate the Room RAF tick via a
+   * named `active*` selector on `useWorks`. See `PANG_Primitives_2026.md`
+   * § Room / overlay.
+   */
+  readonly activeDeepZoom: string | null;
   /** Idempotent on `id` — adding an existing id replaces. */
   addEntry(entry: CollectionEntry): void;
   /** No-op if the id is not present. Clears focus if the removed id was focused. */
@@ -151,6 +170,8 @@ interface WorksStore {
   setFocusedId(id: string | null): void;
   /** Set or clear the active document-viewer overlay. */
   setActiveViewer(composite: string | null): void;
+  /** Set or clear the active deep-zoom overlay. */
+  setActiveDeepZoom(composite: string | null): void;
   /**
    * Flip an entry's `status`. The verification outcome chapter writes
    * `"verified"` here when the gallery confirms; no-op if the id is
@@ -177,6 +198,7 @@ export const useWorks = create<WorksStore>()(
     entries: [],
     focusedId: null,
     activeViewer: null,
+    activeDeepZoom: null,
     addEntry: (entry) =>
       set((state) => {
         const filtered = state.entries.filter((e) => e.id !== entry.id);
@@ -186,24 +208,32 @@ export const useWorks = create<WorksStore>()(
       set((state) => ({
         entries: state.entries.filter((e) => e.id !== id),
         focusedId: state.focusedId === id ? null : state.focusedId,
-        // A removed work's viewer (if any) closes with it — the
-        // composite key prefixes `workId:`, so the match is exact.
+        // A removed work's viewer / deep-zoom (if any) closes with
+        // it — the composite key prefixes `workId:`, so the match
+        // is exact.
         activeViewer:
           state.activeViewer && state.activeViewer.startsWith(`${id}:`)
             ? null
             : state.activeViewer,
+        activeDeepZoom:
+          state.activeDeepZoom && state.activeDeepZoom.startsWith(`${id}:`)
+            ? null
+            : state.activeDeepZoom,
       })),
     setFocusedId: (id) =>
       set((state) => ({
         focusedId: id,
-        // A focus change dismisses any open viewer; the viewer is
-        // always tied to the currently-focused work and survives a
-        // same-work re-focus only (no-op). This mirrors the iter #4
-        // contract: focus is the spine of the session.
+        // A focus change dismisses any open viewer / deep-zoom; the
+        // overlays are always tied to the currently-focused work and
+        // survive a same-work re-focus only (no-op). This mirrors
+        // the iter #4 contract: focus is the spine of the session.
         activeViewer:
           id !== state.focusedId ? null : state.activeViewer,
+        activeDeepZoom:
+          id !== state.focusedId ? null : state.activeDeepZoom,
       })),
     setActiveViewer: (composite) => set({ activeViewer: composite }),
+    setActiveDeepZoom: (composite) => set({ activeDeepZoom: composite }),
     setStatus: (id, status) =>
       set((state) => ({
         entries: state.entries.map((e) =>
@@ -221,7 +251,12 @@ export const useWorks = create<WorksStore>()(
         }),
       })),
     clear: () =>
-      set({ entries: [], focusedId: null, activeViewer: null }),
+      set({
+        entries: [],
+        focusedId: null,
+        activeViewer: null,
+        activeDeepZoom: null,
+      }),
   })),
 );
 

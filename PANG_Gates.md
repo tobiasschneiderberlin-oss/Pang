@@ -329,9 +329,19 @@ shell
     property.** Shares the assertion from Primitive § 33 — any
     `--knob-*` used in a CSS `transition:` has a matching
     `@property` registration.
+  - **P24d: no CSS scale transforms outside the DeepZoom
+    adapter.** `scripts/check-transforms.ts` scans `src/` minus
+    `src/components/deep-zoom/` for `transform:\s*scale(`,
+    `scaleX(`, `scaleY(` in CSS-in-JS / `style=` literals and
+    Tailwind `scale-<n>` utilities. The gate exempts the single
+    sanctioned call site per Primitive § 21 (OpenSeadragon) and
+    fails any other occurrence. Folded into P24 rather than
+    added as P26 — Gate count stays 48. Codified 2026-04-23 from
+    iteration #7.
 - **Failure:** any magic literal outside the allow-list; unknown
   knob custom property; tenth knob added without doc edit;
-  preferences touching localStorage.
+  preferences touching localStorage; any `transform: scale(` /
+  Tailwind `scale-<n>` outside `src/components/deep-zoom/`.
 
 ### P25 — Review is zero-tap (no form between capture and arrival)
 

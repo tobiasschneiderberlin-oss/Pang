@@ -362,9 +362,16 @@ routes to `/`
 - **Forbidden default:** `transform: scale(3)` on a 1200px image.
 - **Required primitive:** OpenSeadragon with simple-image tile source;
   source ≥ 4000px long edge.
-- **Adapter path:** `<DeepZoom>` component wraps the viewer; it is the
-  only call site.
-- **Enforcement:** code-review level.
+- **Adapter path:** `<DeepZoom>` component at
+  `src/components/deep-zoom/DeepZoom.tsx` wraps the viewer; it is the
+  only call site. DOM chrome owns close semantics via React synthetic
+  capture (`onKeyDownCapture`) because OSD's `canvasKeyHandler` calls
+  `$.cancelEvent` on Escape, starving window bubble-phase listeners.
+- **Enforcement:** `scripts/check-transforms.ts` via
+  `npm run check:gates` (P24d). Scans `src/` minus
+  `src/components/deep-zoom/` for `transform:\s*scale(`, `scaleX(`,
+  `scaleY(` in CSS-in-JS / `style=` literals and Tailwind `scale-<n>`
+  utilities. Codified iter #7.
 
 ---
 
@@ -876,6 +883,79 @@ chunks
   Deep Zoom overlays, future narration chapters). Landed
   2026-04-23 from iter #6's mobile-Playwright card-unmount
   race.
+
+---
+
+## Canvas surfaces continued (yet again)
+
+### 44. Overlay canvases gate the Room RAF tick via a named `active*` selector on `useWorks`
+
+- **Forbidden default:** a second canvas surface (document viewer,
+  deep-zoom, future artist canvas, provenance graph) mounted on
+  top of the Room with the Room's RAF tick still running beneath
+  it. Two render loops share the main thread; the hidden Room
+  burns frames the user cannot see; INP degrades on every pinch
+  inside the overlay.
+- **Required primitive:** every second-canvas overlay declares a
+  named `active<Surface>: id | null` selector + matching
+  `setActive<Surface>` action on `useWorks`. The Room's RAF tick
+  reads the union (`activeViewer || activeDeepZoom || …`) and
+  pauses whenever any overlay is mounted; resumes when all return
+  to `null`. The overlay itself owns its own render loop.
+- **Adapter path:** `src/stores/works.ts` exports one
+  `active<Surface>` field per overlay kind; `src/room/RoomCanvas.tsx`
+  subscribes to the union via a shallow selector and gates its
+  `requestAnimationFrame` call. The overlay component calls
+  `setActive<Surface>(id)` on mount and `setActive<Surface>(null)`
+  on unmount — a single effect, idempotent.
+- **Enforcement:** grep `src/stores/works.ts` for every overlay
+  component in `src/components/**` that imports from
+  `@/stores/works`; every such overlay must read or write an
+  `active<Surface>` field. Code-review level today; recurrence-gate
+  candidate once the third overlay ships. Landed 2026-04-23 from
+  iter #6 (`activeViewer`) + iter #7 (`activeDeepZoom`), where the
+  pattern appeared twice and earned the name.
+
+---
+
+## State
+
+### 45. Ref guards gating cleanup-time side effects reset on every effect setup
+
+- **Forbidden default:** a module-scoped or set-once
+  `useRef`-backed guard used to make a cleanup-time side effect
+  idempotent across multiple unmount paths (Escape handler +
+  focus-change unmount, for example). React 19 StrictMode's
+  dev-time simulated cleanup/remount fires the cleanup once,
+  sets the guard to `true`, then *persists the ref across the
+  simulated remount* — so the real user interaction sees an
+  already-tripped guard and the intended side effect never fires.
+- **Required primitive:** the guard is reset inside the effect
+  body, *before* the cleanup closure captures the ref, on every
+  setup. Pattern:
+  ```ts
+  useEffect(() => {
+    closeEmittedRef.current = false; // reset on setup
+    return () => {
+      if (!closeEmittedRef.current) {
+        closeEmittedRef.current = true;
+        emitClose("focus_change");
+      }
+    };
+  }, [deps]);
+  ```
+  The reset undoes StrictMode's simulated corruption on the
+  second setup; the cleanup closure reads the current ref, not
+  a captured value.
+- **Adapter path:** any `useRef<boolean>()` acting as a
+  once-only cleanup gate lives inside the effect that owns the
+  cleanup. A separate idempotency handler (Escape) reads the
+  same ref.
+- **Enforcement:** code-review level. Canonical counter-example:
+  iter #7's `DeepZoom.tsx` emitted `deep_zoom.close` with
+  `close_via: "focus_change"` *before* the paired
+  `deep_zoom.open`, surfaced in a Playwright trace. Cost ~90 min
+  to locate. Landed 2026-04-23 from iter #7.
 
 ---
 

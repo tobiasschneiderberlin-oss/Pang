@@ -66,7 +66,18 @@ interface Violation {
 function extractStringLiterals(
   src: string,
 ): Array<{ value: string; line: number }> {
-  const lines = src.split("\n");
+  // Strip block comments first, preserving line count so reported
+  // line numbers stay accurate. A one-line JSDoc like
+  // `/** see "simple-image" */` embeds a quoted literal inside a
+  // comment; without this pass the literal would falsely register
+  // as a UI string. Line comments are handled below by the
+  // trimmed-prefix check.
+  const stripped = src.replace(/\/\*[\s\S]*?\*\//g, (match) => {
+    // Preserve newlines so line numbers don't shift.
+    const newlines = match.match(/\n/g)?.length ?? 0;
+    return "\n".repeat(newlines);
+  });
+  const lines = stripped.split("\n");
   const out: Array<{ value: string; line: number }> = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
@@ -151,7 +162,15 @@ async function main(): Promise<void> {
           snippet: value.slice(0, 60),
         });
       }
-      if (!isTestFile) {
+      // Code-identifier shape: lowercase kebab-case tokens like
+      // `simple-image` (OSD tile-source kind), `double-tap`,
+      // `cold-open`. These are discriminated-union literals, not
+      // prose — the voice rule targets user-facing copy. A string
+      // with no spaces, at least one hyphen, and only [a-z0-9-]
+      // characters is a code identifier and exempt from the
+      // marketing scan. Prose (has spaces) and Title Case stay in.
+      const isCodeIdentifier = /^[a-z0-9]+(?:-[a-z0-9]+)+$/.test(value);
+      if (!isTestFile && !isCodeIdentifier) {
         for (const term of MARKETING) {
           if (lower.includes(term)) {
             violations.push({

@@ -134,7 +134,7 @@ Models trained on prior code skew toward prior code. Shelf-packs,
 a REST route per AI call — every one of them defensible individually,
 and together a 2018 app wearing 2026 copy.
 
-Four moves are the enablers. They appear in every kickoff brief.
+Five moves are the enablers. They appear in every kickoff brief.
 
 1. **Constrain the stack, not the concept.** "WebGPU with WebGL 2
    fallback" forecloses the default; "spatial" leaves it open and a
@@ -151,6 +151,15 @@ Four moves are the enablers. They appear in every kickoff brief.
    the default. Proof-of-principle is legitimate but explicitly named
    in the kickoff brief with a defensible reason. Unnamed ambition
    loses to the timeline every time.
+5. **Land the primitive ahead of its data when the adapter's
+   interface is decided and a seeded fixture proves the shape.**
+   Empty routes beat ad-hoc patterns that crystallise when data
+   arrives. Iter #6 shipped the enrichment panel ahead of
+   contributor submissions; iter #7 shipped `<DeepZoom>` ahead of
+   per-work tile pyramids. Both had the adapter's shape settled
+   and a seeded smoke route proving it; both closed the door on
+   primitive-shape debate happening under delivery pressure.
+   Codified 2026-04-23 from iteration #7.
 
 See `PANG_Primitives_2026.md` for the catalogued references. See
 `PANG_Gates.md` for the mechanical enforcement of each move.

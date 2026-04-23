@@ -216,7 +216,7 @@ gates:
     family: canvas_data_observability
     folder: any
     auto: true
-    fails_when: "Any length, colour, or font-family literal not resolving to a token in tokens.css."
+    fails_when: "Any length, colour, or font-family literal not resolving to a token in tokens.css. P24d (codified iteration #7, 2026-04-23): transform: scale( / scaleX( / scaleY( or Tailwind scale-<n> utility outside src/components/deep-zoom/ — enforced by scripts/check-transforms.ts. See PANG_Primitives_2026.md § 21, PANG_Gates.md P24."
 
   - id: P25
     name: Zero-tap review
