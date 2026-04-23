@@ -74,7 +74,7 @@ jobs:
       # with the same lockfile, so unchanged chunks stay cached.
       # Lockfile change → full miss (intentional — upstream changed).
       - name: Cache Next.js build
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: pang-2026/.next/cache
           key: ${{ runner.os }}-nextjs-${{ hashFiles('pang-2026/package-lock.json') }}-${{ hashFiles('pang-2026/src/**/*.{js,jsx,ts,tsx,css}', 'pang-2026/app/**/*.{js,jsx,ts,tsx,css}') }}
@@ -120,7 +120,7 @@ jobs:
       # means both jobs benefit from the other's warm cache on
       # subsequent runs. Big win on unchanged-code PRs.
       - name: Cache Next.js build
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: pang-2026/.next/cache
           key: ${{ runner.os }}-nextjs-${{ hashFiles('pang-2026/package-lock.json') }}-${{ hashFiles('pang-2026/src/**/*.{js,jsx,ts,tsx,css}', 'pang-2026/app/**/*.{js,jsx,ts,tsx,css}') }}
@@ -142,7 +142,7 @@ jobs:
       # Cache miss → full `install --with-deps`.
       - name: Cache Playwright browsers
         id: playwright-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ hashFiles('pang-2026/package-lock.json') }}
