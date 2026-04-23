@@ -20,6 +20,7 @@ const DEFAULT_MODELS = {
   intakePrimary: "claude-sonnet-4-6", // Vision + structured output
   intakeQuarantine: "claude-haiku-4-6", // document extraction only
   enrichment: "claude-sonnet-4-6",
+  enrichmentQuarantine: "claude-haiku-4-6", // per-record note sanitiser
   narrative: "claude-sonnet-4-6",
   correspondence: "claude-sonnet-4-6",
 } as const;
@@ -37,6 +38,10 @@ export const AGENT_MODEL_IDS = {
     DEFAULT_MODELS.intakeQuarantine,
   ),
   enrichment: pick("ANTHROPIC_MODEL_ENRICHMENT", DEFAULT_MODELS.enrichment),
+  enrichmentQuarantine: pick(
+    "ANTHROPIC_MODEL_ENRICHMENT_Q",
+    DEFAULT_MODELS.enrichmentQuarantine,
+  ),
   narrative: pick("ANTHROPIC_MODEL_NARRATIVE", DEFAULT_MODELS.narrative),
   correspondence: pick(
     "ANTHROPIC_MODEL_CORRESPONDENCE",

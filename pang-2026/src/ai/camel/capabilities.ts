@@ -31,8 +31,15 @@ export const CAPABILITIES = {
   // content and produces 'Q'-branded fields only.
   "agent.intake.qLlm": ["Q"],
 
-  // --- Enrichment Agent (iteration #4) --------------------------
+  // --- Enrichment Agent (iteration #5) --------------------------
+  // P-LLM authors the enriched `bioMuji` paragraph only. Accepts
+  // 'P'-branded sanitised fields (from the Q-LLM pass) and 'gallery'
+  // identity, never raw 'Q'.
   "agent.enrichment.pLlm": ["gallery", "P"],
+  // Q-LLM quarantine for per-record `untrustedNote` sanitisation.
+  // Mirrors `agent.intake.qLlm`: reads 'Q'-branded content only and
+  // returns 'Q'-branded fields, which `sanitize()` downgrades to 'P'.
+  "agent.enrichment.qLlm": ["Q"],
 
   // --- Narrative Agent (iteration #10) --------------------------
   "agent.narrative.pLlm": ["P", "gallery"],
