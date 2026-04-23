@@ -3233,6 +3233,260 @@ clean in Playwright, heap delta under budget.
 
 ---
 
+## Iteration #7 — findings (2026-04-23)
+
+**Status:** landed at ceiling on `iter-7-deep-zoom`, PR #17
+open at https://github.com/tobiasschneiderberlin-oss/Pang/pull/17.
+`npm run verify` clean (26/26 gates including the new P24d
+`check-transforms` sub-gate, 509/509 unit tests green);
+Playwright e2e pass on chromium-desktop + chromium-mobile
+(1m49s CI duration). Blocking checks green: PANG gates,
+Playwright e2e Tier 2, Vercel build, Vercel Preview Comments.
+Laura's hands: out of scope this iteration per the cadence
+table — the codify targets are doctrine-level, not
+experiential.
+
+### What landed
+- `src/components/deep-zoom/DeepZoom.tsx` — thin OSD 4.1
+  adapter. `new OpenSeadragon({ element, tileSources })` in
+  a `useEffect`, full cleanup on unmount. `tileSources`
+  accepts `{ type: "image", url }` (flat) or
+  `{ Image: { Url } }` / DZI manifest (tiled). Dialog is
+  `role="dialog" aria-label="deep zoom"` +
+  `data-pang-surface="deep-zoom"` + `data-pang-ready` flag
+  flipping on OSD's `open` event.
+- `src/deep-zoom/otel.ts` — span catalogue:
+  `deep_zoom.{open,close,zoom_depth,tile.load}` via
+  `console.debug(JSON.stringify(...))` with `pang.deep_zoom.*`
+  attrs. `close_via` discriminates `"keyboard" | "button" |
+  "focus_change"`.
+- `src/stores/works.ts` — new `activeDeepZoom: string | null`
+  selector + `setActiveDeepZoom` action. Same shape as iter
+  #6's `activeViewer`; the Room's RAF tick reads both as
+  siblings.
+- `app/deep-zoom-smoke/page.tsx` — smoke route gated by
+  `NEXT_PUBLIC_PANG_E2E === "1"` at build time (404 in prod
+  bundles). Mounts `<DeepZoom>` against one seeded
+  public-domain PNG at `public/vendor/deepzoom/sample.png`
+  via the `simple-image` tile source.
+- `scripts/check-transforms.ts` + fixtures under
+  `scripts/__fixtures__/check-transforms/{violating,clean}/`.
+  Scans `src/` minus `src/components/deep-zoom/` for
+  `transform:\s*scale(`, `scaleX(`, `scaleY(` in CSS-in-JS /
+  `style=` literals and Tailwind `scale-<n>` utilities.
+  Folded into `npm run check:gates` as P24d — P24 gains a
+  sub-line in the gates output; the count stays 48.
+- `scripts/check-transforms.test.ts` — 7 unit tests across
+  4 describes (violating fixtures, clean fixtures, exempt
+  adapter escape hatch, `maxViolations` cap).
+- `e2e/deep-zoom.spec.ts` — Playwright walk. Mount + Escape,
+  10-cycle heap discipline (`performance.memory.usedJSHeapSize`
+  delta < 5 MB on Chromium), `deep_zoom.{open,close}` pair on
+  the console-debug sink.
+- `package.json` + `tsconfig.json` — test glob extended to
+  `scripts/` (excluding `__fixtures__`); tsconfig excludes
+  the fixture directory so fixture JSX doesn't need the full
+  project JSX lib resolution.
+
+### What execution exposed
+
+Four discoveries, each with its verdict:
+
+1. **OSD's `canvasKeyHandler` calls `$.cancelEvent` on
+   Escape, which sets `cancelBubble = true` and starves
+   window-level bubble-phase listeners.** A document-level
+   `keydown` listener with `{ capture: false }` never fired
+   when OSD had canvas focus. Fix: move Escape handling to a
+   React `onKeyDownCapture` on the dialog root — React's
+   synthetic capture runs before OSD's bubble-phase native
+   handler, so `e.preventDefault() + e.stopPropagation()`
+   wins. This is the general shape for any DOM chrome that
+   wraps a third-party canvas engine with its own event
+   grammar.
+
+2. **React 19 StrictMode's cleanup/remount corrupts `useRef`
+   guards that were set during the simulated cleanup.** The
+   original `closeEmittedRef` guard (to make the close event
+   idempotent across the Escape handler + focus-change
+   unmount path) tripped because StrictMode fires the effect
+   cleanup once during dev simulation, which set the ref to
+   `true`; `useRef` persists across the simulated remount,
+   so when the user's actual Escape arrived, the handler
+   saw `true` and returned early. The Playwright trace
+   showed `deep_zoom.close` with `close_via: "focus_change"`
+   firing *before* `deep_zoom.open`. Fix: reset the guard at
+   the start of every effect setup — `closeEmittedRef.current
+   = false;` as the first line inside the effect, before the
+   cleanup closure captures it. The pattern: **a ref guard
+   that gates a cleanup-time side effect must be reset on
+   setup, not at module scope**, or StrictMode will corrupt
+   it.
+
+3. **`check-strings.ts` flagged `"simple"` inside the
+   `simple-image` OSD tile-source discriminator (5 false
+   positives).** Two issues: (a) JSDoc one-liners like
+   `/** uses "simple-image" */` weren't skipped by the
+   comment-detection heuristic (`startsWith("*")` doesn't
+   match `/**`); (b) the marketing-term scan didn't exempt
+   code identifiers. Fixes: a block-comment stripping pass
+   that preserves line numbers via newline substitution, and
+   a code-identifier regex exemption
+   (`/^[a-z0-9]+(?:-[a-z0-9]+)+$/` — lowercase kebab-case,
+   no spaces) for the marketing scan. The audit is about
+   user-facing prose, not discriminated-union literals; this
+   closes the gap without narrowing the rule.
+
+4. **`@types/openseadragon@5.0.2`'s `GestureSettings` omits
+   `zoomToRefPoint` and `pinchRotate` even though OSD 4.1
+   supports both.** Passing them typechecks under the plain
+   options shape but fails under the nested
+   `gestureSettingsTouch` shape. OSD's runtime defaults
+   already match what we wanted (`zoomToRefPoint: true`,
+   `pinchRotate: false`), so dropping both keys from our
+   config was lossless. The general shape: when a typed
+   third-party adapter's shape is narrower than the runtime,
+   prefer dropping to the defaults over `as unknown as`
+   casts.
+
+### Codify
+- **Primitive §21's enforcement graduates from
+  "code-review level" to a CI gate.** P24 gains a sub-gate,
+  `P24d: no CSS scale transforms outside the DeepZoom
+  adapter`, wired into `npm run check:gates` via
+  `check-transforms.ts`. Fail condition: any
+  `transform:\s*scale(`, `scaleX(`, `scaleY(` in CSS-in-JS
+  or `style=` literals, or any Tailwind `scale-<n>` class,
+  inside `src/` and outside
+  `src/components/deep-zoom/`. Update
+  `PANG_Primitives_2026.md` § 21 (the "enforced in
+  code-review" clause becomes "enforced by
+  `check-transforms.ts`") and `PANG_Gates.md` P24 (expand
+  the fail list). Gate count stays 48.
+- **Overlay canvases gate the Room RAF tick via a named
+  `active*` selector on `useWorks`.** `activeViewer` (iter
+  #6) and `activeDeepZoom` (iter #7) both follow this
+  shape: when either is non-null, the Room's RAF tick
+  pauses; when both are null, the Room tick resumes. Add to
+  `PANG_Primitives_2026.md` § *Room / overlay* as "every
+  second-canvas overlay declares a named `active<Surface>:
+  id | null` selector on `useWorks`; the Room's RAF tick
+  reads the union and pauses while any overlay is mounted."
+  The pattern generalises to future overlays
+  (`activeArtistCanvas`, `activeProvenanceGraph`, etc.)
+  without re-deriving the contract each time.
+- **Primitives land ahead of data when the adapter's
+  interface is decided.** Iter #6 shipped the enrichment
+  panel before contributor submissions; iter #7 ships
+  DeepZoom before per-work tile pyramids. Both had the
+  adapter's shape settled and both had a seeded smoke
+  surface proving the shape works. Add to `CLAUDE.md`
+  § *Reach forward, not back* as a fifth move: *"Land the
+  primitive ahead of its data when the adapter's interface
+  is decided and a seeded fixture proves the shape. Empty
+  routes beat ad-hoc patterns that crystallise when data
+  arrives."* The fifth move sits alongside the four existing
+  enablers — not a replacement.
+- **Ref guards gating cleanup-time side effects must be
+  reset on every effect setup.** StrictMode's simulated
+  remount corrupts module-scoped or set-once guards;
+  resetting inside the effect body before the cleanup
+  closure captures the ref is the only correct pattern. Add
+  to `PANG_Primitives_2026.md` § *State* as a one-paragraph
+  rule with the iter #7 Escape regression as the canonical
+  counter-example. The regression is not theoretical — it
+  surfaced in a real Playwright trace and cost ~90 min to
+  locate.
+
+### Iterate once (one second pass, no debate)
+- **Adopt `P24d` naming in `.pang/gates.yaml` output.**
+  `check:gates` currently prints the new scanner under
+  P24's general block without the `d` suffix. Cosmetic —
+  the gate is enforced correctly. Next time a gate block
+  is touched, surface the sub-gate letters consistently
+  across P24a–P24d.
+
+### Drop
+- The `@types/openseadragon` gap on `zoomToRefPoint` /
+  `pinchRotate`. The runtime defaults already match; no
+  doctrine edit earned. Noted here so the next contributor
+  doesn't reintroduce the casts.
+- The Playwright `closeBtn.click()` interception by the
+  dialog's `fixed inset-0 z-50`. Escape is the primary
+  close affordance per Primitive §21 and the DocumentViewer
+  contract it generalises; the click-on-external-button
+  path is a smoke-route ergonomic, not a product affordance.
+  No doctrine edit; the spec uses Escape.
+
+### Failure mode — observability proofs (brief's fifth
+declaration): all four classes observable.
+- *CSS-scale backsliding*: `check-transforms.ts` runs as
+  part of `npm run check:gates`; the 7 unit tests assert
+  both directions (positive: flags `transform: scale(2)`
+  and `scale-125`; negative: permits matrix transforms,
+  `scaleFactor` variables, commented scale mentions, and
+  OSD-style `navigatorSizeRatio`). Exempts
+  `src/components/deep-zoom/` exactly. A deliberate
+  violation in `src/components/verification/` was not
+  shipped in this PR but the fixture proof is sufficient.
+- *Tile-load jank*: `deep_zoom.tile.load` OTel span emits
+  with `durationMs` + `source: "network"` attribute on the
+  smoke route. Warm-path SLO (p95 < 200 ms) named as debt
+  per the brief; blocked on the OPFS cache deferred to
+  phase-2.
+- *Memory leak on unmount*: Playwright walk cycles open →
+  close × 10 on the smoke route; `performance.memory.
+  usedJSHeapSize` delta measured and asserted < 5 MB on
+  both chromium-desktop and chromium-mobile. Would catch
+  "OSD viewer + tile cache + canvas contexts leaked across
+  cycles" regression class directly.
+- *Escape semantics*: Playwright asserts
+  `useWorks.getState().activeDeepZoom` returns to `null`
+  after Escape, and `focusedId` stays pinned to the
+  sentinel across the cycle. The `deep_zoom.{open,close}`
+  event pair lands on the console-debug sink.
+
+### What this tightens
+- `PANG_Primitives_2026.md` gains:
+  1. § 21 — enforcement clause updated from "code-review" to
+     "`check-transforms.ts` via `npm run check:gates` (P24d)".
+  2. § *Room / overlay* — overlay canvases gate the RAF
+     tick via a named `active*` selector on `useWorks`.
+  3. § *State* — ref guards gating cleanup-time side
+     effects reset on every effect setup (the StrictMode
+     rule).
+- `PANG_Gates.md` — P24 fail-list extended with P24d. Count
+  stays 48.
+- `.pang/gates.yaml` — P24d wired so `npm run check:gates`
+  reports it.
+- `CLAUDE.md` § *Reach forward, not back* — fifth move
+  added: "Land the primitive ahead of its data when the
+  adapter's interface is decided and a seeded fixture
+  proves the shape."
+- `package.json` — test glob extended to `scripts/`; the
+  scripts directory now hosts unit-tested gates alongside
+  the scanners they implement.
+- `tsconfig.json` — `scripts/__fixtures__` excluded from
+  type-check (fixtures are read as text by the scanner, not
+  compiled as JSX).
+
+### Metabolism check
+Every discovery lands: Primitive §21 uplift → codify +
+doctrine propagation; overlay-canvas RAF gate → codify;
+primitives-ahead-of-data → codify (new fifth move in
+`CLAUDE.md`); StrictMode ref-guard reset → codify (new
+state rule in `PANG_Primitives_2026.md`); OSD
+`cancelBubble` on Escape → codify (folded into the
+overlay-canvas primitive — chrome owns React synthetic
+capture, engine owns the canvas surface); `check-strings.ts`
+code-identifier exemption → landed directly in the scanner,
+no doctrine edit earned (the voice rule is about prose, not
+identifiers; the exemption narrows the false-positive set);
+@types gap → drop (runtime defaults match); `closeBtn`
+click interception → drop (Escape is the product
+affordance). No unnamed overhangs.
+
+---
+
 ## Known debts
 
 Named so they're not invisible. Not iterations in themselves —
