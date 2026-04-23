@@ -163,6 +163,14 @@ export const DOCUMENTS_VIEWER = Object.freeze({
 export const DOCUMENTS_LABEL = "documents";
 
 /**
+ * Screen-reader label for the deep-zoom overlay (iteration #7).
+ * The surface is a magnifier for the work itself — paint, canvas
+ * weave, restoration marks — not a separate artefact. One word,
+ * lowercase, because the Museumsschild test says so.
+ */
+export const DEEP_ZOOM_LABEL = "deep zoom";
+
+/**
  * The screen-reader label for the arrival surface. Landmarks that
  * name the place, not the action. `aria-label` on the `<main>`.
  */

@@ -211,16 +211,35 @@ export function TheRoomCanvas({
   // gate `renderer.render()` on the latched ref each frame. The
   // animator + gesture state continue to tick so the camera is in
   // the right place the moment the viewer closes.
+  //
+  // Iteration #7 generalises the pattern: the DeepZoom overlay
+  // (Primitive §21) is a second full-screen canvas. Same gate, same
+  // contract — the scene behind either overlay has nothing to
+  // paint. Codified in `PANG_Primitives_2026.md` as "overlay
+  // canvases gate the Room RAF tick via a named selector on
+  // `useWorks`."
   const viewerActiveRef = useRef<string | null>(null);
+  const deepZoomActiveRef = useRef<string | null>(null);
 
   useEffect(() => {
     viewerActiveRef.current = useWorks.getState().activeViewer;
-    return useWorks.subscribe(
+    deepZoomActiveRef.current = useWorks.getState().activeDeepZoom;
+    const offViewer = useWorks.subscribe(
       (s) => s.activeViewer,
       (next) => {
         viewerActiveRef.current = next;
       },
     );
+    const offDeepZoom = useWorks.subscribe(
+      (s) => s.activeDeepZoom,
+      (next) => {
+        deepZoomActiveRef.current = next;
+      },
+    );
+    return () => {
+      offViewer();
+      offDeepZoom();
+    };
   }, []);
 
   useEffect(() => {
@@ -397,11 +416,17 @@ export function TheRoomCanvas({
           onFocusChange?.(lastFocus);
         }
 
-        // Document-viewer gate (iteration #6): skip the GPU submit
-        // when the viewer overlay is on top. Animator + gesture state
-        // still tick so the camera is settled in the right pose when
-        // the viewer closes and the Room reappears.
-        if (viewerActiveRef.current === null) {
+        // Overlay-canvas gate (iter #6 + iter #7): skip the GPU
+        // submit when an overlay canvas is on top. Animator + gesture
+        // state still tick so the camera is settled in the right
+        // pose when the overlay closes and the Room reappears. Two
+        // selectors share the gate: `activeViewer` (DocumentViewer)
+        // and `activeDeepZoom` (DeepZoom). Adding a third overlay is
+        // one more `*ActiveRef` + a `&&` here.
+        if (
+          viewerActiveRef.current === null &&
+          deepZoomActiveRef.current === null
+        ) {
           renderer.render();
         }
 

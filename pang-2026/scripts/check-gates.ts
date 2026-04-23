@@ -19,6 +19,7 @@
 
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { scanForTransformScale } from "./check-transforms";
 
 const ROOT = process.cwd();
 const STRICT = process.env["PANG_STRICT"] === "1";
@@ -450,6 +451,22 @@ async function p24(): Promise<GateResult> {
           `${f} uses non-scale spacing: ${m[0]} (scale: ${SPACING_PX.join(",")})`,
         );
     }
+  }
+
+  // 24d: no CSS `transform: scale(...)` / Tailwind `scale-*` outside
+  // the sanctioned DeepZoom adapter (Primitive §21, iter #7 uplift).
+  // The anti-pattern — pinching a flat JPEG with `transform: scale(2)`
+  // — regresses crisp-at-1× imagery to mush at 2×. Deep zoom lives
+  // behind OpenSeadragon in `src/components/deep-zoom/` exclusively.
+  const scaleScan = await scanForTransformScale();
+  if (!scaleScan.ok) {
+    const first = scaleScan.violations[0]!;
+    return fail(
+      id,
+      title,
+      `${first.path}:${first.line} uses transform scale (${first.match}) — ` +
+        `deep zoom lives behind OpenSeadragon in src/components/deep-zoom/`,
+    );
   }
 
   return pass(id, title);
