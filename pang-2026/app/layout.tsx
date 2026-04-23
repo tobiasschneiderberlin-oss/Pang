@@ -18,6 +18,7 @@ import {
   FONT_STYLESHEET_HREF,
 } from "@design/fonts";
 import { AppBoot } from "@/components/AppBoot";
+import { Tweaks } from "@/components/dev/Tweaks";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -105,6 +106,7 @@ export default async function RootLayout({
       <body>
         {children}
         <AppBoot />
+        <Tweaks />
       </body>
     </html>
   );

@@ -22,10 +22,10 @@
 
 | # | Name | Scope | Status | Landed principle / cut reason |
 |---|------|-------|--------|-------------------------------|
-| 0 | PWA reset | Infra | **In progress** | — |
-| 1 | Intake Agent | Ceiling | Queued (next) | — |
-| 2 | The Room v2 | Ceiling | Queued | — |
-| 3 | Arrival as chapter v2 | Ceiling | Queued | — |
+| 0 | PWA reset | Infra | Landed | Spine — ability — repeatable gates |
+| 1 | Intake Agent | Ceiling | Landed | Camera → arrival in one tap; zero-tap review (P25) |
+| 2 | The Room v2 | Ceiling | **Landed (2026-04-23)** | Room as backdrop; OPFS rehydration; RAF perf budget; dev Tweaks |
+| 3 | Arrival as chapter v2 | Ceiling | Queued (next) | — |
 | 4 | Enrichment Agent v1 | Ceiling | Queued | — |
 | 5 | Documents as evidence v1 | Ceiling | Queued | — |
 | 6 | Deep Zoom collection-wide | Principle | Queued | — |
@@ -773,6 +773,134 @@ instead of saying "later."
 
 Both are amplifiers, not floor-level correctness. Laura can walk
 the current ceiling before they need to land.
+
+---
+
+## Iteration #2 — findings, step 4 tail (2026-04-23)
+
+The two amplifiers still open from step 4 landed as a pair. Small
+scope, client-side only, no new API surface. Both codify into the
+sprint log here and leave the keeper docs untouched — they are
+execution of promises the architecture already made, not new
+doctrine.
+
+### What landed — RAF perf budget
+
+- **`src/room/perf.ts`.** A pure frame-time budget. Meters each
+  frame's dt into a 60-sample ring buffer (~1s at 60fps); when the
+  sampled p95 exceeds target (default 22ms = a hair below 50fps
+  sustained) the budget signals a DPR step-down. One-way — once
+  degraded, stays degraded for the session. Oscillation between
+  sharp and soft reads as a bug; a permanent slightly-softer image
+  reads as a style.
+- **Why p95 and not mean.** A single 500ms frame during tab-switch
+  or GC would otherwise trip the degrade on mean. p95 surfaces
+  *sustained* pressure without reacting to a one-frame hitch. The
+  module also clamps pathological samples at 100ms so one tab-
+  switch can't poison the buffer for a full second.
+- **Wiring in `TheRoomCanvas.tsx`.** The RAF loop samples
+  `frameMs = now - lastT` every tick. On scale change, the budget's
+  listener reissues `renderer.resize(currentWidth, currentHeight,
+  baseDpr * scale)` — the scene doesn't rebuild, only the
+  drawing-buffer size shrinks. A `console.info` logs the degrade
+  so it never feels like a bug in the preview harness.
+- **Resize observer alignment.** The observer multiplies `baseDpr *
+  budget.scale` when canvas dimensions change, so a layout change
+  after a degrade doesn't reset the renderer back to full DPR.
+- **Tier coverage.** Applies to both `gpu` and `gl2` renderers.
+  The gate was described as "tier B" in the step brief because
+  that's the path where the degrade is most visible, but the
+  mechanism is renderer-agnostic — the mount path doesn't branch.
+
+### What landed — Tweaks menu
+
+- **`src/components/dev/Tweaks.tsx`.** A fixed-position overlay,
+  bottom-right, safe-area inset aware. Dev-only — visibility gated
+  on `process.env.NODE_ENV === "development"` so Next.js dead-code-
+  eliminates the JSX branch in production bundles.
+- **Collapsed state.** A 32×32 "T" trigger (well above the P23
+  24×24 floor). Chrome radius 2px, hairline border, paper-5
+  surface, muted ink. Opens the full panel on tap.
+- **Expanded state.** Header reads "TWEAKS" in MONO-CAP. One
+  slider: `timeWarmth` (0–1 range, 0.01 step), with `cool — 0.50 —
+  warm` sentence-case row beneath. The slider uses the warm-deep
+  pigment as its accent (OKLCH through `accent-warm-deep`); the
+  thumb sits on the warm end of the rail at value 1.
+- **Live subscription.** `TheRoomCanvas.tsx` subscribes to
+  `usePreferences(s => s.timeWarmth)` on mount (through
+  `subscribeWithSelector`). On change, the scene calls
+  `setLightingByWarmth(t)` which lerps day → dusk across the
+  ambient + key + fill lights. The dev walk confirmed the rig
+  responds at ~60fps while dragging the slider; no hitches.
+- **Shipping Tweaks vs dev Tweaks.** This is not the DS Ch. 11
+  shipping sheet. That one has preset pickers ("subtle /
+  balanced / pronounced"), numeric inputs, and the "what these
+  do" explainer voice. Those land when the shipping chrome
+  iteration opens. The dev overlay lets us iterate the warmth
+  curve against Laura's hands before the shipping UI freezes.
+
+### What we verified
+
+- Static: 48 tests pass (+10 for `createFrameBudget`: steady-state,
+  sustained spike, cooldown, floor, no escalation, clamp behaviour,
+  multi-listener fan-out, reset). Typecheck clean. Lint clean.
+  Gates 26/26 pass. The one voice-check hit in
+  `src/ai/prompts/failure.test.ts:30` is a pre-existing false
+  positive (the file declares the banned-vocab list for its own
+  enforcement test); out-of-scope for this slice.
+- Live (preview harness):
+  - `T` trigger renders bottom-right on first paint.
+  - Click expands to panel with slider, readout, and labels.
+  - Driving the slider through the native value setter + input
+    event updates the store, the `:root` CSS var, and the scene
+    lighting in one frame. Drag from 0.50 to 0.95 visibly warms
+    the walls from paper-neutral toward dusk.
+  - Click `×` collapses back to the trigger; the warmed state
+    persists because it lives in the store, not the panel.
+  - Zero console errors across the full round-trip.
+
+### What this tightens
+
+- No new gates. The RAF budget operates inside P7 (INP / LoAF
+  already assert frame-time globally); the canvas-specific
+  mechanism is the implementation, not a new rule. The Tweaks
+  menu is dev-only chrome; it doesn't enter the gate surface.
+- No doctrine revisions. `works.ts`'s top-of-file comment already
+  said "a future step reads the knob and scales proportionally"
+  for the wall-gap case; `TheRoomCanvas.tsx`'s old `readTimeWarmth`
+  comment said knob subscriptions land "with the Tweaks menu" —
+  which they now have. Comment text in those two files is
+  refreshed to reflect the current state.
+- `src/room/perf.ts` is testable under Node's test runner because
+  it deliberately avoids DOM globals. The module is the prototype
+  for future perf budgets (scroll jank, hydration cost, upload
+  throughput) — pure value objects with ring-buffered samples and
+  subscription fan-out.
+
+### Codify / iterate / drop
+
+- **Codify.** The "one-way degrade" pattern and "p95 over ring
+  buffer with clamp" approach are reusable across any metered
+  surface. Keeping them in `perf.ts` (not inlined in the canvas)
+  makes that reuse mechanical.
+- **Codify.** Dev-only overlays under `src/components/dev/`,
+  gated on `NODE_ENV === "development"`. This is now the pattern
+  for any dev affordance; production bundles stay clean by virtue
+  of Next.js's build-time substitution, no runtime flag needed.
+- **Iterate once.** The Tweaks overlay currently wires one knob
+  (`timeWarmth`). The nine-knob DS surface is the shipping sheet's
+  problem, not this overlay's — but the next knob we tune
+  (probably `warmthMultiplier` or `wallGap` against a populated
+  wall) can land here as a second row with the same shape.
+- **Drop.** The earlier speculative "tier-B-only" framing. The
+  budget is renderer-agnostic; the step brief's "at tier B"
+  wording was about where the *visible effect* shows up, not
+  where the mechanism lives.
+
+Iteration #2 is closed. Next iteration opens with its own kickoff
+brief — spine's next move is verification request (the one-tap
+"ask my gallery" gesture that turns an unverified work's dormancy
+into a growth trigger).
 
 ---
 

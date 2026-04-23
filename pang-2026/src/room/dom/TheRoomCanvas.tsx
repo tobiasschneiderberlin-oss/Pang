@@ -36,6 +36,8 @@ import { attachGestureController } from "../gestures";
 import type { GestureState } from "../gestures";
 import { raycastWork } from "../tap";
 import type { RoomRenderer, Tier, Work } from "../types";
+import { createFrameBudget } from "../perf";
+import { usePreferences } from "@design/preferences";
 
 /**
  * Field-wise equality for a `Work`. Used by the diff effect to skip
@@ -129,18 +131,14 @@ function computeCameraTarget(
 }
 
 /**
- * One-shot read of the `--knob-time-warmth` CSS knob. The knob menu
- * (which mutates it) hasn't landed yet — when it does, it will
- * broadcast through the preference store and this component
- * subscribes. For now: read once on mount.
+ * One-shot read of the preferences store for the initial lighting
+ * warmth. The mount effect installs a live subscription via
+ * `usePreferences.subscribe` so subsequent changes from the Tweaks
+ * menu propagate without recreating the renderer.
  */
-function readTimeWarmth(): number {
-  const raw = getComputedStyle(document.documentElement).getPropertyValue(
-    "--knob-time-warmth",
-  );
-  const n = parseFloat(raw);
-  if (!Number.isFinite(n)) return 0.5;
-  return Math.max(0, Math.min(1, n));
+function readInitialTimeWarmth(): number {
+  const t = usePreferences.getState().timeWarmth;
+  return Math.max(0, Math.min(1, t));
 }
 
 export function TheRoomCanvas({
@@ -190,6 +188,7 @@ export function TheRoomCanvas({
     let resizeObserver: ResizeObserver | null = null;
     let sceneDispose: (() => void) | null = null;
     let gestureDispose: (() => void) | null = null;
+    let prefsUnsubscribe: (() => void) | null = null;
 
     async function mount(): Promise<void> {
       const resolved = await detectCapability();
@@ -205,16 +204,33 @@ export function TheRoomCanvas({
       if (!canvas) return;
 
       const rect = canvas.getBoundingClientRect();
-      const dpr = Math.min(window.devicePixelRatio ?? 1, 2);
+      // Base DPR is the device's native pixel ratio, clamped at 2 so
+      // a 3× Retina display doesn't push 9M fragments per frame on a
+      // tier-B device. The perf budget multiplies this by its own
+      // scale factor (≤ 1) to step down when frame time exceeds
+      // target; the budget never escalates above 1.
+      const baseDpr = Math.min(window.devicePixelRatio ?? 1, 2);
+      // Latest canvas content-rect. Both the resize observer and the
+      // budget's scale-change listener need this to issue
+      // `renderer.resize()` — without tracking it the observer would
+      // overwrite the budget's scale on the next layout change.
+      let currentWidth = rect.width;
+      let currentHeight = rect.height;
 
       const roomScene = buildRoomScene(works);
       sceneDispose = roomScene.dispose;
       sceneRef.current = roomScene;
       worksSnapshotRef.current = new Map(works.map((w) => [w.id, w]));
 
-      // Apply the time-of-day knob once on mount. Knob subscriptions
-      // land with the Tweaks menu.
-      roomScene.setLightingByWarmth(readTimeWarmth());
+      // Apply the time-of-day knob once on mount, then subscribe to
+      // the preferences store so the Tweaks menu can drive it live.
+      roomScene.setLightingByWarmth(readInitialTimeWarmth());
+      prefsUnsubscribe = usePreferences.subscribe(
+        (s) => s.timeWarmth,
+        (t) => {
+          roomScene.setLightingByWarmth(Math.max(0, Math.min(1, t)));
+        },
+      );
 
       // Pick the renderer. Lazy-import the gpu path so tier B devices
       // never pay its cost.
@@ -240,7 +256,25 @@ export function TheRoomCanvas({
         return;
       }
 
-      renderer.resize(rect.width, rect.height, dpr);
+      // Perf budget. Starts at scale 1; steps down when sustained p95
+      // frame-time exceeds target. On scale change we reissue the
+      // current dimensions with `baseDpr * scale` so the renderer
+      // draws at fewer fragments without touching the scene.
+      const budget = createFrameBudget();
+      budget.onScaleChange((scale) => {
+        if (!renderer) return;
+        renderer.resize(currentWidth, currentHeight, baseDpr * scale);
+        // Dev observability. The production OTel span (A10 family /
+        // P22) lands when telemetry wires up; this log is explicit
+        // about the user-visible trade-off so the degrade never feels
+        // like a bug when it surfaces in the preview harness.
+        console.info(
+          `[room] dpr degrade → ${(baseDpr * scale).toFixed(2)} ` +
+            `(p95 ${budget.currentP95Ms()?.toFixed(1) ?? "?"}ms)`,
+        );
+      });
+
+      renderer.resize(rect.width, rect.height, baseDpr);
 
       // Animator + gesture controller. Wire the raycaster into the
       // gesture's `hitTest` binding so a tap resolves to a work id.
@@ -278,8 +312,11 @@ export function TheRoomCanvas({
         const entry = entries[0];
         if (!entry) return;
         const { width, height } = entry.contentRect;
-        const currentDpr = Math.min(window.devicePixelRatio ?? 1, 2);
-        renderer.resize(width, height, currentDpr);
+        currentWidth = width;
+        currentHeight = height;
+        // Use the budget's current scale so a resize after a degrade
+        // doesn't reset the renderer back to full DPR.
+        renderer.resize(width, height, baseDpr * budget.scale);
       });
       resizeObserver.observe(canvas);
 
@@ -289,8 +326,15 @@ export function TheRoomCanvas({
       const loop = (): void => {
         if (cancelled || !renderer) return;
         const now = performance.now();
-        const dt = (now - lastT) / 1000;
+        const frameMs = now - lastT;
+        const dt = frameMs / 1000;
         lastT = now;
+
+        // Feed the perf budget. The first frame's dt is meaningless
+        // (lastT started at mount-init time, not at animation start)
+        // but a single outlier is clamped inside `sample()` and
+        // washed out by the ring buffer within the first window.
+        budget.sample(frameMs);
 
         // State → target → camera.
         animator.target = computeCameraTarget(gesture.state, roomScene);
@@ -320,6 +364,7 @@ export function TheRoomCanvas({
       if (rafId) cancelAnimationFrame(rafId);
       resizeObserver?.disconnect();
       gestureDispose?.();
+      prefsUnsubscribe?.();
       renderer?.dispose();
       sceneDispose?.();
       sceneRef.current = null;
