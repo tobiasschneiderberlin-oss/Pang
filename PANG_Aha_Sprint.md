@@ -3487,6 +3487,327 @@ affordance). No unnamed overhangs.
 
 ---
 
+## Iteration #8 — Deep Zoom collection-wide, data phase (opened 2026-04-23)
+
+**Status:** kickoff brief. Scope is **ceiling**. This iteration
+closes spine moment #6 (`PANG_Spine.md` § *Build order*): paint
+strokes on real works. Iter #7 landed the primitive behind its
+sanctioned adapter ahead of data; iter #8 ships the data across
+the collection and wires the Room to open `<DeepZoom>` on focused
+works. It also discharges iter #7's "primitive ahead of data"
+codify by proving the adapter against real pyramids.
+
+**Why now:** the primitive exists, the gate exists, the overlay
+contract (`activeDeepZoom` + RAF-gate) exists. The three missing
+pieces are (1) real tile pyramids generated from high-res source
+images, (2) `CollectionEntry.tileSource` as the shape that
+surfaces the pyramid to the adapter, and (3) a Room gesture that
+escalates focus → deep zoom without disturbing the wall. Without
+this iteration, iter #7 sits latent; with it, the "Rijksstudio
+register" lands in the Room. This is the iteration where Laura
+can stand in front of her Van Gogh and see the paint.
+
+**Scope:** **ceiling.** Reasons this is ceiling not principle:
+the pipeline is well-understood (DZI is 1:1 with the
+OpenSeadragon adapter we already ship), the OPFS cache shape is
+pre-declared in iter #7's stack, and the Room wire-up uses an
+existing `activeDeepZoom` selector. No experimental path has
+to be proven; the risk is execution quality, not direction.
+
+Landing shape:
+- Build-time DZI pyramid generator (`scripts/build-deepzoom-pyramids.ts`)
+  using `sharp` — reads `public/vendor/deepzoom/sources/<workId>.{jpg,png,avif}`,
+  emits DZI pyramid + manifest under
+  `public/vendor/deepzoom/<workId>/`. Deterministic: same input
+  → identical pyramid bytes. Hashed output so CI can cache.
+- Seeded real works: 2–3 public-domain pieces with ≥ 4000 px
+  long edge (Rijksmuseum open-access / Met Open Access). Source
+  images checked into `public/vendor/deepzoom/sources/`;
+  generated pyramids checked in under the per-work directory
+  so `npm ci && npm run build` is self-contained (no network
+  fetch on CI).
+- `CollectionEntry.tileSource?: TileSource` where `TileSource`
+  is a discriminated union: `{ type: "dzi", manifestUrl, maxLevel,
+  tileSize }` or `{ type: "image", url }` (OSD simple-image
+  fallback). Zod schema at the boundary. Store migration:
+  default `undefined` for existing works; new works admit the
+  field on intake when pipeline runs.
+- `src/deep-zoom/opfs-cache.ts` — intercepts tile fetches via
+  a custom OSD tile source wrapper. Lookup order: OPFS →
+  network (write-through). LRU eviction keyed on `workId`; on
+  mount, the most-recently-opened work's tiles are warmed.
+  `navigator.storage.estimate()` probe on first use; graceful
+  no-op if quota < a floor threshold (cached in memory only).
+- Room integration: `src/room/RoomCanvas.tsx` adds a
+  `tap-on-focused-work` handler that reads the focused work's
+  `tileSource` and calls `setActiveDeepZoom(workId)` if
+  present. No tile source → no deep-zoom affordance (not a
+  loud absence; the work just stays in the wall-focus pose).
+  `activeDeepZoom` triggers `<DeepZoom>` mount via the app
+  shell.
+- Escape / drag-down / pinch-out-past-threshold from
+  `<DeepZoom>` → `setActiveDeepZoom(null)`; `focusedId`
+  invariant across the cycle. Room camera pose unchanged —
+  the wall stays at the exact focus pose, so closing deep
+  zoom feels like *returning to where you were*.
+- Observability: `deep_zoom.cache.{hit,miss,evict}`,
+  `deep_zoom.tile.load { source: "opfs" | "network",
+  durationMs }`, `deep_zoom.pyramid.load { workId, maxLevel,
+  sourceBytes }` on mount. Sibling spans:
+  `room.focus.deep_zoom_enter` / `room.focus.deep_zoom_exit`
+  so the Room-overlay chain is observable end-to-end.
+- Iterate-once carry-over from iter #6: lift
+  `persistentArtifactSlots` from `DocumentsChapter.tsx` into
+  `src/ai/chapter/driver.ts` alongside `activeBeats`. First
+  commit on the branch, before the main iter #8 surface.
+
+**Stack:**
+- `sharp` ≥ 0.33 — the DZI generator. Native (libvips under
+  the hood); no Python or ImageMagick. Already de facto
+  standard for Node image pipelines; MIT.
+- OpenSeadragon 4.1 — unchanged from iter #7. The adapter
+  already supports both DZI manifest URLs and simple-image
+  fallbacks. Custom tile source wraps the DZI loader to
+  route through OPFS cache.
+- OPFS for tile cache. No IndexedDB (Primitive §14). Per-work
+  directory: `/deep-zoom/<workId>/<level>/<col>_<row>.jpg`.
+  Read via `FileSystemFileHandle` + `Blob`; write via
+  `createWritable()`. Eviction: delete the oldest-mtime
+  per-work directory when quota pressure is detected.
+- Zod at the `tileSource` boundary. Same pattern as every
+  other untrusted shape; even though the source is our own
+  build output, the schema validates the contract between
+  generator and consumer.
+- `navigator.storage.estimate()` for quota probing. Chromium,
+  Safari 18.4+, Firefox all ship it. Fallback: assume 50 MB
+  available and let write failures gracefully degrade to
+  network-only.
+- Room integration through the existing `activeDeepZoom`
+  selector on `useWorks`; no new store fields. The Room's
+  RAF-gate already reads the union.
+- `TheRoomCanvas.tsx` — one new handler on the focused-work
+  tap path. No new gestures; the existing tap-to-focus
+  semantics get a second meaning when the focused work
+  already sits in the focus pose (tap-while-focused →
+  open deep zoom).
+
+**Reference:**
+- **Rijksmuseum Rijksstudio** (https://www.rijksmuseum.nl/en/rijksstudio)
+  — the canonical register for "zoom into a painting on the
+  web." Paint strokes at 100%, canvas weave at 200%,
+  restoration marks visible. The Room-to-deep-zoom handoff
+  isn't there (their surface is a list view) but the zoom
+  fidelity is the target.
+- **Google Arts & Culture Art Camera**
+  (https://artsandculture.google.com/project/art-camera) —
+  same fidelity; the ML upscaler is out of scope, but the
+  "don't show chrome while zooming" discipline is set
+  there. The close gesture is a quiet return, not a
+  dismissal.
+- **Apple Photos pinch-to-zoom-to-detail** — for the
+  continuous-gesture shape. The Room already owns pinch for
+  wall-pan; the tap-in-focus escalation (not continuous
+  pinch) is iter #8's compromise. Continuous pinch
+  escalation is iter #9+ (open question #4).
+- **Anti-reference:** any gallery-site lightbox that opens a
+  flat JPEG in a modal. Crisp at fit, mush at zoom. The
+  exact failure Primitive §21 + P24d forbid.
+
+**Canvas:** OSD canvas for deep zoom (unchanged from iter #7);
+Room canvas for the wall (iter #2); DocumentViewer canvas
+(iter #6). Three sibling overlays; each gates Room RAF via its
+own `active<Surface>` selector per Primitive §44. Sharp
+corners, 2 px borders, OKLCH tokens only. No new chrome
+surfaces.
+
+**Failure mode (5th declaration):** four regression classes
+must be observable.
+
+- *Pyramid generator incorrectness.* A pyramid with off-by-one
+  level counts or wrong tile overlap reads as ghosting or
+  missing tiles at zoom boundaries. Enforcement: unit tests
+  on `planDeepZoomPyramid(sourceWidth, sourceHeight,
+  tileSize, overlap)` — pure, no image I/O. Golden-fixture
+  hash check on the first seeded pyramid: any change to
+  generator output changes the hash; test fails.
+  `deep_zoom.pyramid.load` span emits `maxLevel` and
+  `sourceBytes`; playwright asserts a sensible pair for the
+  seeded fixture.
+- *OPFS cache misses cold-path.* First open → network fetch;
+  second open → OPFS hit. `deep_zoom.tile.load` with
+  `source: "opfs" | "network"` makes the path observable.
+  Playwright walk: open work twice; first cycle emits
+  `source: "network"`; second cycle emits `source: "opfs"`
+  for the same tile coordinates. Warm-path budget named
+  (p95 first-tile-paint < 50 ms) but not CI-gated — the
+  signal lives in the span durations for manual review
+  until we have a perf harness.
+- *OPFS quota overrun.* `navigator.storage.estimate()` polled
+  on mount; if `quota - usage < 10 MB`, evict the oldest
+  per-work directory. `deep_zoom.cache.evict { workId,
+  reclaimedBytes }` span. Fails observably when eviction
+  loops (same workId evicted repeatedly) — a pathological
+  signal the e2e asserts doesn't fire on the standard walk.
+- *Room handoff.* `focusedId` must stay pinned through
+  open → pan-and-zoom → close; Room camera pose must be
+  identical on exit to what it was on entry. Enforcement:
+  Playwright asserts `useWorks.getState().focusedId`
+  unchanged across the cycle, and reads a camera-pose
+  snapshot before/after (exposed via the `__PANG` E2E
+  seam). `room.focus.deep_zoom_enter` and
+  `room.focus.deep_zoom_exit` spans carry the pose as an
+  attribute so the invariant is observable offline too.
+
+**Gates this iteration must pass:** the 48.
+- P7 (INP 200 ms p75) — opening deep zoom from Room focus
+  must not drop frames; OSD's mount is the critical path.
+- P9 (Room canvas) — unchanged; deep zoom opens as a third
+  overlay sibling to DocumentViewer (iter #6) and DeepZoom's
+  own smoke route (iter #7).
+- P11 (OKLCH only) — any new chrome uses tokens.
+- P15 (compiled easings / springs default) — the Room →
+  deep-zoom transition uses an exponential-smoothing
+  animator (Primitive §39) if any interstitial motion
+  appears; no new cubic-beziers.
+- P24d (no CSS scale transforms outside DeepZoom adapter) —
+  new code in `src/room/**` cannot add `transform: scale(`
+  to simulate the zoom-in gesture. The whole point of
+  iter #7's P24d is it's enforced for this iteration.
+- P23 (keyboard a11y) — Escape dismissable from deep zoom;
+  +/- / arrow-key zoom inherited from OSD.
+- A8 (CaMeL / Untrusted boundary) — `TileSource` shape at
+  the Zod boundary. Even our own build output validates.
+- A16 (OPFS-backed queue discipline) — the tile cache is
+  OPFS-backed; matches the intake queue pattern.
+
+**Test criteria:**
+1. `npm run build:deepzoom-pyramids` runs deterministically.
+   Same input source produces identical output bytes
+   (golden-hash check). Zero dependencies on network at
+   build or runtime.
+2. 2–3 real public-domain works seeded with tile pyramids
+   checked into `public/vendor/deepzoom/<workId>/`. Each
+   source ≥ 4000 px long edge. `CollectionEntry.tileSource`
+   populated in the seed data.
+3. From The Room, tap on a focused work opens `<DeepZoom>`
+   with the work's tile source. First tile paints within
+   1 frame of mount on warm cache (second open); within
+   3 frames on cold.
+4. Pinching to 3× reveals paint-stroke detail a 1024 px
+   flat image cannot show. Playwright visual-diff captures
+   1×, 2×, 3× frames against golden fixtures.
+5. Escape → back to Room. `focusedId` unchanged.
+   `useWorks.getState().activeDeepZoom` back to `null`.
+   Room camera pose identical to pre-open (snapshot assert).
+6. Open → close × 10 from Room focus state: heap delta <
+   5 MB (Chromium `performance.memory`), no OSD leaks.
+7. OPFS tile cache observable: first cycle emits
+   `deep_zoom.tile.load { source: "network" }`; second
+   cycle emits `source: "opfs"`.
+8. `npm run verify` clean — 26/26 gates + unit tests +5 or
+   more (pyramid planner, OPFS cache, tile-source Zod
+   schema, Room tap-to-zoom handler, driver.ts slot lift);
+   evals unchanged; Playwright +1 spec (`room-deep-zoom.spec.ts`).
+9. `persistentArtifactSlots` lifted into
+   `src/ai/chapter/driver.ts`; `DocumentsChapter.tsx`
+   imports from `@/ai/chapter` instead of its local helper.
+
+**Pre-existing work this depends on:**
+- Iter #2 Room + the camera-pose state + gesture controller.
+- Iter #6 DocumentViewer (reference implementation for the
+  overlay contract), + `__PANG` E2E seed seam.
+- Iter #7 `<DeepZoom>` primitive + `activeDeepZoom`
+  selector + `check-transforms.ts` gate.
+- Iter #5 enrichment data shape (same store, same
+  `CollectionEntry` type being extended).
+
+**Open questions (answered before execution):**
+1. **`sharp` vs `libvips` direct vs a pure-JS DZI
+   generator?** `sharp`. Native (libvips bindings);
+   handles AVIF, JPEG, PNG, WebP; deterministic output.
+   Pure-JS alternatives (`deepzoom-node`) are 10× slower
+   and unmaintained.
+2. **DZI vs IIIF?** DZI, as in iter #7. File-folder on disk,
+   no manifest server. IIIF when museum-API integration
+   lands (spine #8, iter #9+).
+3. **AVIF vs JPEG tiles?** JPEG. AVIF has better
+   compression but Safari tile decode is still slow; the
+   warm-path latency floor matters more than storage
+   bytes. Revisit when Safari 18.4 is minimum.
+4. **Continuous-pinch escalation from Room → deep zoom,
+   or tap-to-zoom?** Tap-to-zoom. Continuous-pinch
+   escalation is a Room-canvas gesture-ownership problem
+   (OSD wants to own pinch once mounted; the Room owns it
+   pre-mount). Deferred to iter #9+. The tap on
+   already-focused-work is the compromise: one discrete
+   gesture, no ownership handoff.
+5. **Gate added to the count?** No. P24d already covers
+   "no CSS scale outside adapter"; that's the regression
+   class this iteration could regress. The tile-source
+   Zod schema lives under A8 (untrusted boundary). Gate
+   count stays 48.
+6. **Per-work `tileSource` on intake, or out-of-band?**
+   Out-of-band this iteration. The build script seeds
+   2–3 works with hand-placed source images and produces
+   pyramids. Intake-pipeline integration (photo → DZI on
+   submit) is a later iteration — probably adjacent to
+   Passkeys or post-Correspondence. Named as out-of-scope.
+7. **What real works?** Public-domain candidates from
+   Rijksmuseum and Met Open Access APIs:
+   - Vermeer, *Girl with a Pearl Earring* (Mauritshuis, PD —
+     backup: Met Open Access holds a 19th-century study).
+   - Van Gogh, *Wheatfield with Crows* (Van Gogh Museum PD,
+     Met Open Access has *A Wheatfield* 1895).
+   - Rembrandt, *The Night Watch* (Rijksmuseum PD).
+   Final selection in the commit depends on which sources
+   are available ≥ 4000 px without login.
+
+**Out of scope (explicit):**
+- Continuous-pinch escalation from Room to deep zoom
+  (iter #9+ when gesture-ownership story is designed).
+- IIIF tile source (iter #9+ with museum-API integration).
+- Per-work pyramid generation on intake (out-of-band).
+- ML upscaling (Google Art Camera style). Never, probably.
+- Tile streaming compression (AVIF). Revisit in two
+  iterations.
+- Tile pre-warming on Room paint. Cache warms on first
+  open, not in the background. Background pre-warm is a
+  performance iteration downstream.
+- Per-work credits / attribution overlay in deep zoom.
+  Minimal DOM chrome — the painting is the subject, not
+  the metadata.
+- A11y audit of OSD's internal chrome (still deferred
+  per iter #7).
+
+**Outcome gate:** codify or iterate once. Codify targets if
+the pipeline + Room wire-up land cleanly:
+- **DZI pyramid generator is the sole sanctioned path.**
+  Add to `PANG_Primitives_2026.md` § 21 as the generator
+  half of the adapter primitive.
+- **OPFS tile cache is the sole sanctioned cache for tile
+  bytes.** No IndexedDB, no Cache API, no in-memory
+  beyond OSD's own. Add to
+  `PANG_Primitives_2026.md` § *Storage* as a clarifying
+  clause on §14 (OPFS for staged binaries).
+- **Overlay-to-Room handoff preserves camera pose and
+  `focusedId`.** Add to `PANG_Primitives_2026.md` § 44
+  (overlay-canvases-gate-RAF) as the complementary
+  contract: *the Room camera pose is an invariant of the
+  overlay lifecycle; overlays close to the same pose they
+  opened from.*
+- **Tile-source shape is a Zod-validated discriminated
+  union.** Add to `PANG_AI_Era_2026.md` § *Untrusted
+  boundaries* as a non-AI example of the same pattern.
+
+Laura's hands: **after merge.** Walks the full Room → tap
+work → deep zoom → paint strokes → close → Room loop on a
+real device. This is the spine moment test. The outcome
+is either "I can see the paint" (codify and advance) or
+a named regression in the observability proofs above
+(iterate once or drop).
+
+---
+
 ## Known debts
 
 Named so they're not invisible. Not iterations in themselves —
