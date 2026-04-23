@@ -67,24 +67,6 @@ jobs:
       - name: A22 eval (mock — harness sanity)
         run: npm run check:eval
 
-      # Share the built app with the downstream `e2e` job instead of
-      # rebuilding. `.next/` + generated `public/sw.js` are all
-      # `next start` needs. Saves ~2 min per PR.
-      #
-      # `include-hidden-files: true` is load-bearing — upload-artifact
-      # v4 excludes dotfile paths by default, and `.next/` would
-      # silently not ship, leaving e2e with an empty runtime.
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: next-build
-          path: |
-            pang-2026/.next/
-            pang-2026/public/sw.js
-          include-hidden-files: true
-          retention-days: 1
-          if-no-files-found: error
-
   e2e:
     name: Playwright e2e (Tier 2)
     runs-on: ubuntu-latest
@@ -92,9 +74,8 @@ jobs:
     needs: gates
     env:
       NEXT_PUBLIC_SUPABASE_HOST: "example.supabase.co"
-      # Serve the prod build (downloaded from gates) via `next start`
-      # for parity with Vercel. Playwright's webServer respects CI=1
-      # and runs `npm run start`.
+      # Serve the prod build via `next start` for parity with Vercel.
+      # Playwright's webServer respects CI=1 and runs `npm run start`.
       CI: "1"
     defaults:
       run:
@@ -115,13 +96,14 @@ jobs:
             lightningcss-linux-x64-gnu \
             @tailwindcss/oxide-linux-x64-gnu
 
-      # Reuse the `.next/` and `public/sw.js` that `gates` built.
-      # download-artifact unpacks preserving archived paths, so files
-      # land back at `pang-2026/.next/` and `pang-2026/public/sw.js`.
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: next-build
+      # Build standalone. Earlier revisions tried sharing `.next/`
+      # from the gates job via upload/download-artifact to skip this
+      # ~2-minute rebuild, but the download-side extraction ran into
+      # the upload-artifact-v4 hidden-files default and later a
+      # webServer boot issue that wasn't worth chasing on CI
+      # hardware. Re-introduce the share when we have a reason to.
+      - name: Build
+        run: npm run build
 
       # Cache Playwright browsers across runs. The key is tied to
       # `package-lock.json` (Playwright version moves with the lock).
