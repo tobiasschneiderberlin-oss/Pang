@@ -22,8 +22,11 @@
 #
 # Everything else in `.claude/` is per-machine state: the local
 # permissions overlay, scheduled-task locks, editor launch config.
-.claude/*
-!.claude/settings.json
+# `**/` makes the rule reach into subdirectories too (e.g. the
+# app's `pang-2026/.claude/` that Claude Code drops alongside a
+# package.json it's been run from).
+**/.claude/*
+!**/.claude/settings.json
 
 # Legacy prototypes + reference scrapes. Kept locally for lookups.
 _archive/
