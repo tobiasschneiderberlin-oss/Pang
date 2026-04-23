@@ -12,11 +12,16 @@
 > training-mean implementation. See `CLAUDE.md` § *Reach forward, not
 > back*.
 >
-> Last updated: 2026-04-23 — iteration #5 (Enrichment Agent v1)
-> landed on `iter-5-enrichment-agent`; five codify targets absorbed
-> into doctrine, reconcile-on-boot named as the single iterate-once,
-> EnrichmentPanel render deferred to iteration #6. Prior same day —
-> iteration #4 (verification request). Prior 2026-04-21 — post-reset.
+> Last updated: 2026-04-23 — iteration #6 (Documents as evidence
+> v1) landed on `iter-6-documents-as-evidence`, squash-merged to
+> `main` as `413e549` via PR #16. Four codify targets absorbed
+> (singleton fallbacks, chapter reveal + rest state, `NEXT_PUBLIC_*`
+> build-time discipline, `window.__PANG` seed seam); one
+> iterate-once queued (`persistentArtifactSlots` → `driver.ts`);
+> Laura's hands pending. Iteration #7 (Deep Zoom collection-wide)
+> brief added — principle scope, gates-only, primitive lands ahead
+> of source tiles. Prior same day — iteration #5 (Enrichment Agent
+> v1). Prior 2026-04-21 — post-reset.
 
 ---
 
@@ -30,8 +35,8 @@
 | 3 | Arrival as chapter v2 | Ceiling | **Landed (2026-04-23)** | Chapter as pure `tMs`-in state machine; slot-based DOM; conservation-identity testing |
 | 4 | Verification request | Ceiling | **Landed (2026-04-23)** | Optimistic flip + OPFS outbox + planReconcile pure core; outcome chapters reuse chapter primitive |
 | 5 | Enrichment Agent v1 | Ceiling | **Landed (2026-04-23)** | P-LLMs author prose, never structure; cache+status two-file rule; pure-core + procedural-wrapper for OPFS; Q-LLM per untrusted field |
-| 6 | Documents as evidence v1 | Ceiling | Queued | — |
-| 7 | Deep Zoom collection-wide | Principle | Queued | — |
+| 6 | Documents as evidence v1 | Ceiling | **Landed (2026-04-23)** | Chapter = reveal + rest; discriminated-union stores export a NONE singleton; `NEXT_PUBLIC_*` is build-time inline; `window.__PANG` seed seam |
+| 7 | Deep Zoom collection-wide | Principle | Brief | — |
 | 8 | Passkeys auth | Ceiling | Queued | — |
 | 9 | PANG Voice v1 wire-up | Principle | Queued | — |
 | 10 | Narrative Agent — monthly reading v1 | Ceiling | Queued | — |
@@ -2763,6 +2768,468 @@ the register is ambiguous, iterate once on the chapter
 cadence or the viewer chrome. If it lands as "file manager",
 drop iter #6 and ask what the spine actually wants from
 evidence.
+
+---
+
+## Iteration #6 — findings (2026-04-23)
+
+**Status:** landed at ceiling on `iter-6-documents-as-evidence`,
+squash-merged to `main` as `413e549` via PR #16. `npm run verify`
+clean (26/26 gates, all unit suites green); Playwright e2e
+18/18 across `chromium-mobile` + `chromium-desktop`; CI green
+(PANG gates + Playwright e2e + Vercel build + preview comments).
+Laura's hands pending — the walk goes next; these findings cover
+what CI, the lint, and the gesture grammar already taught us.
+
+### What landed
+- `src/ai/chapter/plan.ts` — `planDocumentsChapter(workId,
+  documents, focusedAt)` pure (no clock reads inside);
+  `settle → artifact.1…n → ready` beat sequence; `totalMs`
+  scales with document count. Beats carry `payload` with
+  `type`, `fileRef`, `extractedFields`.
+- `src/ai/chapter/types.ts` + `voice.ts` + `index.ts` — shared
+  `BeatPayload`, `DocumentsChapterPlan`, plus voice corpus for
+  artifact labels (*"certificate of authenticity"*, *"invoice"*,
+  *"condition report"*) and the context / viewer lines.
+- `src/ai/chapter/plan-documents.test.ts` — 8 unit tests (plan
+  purity, beat count, totalMs bounds, payload integrity).
+- `src/components/documents/DocumentsChapter.tsx` — DOM chrome
+  consumer of the plan. Staggered reveal via compiled easings;
+  artifact cards persist at rest state after their beat ends
+  (see *persistent artifact slots* below).
+- `src/components/documents/DocumentViewer.tsx` + `src/documents/
+  viewer.ts` + `viewer.test.ts` — canvas viewport, pdf.js 4.x
+  worker at `public/vendor/pdf.worker.min.mjs`, exponential-
+  smoothing zoom (Primitive §39), `PointerEvent` + `touch-action:
+  none`. Missing-bytes path renders the muji "no longer
+  available" line and fires `documents.bytes.miss`.
+- `src/documents/bytes.ts` — thin OPFS accessor
+  (`Blob | null`), never throws.
+- `src/documents/otel.ts` — full span catalogue:
+  `documents.chapter.{start,complete,abort}`,
+  `documents.viewer.{open,close,zoom_depth}`,
+  `documents.bytes.miss`, and `enrichment.panel.render`
+  tying back into iter #5's data surface.
+- `src/components/enrichment/EnrichmentPanel.tsx` — provenance
+  `<dl>` + bioMuji `<p>` with `data-pang-source` per element.
+  Reads `readEnrichmentCache(workId)` on ready/stale; renders
+  nothing on `none` / `enriching` / `failed` (the absence is
+  the state, per the panel's own doctrine).
+- `src/stores/enrichment.ts` — exports `ENRICHMENT_NONE` as a
+  module-scoped singleton (see *selector stability* below).
+- `src/components/AppBoot.tsx` — `window.__PANG.useWorks`
+  exposed under `NEXT_PUBLIC_PANG_E2E=1`; the sanctioned
+  Playwright seeding seam.
+- `e2e/documents.spec.ts` — Tier 2 walk: focus a seeded work
+  with a document → chapter mounts → tap CoA card → viewer
+  opens → Escape dismisses → chapter DOM survives + focus
+  preserved.
+- `playwright.config.ts` + `.github/workflows/ci.yml` — the
+  env var is threaded into both webServer and CI build step
+  (see *build-time env discipline* below).
+
+### What CI + the gesture grammar exposed
+
+Four discoveries, each with its own verdict:
+
+1. **Zustand selector instability under `useSyncExternalStore`.**
+   `EnrichmentPanel`'s original fallback — inline `{ kind:
+   "none" }` inside the selector — allocated a fresh object on
+   every call. React 19 detected the unstable snapshot and
+   logged *"The result of getServerSnapshot should be cached
+   to avoid an infinite loop"*. Playwright caught it as a
+   hang. Fix: module-level `ENRICHMENT_NONE` singleton,
+   exported from the store, reused as the selector fallback.
+   The shape generalises to every discriminated-union store:
+   a missing key maps to a shared singleton, never a literal.
+
+2. **Chapter grammar = reveal + persistent rest, not reveal
+   alone.** `activeBeats(plan, tMs)` drops past-end beats
+   (correct for transient narration: a settle beat should
+   not keep painting after `endMs`). But artifact beats
+   carry tap targets — they must survive their reveal so the
+   evidence is still reachable. Desktop raced past this on
+   first implementation; mobile's slower frame cadence lost
+   the race and cards unmounted before the Playwright
+   `dispatchEvent` fired. Fix: a local `persistentArtifactSlots`
+   helper in `DocumentsChapter.tsx` clamps past-end artifact
+   beats to `{ envelope: 1, progress: 1 }`. The chapter is
+   the reveal *and* the rest state.
+
+3. **React 19 `react-hooks/set-state-in-effect`.** The panel's
+   first cut called `setState` inside an async `useEffect` to
+   reset-on-focus-change; React 19's lint rejects this
+   pattern (cascades renders). Rewrote to stamp `{ workId,
+   payload }` and derive the current-focus payload at render
+   time via equality check. The lint is the enforcement; no
+   doctrine edit earned.
+
+4. **`NEXT_PUBLIC_*` is build-time inline, not runtime.** The
+   `window.__PANG` seed hook is gated by
+   `process.env["NEXT_PUBLIC_PANG_E2E"]` inside `AppBoot`.
+   Setting it on Playwright's webServer env works locally
+   (dev reads env live) but failed in CI, where `next build`
+   runs separately from `next start`. The flag has to be
+   present during **build** for Next.js to inline
+   `"1"` into the production bundle; the runtime value is
+   never consulted. One-line fix in the workflow lifting the
+   var to the e2e job env.
+
+### Codify
+- **Module-scoped singleton fallbacks for discriminated-union
+  stores.** Every Zustand selector that maps a missing key to
+  a "none" variant reuses a module-level singleton rather
+  than allocating. Add to `PANG_Primitives_2026.md` § *Storage*
+  as *"discriminated-union stores export a NONE singleton"*.
+- **Chapter grammar = reveal + rest state.** Artifact beats
+  have a transient reveal envelope (0→1 over `durationMs`)
+  **and** a persistent rest state (envelope = 1 after `endMs`).
+  Narration beats stay transient. Extends the existing
+  "chapter grammar: pure plan + tMs-driven renderer" primitive
+  earned in iter #3 + #4. Add to `PANG_Primitives_2026.md`
+  § *Motion* as a clarifying clause.
+- **`NEXT_PUBLIC_*` build-time discipline.** Next.js inlines
+  these vars at build time; any CI step that runs `next build`
+  must already see every `NEXT_PUBLIC_*` the code reads, or
+  those branches compile out to dead code. Add to
+  `PANG_Architecture_2026.md` § *Build* as a one-paragraph
+  rule with the exact failure mode (PR #16's e2e hang) as the
+  canonical counter-example.
+- **`window.__PANG` as the sanctioned E2E seed seam.**
+  `window.__PANG.<storeName>` exposed under `NEXT_PUBLIC_PANG_E2E=1`;
+  scoped to non-prod bundles by env gate. Every Playwright
+  spec that needs store-level seeding goes through this seam
+  rather than driving the UI; prod bundles ship no seed hook.
+  Add to `PANG_Architecture_2026.md` § *Testing*.
+
+### Iterate once (one second pass, no debate)
+- **Lift `persistentArtifactSlots` into `src/ai/chapter/driver.ts`.**
+  Export alongside `activeBeats` so every chapter renderer
+  uses the same primitive rather than re-implementing the
+  reveal-vs-rest split per surface. Apply to `ArrivalChapter`
+  and `OutcomeChapter` the same pass — both have artifact
+  beats that want the rest-state contract. Single PR, scoped
+  to the chapter grammar unification. Picked up at the next
+  surface that opens.
+
+### Drop
+- The React 19 setState-in-effect discovery. The lint
+  enforces the pattern mechanically; no doctrine edit
+  earned. Noted here so it's not rediscovered.
+- `documents.chapter.abort` event ergonomics — emitted but
+  not yet read by any consumer. The span is cheap to leave
+  alone; its consumer-side shape gets codified when a
+  surface actually reads it.
+
+### Failure mode — observability proofs (brief's fifth
+declaration): all four classes observable.
+- *Jank under staggered reveal*: per-beat reveal timing holds
+  through the e2e walk on chromium-mobile (Pixel 7 emulation);
+  `documents.chapter.*` spans emit with the expected payload.
+  The 8-artifact fixture is still TODO — named as a debt on
+  the `check:perf` harness below.
+- *Source confusion*: TimelineRow's `data-pang-source`
+  attribution wires per entry; `inkForRole` maps every
+  contributor role to `"gallery"` today (a conservative
+  palette decision — widening is a later iteration). BioMuji
+  lands under `data-pang-source="ai"`. Playwright asserts
+  the attributes at the panel level.
+- *Missing document bytes*: `src/documents/bytes.ts` returns
+  `null` cleanly; viewer emits `documents.bytes.miss` and
+  renders the muji "no longer available" line. Confirmed in
+  the e2e walk — the spec deliberately doesn't seed OPFS
+  bytes and the viewer still mounts.
+- *Viewer-as-escape-hatch*: `focusedId` preserved through
+  viewer open + Escape close; asserted in
+  `e2e/documents.spec.ts`. The chapter DOM survives the
+  viewer lifecycle.
+
+### What this tightens
+- `PANG_Primitives_2026.md` gains the singleton-fallback
+  rule and the reveal-plus-rest clause. Two lines, both
+  subtractive (they replace ad-hoc patterns that were
+  already sitting in the code).
+- `PANG_Architecture_2026.md` gains the `NEXT_PUBLIC_*`
+  build-time rule and the `window.__PANG` seed-seam rule.
+- `PANG_Gates.md` and `.pang/gates.yaml` unchanged (still
+  48). P7's staggered-reveal perf assertion stays a debt
+  until the 8-artifact fixture exists; not a new gate.
+- `CLAUDE.md` unchanged. Nothing cut from the cannot-do
+  list; nothing added.
+
+### Metabolism check
+Every discovery lands: singleton → codify; reveal+rest →
+codify + iterate-once (the driver.ts lift); build-time env
+→ codify; seed seam → codify; set-state-in-effect → drop
+(lint owns it); `abort` span ergonomics → drop (no consumer
+yet). The Vercel Agent Review PR-permissions detour earlier
+today is a tooling note, not a doctrine edit. No unnamed
+"we should think about this" overhangs.
+
+---
+
+## Iteration #7 — Deep Zoom collection-wide (opened 2026-04-23)
+
+**Status:** kickoff brief. Scope is explicit down-scope to
+**principle** with a named reason (below). Cadence table
+row: gates-only, no Laura's hands — this iteration lands a
+primitive behind its sanctioned adapter ahead of the data
+that will populate it.
+
+**Why now:** iter #6 codified "pinch means read closer" on
+the document viewer (the signature on the CoA, the price on
+the invoice). The same gesture wants to apply to the **work
+itself** — paint, canvas weave, restoration marks — but two
+prerequisites are missing:
+
+1. `CollectionEntry.imageUrl` is a flat single-resolution
+   image today; source pyramids (DZI / IIIF) don't exist in
+   the intake pipeline yet. Generating them is a separate
+   iteration.
+2. Primitive §21 ("Deep Zoom via OpenSeadragon, not CSS
+   scale transforms") exists in doctrine but its enforcement
+   is "code-review level" — no gate, no lint. A future
+   iteration wanting a "quick zoom" affordance could add
+   `transform: scale(2)` and nothing would stop it.
+
+Landing the primitive behind its sanctioned adapter now —
+before the source tiles exist — makes the seam ready. When
+the tile-generation pipeline ships, `<DeepZoom>` plugs in
+without a round of primitive-shape debate. The gate upgrade
+closes the door on the regression class before it can land.
+
+**Scope:** **principle** (explicit down-scope). Named reason:
+source tile pyramids don't exist in the intake pipeline yet,
+so "every work in The Room is deep-zoomable" is not
+achievable this iteration. The principle being proven: a
+primitive can land behind its sanctioned adapter ahead of the
+data. Ceiling for the iteration is "`<DeepZoom>` exists, is
+lint-enforced, smoke-routed with a seeded DZI, and the
+anti-pattern (CSS scale) is gated out of `src/` outside the
+adapter." Room wire-up is out of scope.
+
+**Stack:**
+- `openseadragon` 4.x npm package. Wrapped in
+  `src/components/deep-zoom/DeepZoom.tsx` as the sole
+  sanctioned call site per Primitive §21. Thin wrapper —
+  `new OpenSeadragon({ element, tileSources })` inside a
+  `useEffect` with proper cleanup on unmount.
+- Tile source: `{ Image: { Url } }` for flat fallback +
+  `{ type: "image", tileSource: "<DZI manifest URL>" }` for
+  tiled pyramids. Both land; only DZI exercises real deep
+  zoom, but the simple-image path is the fallback when only
+  flat bytes exist (so the adapter is never blocked on
+  source-pipeline readiness).
+- Smoke route `/deep-zoom-smoke` (behind `NEXT_PUBLIC_PANG_E2E=1`
+  or `NODE_ENV === "development"`; prod bundles never ship
+  it — same env-gate discipline as iter #6's `__PANG` seam).
+  Mounts `<DeepZoom>` against one pre-baked DZI pyramid
+  seeded at `public/vendor/deepzoom/<work>/`. Source
+  selection: a genuinely public-domain reference (MET /
+  Rijksmuseum open-access), not a generated placeholder.
+- Gesture: OSD owns its own pinch / wheel / keyboard-zoom
+  handling. We confirm compose with `touch-action: none` on
+  the container. No CSS scale, no transforms, no overlaying
+  gesture library.
+- Canvas: OSD renders to its own canvas — no second overlay,
+  no CSS-scaled `<img>`. The Room's canvas (iter #2) is
+  untouched; DeepZoom opens as a second canvas overlay
+  matching iter #6's DocumentViewer pattern. Room's RAF tick
+  gates on a new `activeDeepZoom` selector (same shape as
+  `activeViewer`).
+- OPFS tile cache at `/deep-zoom/<workId>/` — **named but
+  deferred**. The shape (pure `planTileCache()` + procedural
+  wrapper per iter #5's OPFS discipline) is declared here
+  for the later iteration that wires it; v1 lets OSD fetch
+  directly.
+- Lint / gate uplift: a new `check-transforms.ts` script
+  folded into `npm run check:gates`, scanning `src/` minus
+  `src/components/deep-zoom/` for `transform:\s*scale\(`,
+  `scaleX\(`, `scaleY\(` in CSS-in-JS / `style=` literals +
+  Tailwind `scale-` utilities. Runs alongside the existing
+  string audit. Gate count stays 48 — folded into P24
+  (design-token discipline) rather than added as P26.
+
+**Reference:**
+- Rijksmuseum Rijksstudio zoom into *The Night Watch* — the
+  canonical deep-zoom-into-a-painting experience. Paint
+  strokes, canvas weave, restoration marks at 100 %+. This
+  is the target register for when source tiles exist.
+- Google Arts & Culture / Art Camera — the same shape with
+  an ML upscaler on top; the upscaler is out of scope, but
+  the gesture contract is identical. Worth the reference
+  because the *"don't show chrome while zooming"* discipline
+  is already set there.
+- OpenSeadragon's `simple-image` example on their own docs —
+  the minimum viable wiring; their docs are the spec.
+- Anti-reference: any lightbox that pinches a JPEG with CSS
+  scale. Crisp at 1×, mush at 2×. Exactly the failure
+  Primitive §21 names.
+
+**Canvas:** `<canvas>` via OSD. Minimal DOM chrome around it
+(close gesture, no title strip, no zoom controls — OSD's
+internal UI is suppressed). Sharp corners, 2 px borders,
+OKLCH tokens only. The Room's canvas is unaffected.
+
+**Failure mode (5th declaration):** four regression classes
+must be observable.
+
+- *CSS-scale backsliding.* Most likely future regression: a
+  future iteration adds a "quick-zoom" affordance via
+  `transform: scale(2)` somewhere in `src/`. Enforcement:
+  the new `check-transforms.ts` gate. A violation fails CI;
+  the unit-test fixture lives in `scripts/check-transforms.test.ts`
+  and deliberately introduces a pattern the scanner must
+  catch, asserting both the positive (catches the
+  violation) and negative (the adapter's own file is
+  exempted) cases.
+- *Tile-load jank.* OSD's default tile strategy is
+  network-first; on a cold cache with a 4000 px DZI, the
+  initial pan can jank. Enforcement: `deep_zoom.tile.load`
+  OTel span with `durationMs` + `source: "network"` attribute.
+  The Playwright smoke asserts the span fires on first
+  pan; the perf SLO (p95 < 200 ms warm) is named but not
+  CI-gated this iteration — the warm path requires the
+  OPFS cache which is the deferred phase.
+- *Memory leak on unmount.* OSD holds tile-cache references
+  + canvas contexts; a missed cleanup leaks across
+  open/close cycles. Enforcement: Playwright harness cycles
+  open → close × 10 on the smoke route and asserts
+  `performance.memory.usedJSHeapSize` delta < 5 MB
+  (Chromium-only; our CI matrix is chromium-desktop +
+  chromium-mobile so this works). Fails CI on regression.
+- *Escape semantics.* Close gesture (Escape, drag-down,
+  pinch-out-past-threshold) returns to the originating
+  surface with `focusedId` preserved. Same contract as
+  iter #6's DocumentViewer. Enforcement: Playwright spec
+  asserts `useWorks.getState().focusedId` unchanged across
+  open → close; `useWorks.getState().activeDeepZoom` returns
+  to `null` on close.
+
+**Gates this iteration must pass:** the 48.
+- P7 (INP 200 ms p75) — pinch + wheel must hold the budget;
+  OSD's RAF cannot starve main-thread input.
+- P9 (Room reserves `<canvas>`) — unchanged; DeepZoom opens
+  as a second canvas overlay behind an `activeDeepZoom`
+  selector (the iter #6 `activeViewer` pattern generalised).
+- P11 (OKLCH only) — any new chrome uses tokens.
+- P15 (compiled easings / springs default) — OSD's internal
+  easings live under its own adapter surface; PANG code
+  introduces no new cubic-beziers.
+- P24 (design-token discipline) — **extended** by
+  `check-transforms.ts` to ban `transform: scale(` outside
+  the DeepZoom adapter. The gate content grows; the gate
+  count does not.
+- P23 (keyboard a11y) — OSD's + / − / arrow-key zoom
+  preserved; Escape dismissable; `role="dialog"` +
+  `aria-label="deep zoom"` on the overlay root.
+- A4, A5, A8, A10, A21 — not applicable (no LLM calls, no
+  new agent); gates still run and pass.
+
+**Test criteria:**
+1. `<DeepZoom src tileSource onClose />` mounts, wraps OSD,
+   emits `deep_zoom.{open,close,zoom_depth,tile.load}`
+   spans at declared boundaries. Unit test + smoke-route
+   integration.
+2. A deliberately-introduced `transform: scale(2)` in
+   `src/components/verification/` (temporary commit on a
+   test branch) fails `npm run check:gates`; reverting
+   passes. The gate's fixture file proves both directions.
+3. Smoke route `/deep-zoom-smoke` renders the seeded DZI;
+   first tile paints within 1 frame of mount; pinching to
+   3× reveals a region the flat 1024 px fallback source
+   cannot show (canvas weave visible). Playwright visual
+   diff captures the 1× vs 3× frames.
+4. Open → close × 10 on the smoke route holds heap delta
+   under 5 MB (Playwright + `performance.memory`).
+5. Escape / drag-down / pinch-out-past-threshold all
+   dismiss; `focusedId` unchanged; `activeDeepZoom` back
+   to `null`.
+6. `npm run verify` — still 26/26 declared checks plus the
+   new `check-transforms`; unit tests +5 or more (wrapper,
+   span emission, close paths, scanner fixture); evals
+   unchanged; Playwright +1 spec (`deep-zoom.spec.ts`).
+7. The new gate surfaces in `npm run check:gates` output
+   as a line item under P24's section.
+
+**Pre-existing work this depends on:**
+- Iter #2 Room + the `active*`-selector pattern for
+  overlay canvases.
+- Iter #6 DocumentViewer (the second-canvas-overlay
+  reference implementation, the gesture semantics, the
+  Escape contract).
+- Iter #6 codify: `NEXT_PUBLIC_PANG_E2E` env discipline
+  (the smoke route's dev-only gate).
+- `touch-action: none` + `PointerEvent` discipline
+  (iter #2).
+
+**Open questions (answered before execution):**
+1. **OpenSeadragon vs a 2026 alternative?** OSD. It is the
+   reference implementation for tiled deep-zoom in the
+   browser; alternatives (Leaflet, OpenLayers, Seadragon.js)
+   are forks or subsets. 4.x is maintained. The tile
+   protocol is open; if we ever swap engines, `<DeepZoom>`
+   is the one change-site.
+2. **DZI vs IIIF?** DZI first. File-folder-on-disk simple;
+   no manifest server required. IIIF joins when museum-API
+   integration lands (a later iteration).
+3. **Who generates the tile pyramid?** Not this iteration.
+   v1 ships with one pre-baked DZI under `public/vendor/
+   deepzoom/`. A build-time script (flat source → DZI
+   pyramid) is its own iteration, probably adjacent to the
+   higher-res source-image acquisition.
+4. **Gate added to the count or folded in?** Folded into
+   P24. Gate count stays 48 — extending the doctrine the
+   existing gate already enforces is cleaner than adding a
+   parallel gate for the same concept.
+5. **Does the adapter wire into The Room this iteration?**
+   No. The Room wire-up is a later iteration when per-work
+   source tiles exist. Today's ceiling is primitive + smoke
+   + gate uplift.
+
+**Out of scope (explicit):**
+- Live per-work Deep Zoom in The Room. Primitive + smoke
+  route only.
+- The tile-generation pipeline (flat JPEG → DZI pyramid).
+- OPFS write-through tile cache. Named in stack; phase-2.
+- IIIF tile source.
+- Deep-zoom of documents (iter #6's CoA viewer keeps its
+  own pinch-zoom animator; DeepZoom is for artwork
+  surfaces, not documents).
+- A11y audit of OSD's internal chrome. OSD's defaults are
+  reasonable; a dedicated audit is its own iteration if
+  signal warrants.
+- New LLM calls, new agents, new eval fixtures. Rendering +
+  gate uplift only.
+
+**Outcome gate:** codify or iterate once. Codify targets if
+the primitive + the gate uplift land cleanly:
+- **Primitive §21's enforcement graduates from
+  "code-review level" to a CI gate.** Update
+  `PANG_Primitives_2026.md` § 21 and `PANG_Gates.md` P24
+  accordingly.
+- **Overlay canvases gate the Room tick via an `active*`
+  selector.** The same pattern appears in iter #6's
+  DocumentViewer (`activeViewer`) and iter #7's DeepZoom
+  (`activeDeepZoom`). Name it a primitive. Add to
+  `PANG_Primitives_2026.md` § *Room / overlay* as "overlay
+  canvases gate the Room RAF tick via a named selector on
+  `useWorks`."
+- **Primitives land ahead of data when the shape is stable.**
+  Iter #6 shipped the enrichment panel ahead of contributor
+  submissions; iter #7 ships DeepZoom ahead of source tiles.
+  The discipline: if the adapter's interface is decided,
+  land it — empty routes beat ad-hoc patterns appearing
+  when data arrives. Add to `CLAUDE.md` § *Reach forward,
+  not back* as a fifth move (or absorb into the existing
+  four — decide at codify time based on what the language
+  lands as).
+
+Laura's hands: **not this iteration**. Gates-only per the
+cadence table. Close-out walk: `npm run verify` green
+including the new `check-transforms` gate, smoke route
+mounts under `NEXT_PUBLIC_PANG_E2E=1`, open → close × 10
+clean in Playwright, heap delta under budget.
 
 ---
 

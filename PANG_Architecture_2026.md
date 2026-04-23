@@ -327,6 +327,18 @@ degradations; they are never the target.
 - Surface-local state **never** caches server data. That's TanStack
   Query's job. A Zustand store holds transient UI state only (camera
   mode, pinch-zoom target, current tile hover, etc.).
+- **Discriminated-union stores export a NONE singleton.** Every
+  store that maps a missing key to a "none" variant (intake
+  status, enrichment state, verification outbox slot, etc.)
+  exports a module-scoped singleton of that variant alongside
+  the hook. Selector fallbacks reuse the singleton — they
+  never return an inline literal. React's
+  `useSyncExternalStore` compares snapshots by identity; an
+  inline `?? { kind: "none" }` allocates a fresh object per
+  call, trips the *"getServerSnapshot should be cached to
+  avoid an infinite loop"* warning, and hangs the surface.
+  Landed 2026-04-23 from iter #6's Playwright hang;
+  `PANG_Primitives_2026.md` § 42 carries the primitive.
 
 ### Device state (persistent)
 
@@ -636,6 +648,67 @@ without asking Laura to do anything.
   Fails the build if any of P1–P25 or A1–A23 fail.
 - **Preview deploys:** every PR gets a Vercel preview. Laura (and
   others) test on preview URLs, not localhost.
+
+---
+
+## 10.5. Build + testing seams
+
+### `NEXT_PUBLIC_*` is build-time inline, not runtime
+
+Next.js inlines every `process.env["NEXT_PUBLIC_*"]` reference at
+**build time** (the transform runs during `next build`). A value
+present at `next start` runtime but absent at `next build` time is
+compiled out as `undefined`; the branch behind it becomes dead
+code in the production bundle. Local `next dev` reads env live
+and hides the mismatch.
+
+**The rule:** every `NEXT_PUBLIC_*` the code reads must be present
+during every CI step that runs `next build`. The e2e job cannot
+rely on the Playwright webServer env to supply the flag — that
+env only reaches `next start`. Thread the var into the **job
+env block** so both the Build step and the Start step see it.
+
+Canonical counter-example: PR #16 (iter #6) hung the Playwright
+e2e because `NEXT_PUBLIC_PANG_E2E=1` was set on the webServer but
+not on the e2e job env; the `window.__PANG` seed hook compiled
+out, and the spec timed out waiting for a global that would
+never install. One-line fix in
+`.github/workflows/ci.yml` lifted the var to the job env.
+
+### `window.__PANG` E2E seed seam
+
+Playwright specs seed Zustand stores through a sanctioned
+window-exposed hook rather than by driving the UI. The seam is
+gated by an env flag so prod bundles ship no seed code.
+
+**Shape:**
+
+```ts
+// Inside AppBoot's useEffect, once hydration completes:
+if (process.env["NEXT_PUBLIC_PANG_E2E"] === "1") {
+  (window as unknown as { __PANG?: { useWorks: typeof useWorks } })
+    .__PANG = { useWorks };
+}
+```
+
+**Contract:**
+- Only exposes store hooks, never actions directly. Specs call
+  `window.__PANG.useWorks.getState().addEntry(...)` — the same
+  surface the app uses.
+- The env flag lives on every build step that produces a bundle
+  a Playwright spec will run against (per the rule above).
+- Prod CI builds (the main merge → Vercel deploy) run
+  **without** the flag; the hook compiles out. Only the e2e CI
+  job and local `npm run test:e2e` see it.
+- Adding a new store to the seam is a deliberate export — every
+  store the spec touches is named in `AppBoot`'s seed block. No
+  automatic reflection of the whole state tree.
+
+Landed 2026-04-23 from iter #6. The alternative (driving
+real UI through a scanner + intake fake-media stream per
+spec) would couple every documents / enrichment / room spec
+to the intake flow's shape; when that flow changes, unrelated
+specs break for the wrong reason.
 
 ---
 

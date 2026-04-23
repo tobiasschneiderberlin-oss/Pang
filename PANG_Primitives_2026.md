@@ -821,6 +821,64 @@ chunks
 
 ---
 
+## Storage continued
+
+### 42. Discriminated-union Zustand stores export a NONE singleton
+
+- **Forbidden default:** a selector that maps missing keys to an
+  inline literal, e.g.
+  `useEnrichment((s) => s.byWorkId[id] ?? { kind: "none" })`.
+  Every call allocates a fresh object; React's
+  `useSyncExternalStore` compares snapshots by identity, detects
+  drift, and logs *"getServerSnapshot should be cached to avoid
+  an infinite loop"* — then hangs the surface.
+- **Required primitive:** the store module exports a
+  module-scoped singleton for the NONE variant (e.g.
+  `export const ENRICHMENT_NONE: EnrichmentState = { kind: "none" }`).
+  Every selector fallback reuses the singleton.
+- **Adapter path:** any `create<StoreWithDiscriminatedUnion>()`
+  in `src/stores/*.ts` exports its NONE singleton alongside the
+  hook and state type; consumers import the singleton, never
+  write the literal.
+- **Enforcement:** code-review level + a recurrence-gate
+  candidate (`grep '?? { kind: "' src/components/**/*.tsx`
+  post-refactor). Landed 2026-04-23 from iter #6's Playwright
+  hang.
+
+---
+
+## Motion continued (again)
+
+### 43. Chapter grammar = reveal + persistent rest state
+
+- **Forbidden default:** every beat in a chapter is transient.
+  `activeBeats(plan, tMs)` drops past-end beats; the renderer
+  iterates what's active and everything else vanishes. For
+  narration beats (settle, ready, placement lines) that's
+  correct — they're prose and the prose is over. For artifact
+  beats (document cards, work thumbnails, anything Laura can
+  *tap*), dropping past-end unmounts the tap target and the
+  evidence disappears behind the reveal.
+- **Required primitive:** artifact beats carry two lives — a
+  transient reveal (`envelope` 0→1 across `durationMs`) and a
+  persistent rest state (`envelope = 1, progress = 1` for all
+  `tMs >= beat.startMs + beat.durationMs`). The chapter is the
+  reveal *and* the settled evidence, not the reveal alone.
+- **Adapter path:** `persistentArtifactSlots(beats, tMs)` in
+  `src/ai/chapter/driver.ts` (companion to `activeBeats`). The
+  renderer consumes whichever of the two helpers matches the
+  beat kind's semantics — narration = transient, artifact =
+  reveal-plus-rest.
+- **Enforcement:** every `ChapterShape` renderer imports from
+  `@/ai/chapter`; the helper is the single call site.
+  Code-review level today; a recurrence-gate candidate once a
+  second artifact-bearing chapter ships (it will: Room-wide
+  Deep Zoom overlays, future narration chapters). Landed
+  2026-04-23 from iter #6's mobile-Playwright card-unmount
+  race.
+
+---
+
 ## Active references
 
 The enablers from `CLAUDE.md` § *Reach forward, not back*, in one
