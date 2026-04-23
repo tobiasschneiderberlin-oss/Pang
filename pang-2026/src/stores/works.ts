@@ -29,6 +29,7 @@ import { subscribeWithSelector } from "zustand/middleware";
 import { ROOM, WORK_CENTRE_HEIGHT } from "@/room/constants";
 import type { Work } from "@/room/types";
 import type { IntakeOutput } from "@/ai/tools/artwork";
+import type { ArtworkSnapshot } from "@/verification/schema";
 
 /**
  * A domain entry — what the collector *has*. Image is a URL (blob:,
@@ -40,12 +41,45 @@ import type { IntakeOutput } from "@/ai/tools/artwork";
  * receive the warm emissive bias; `unverified` works sit dormant,
  * waiting for the collector's request-verification tap.
  */
+/**
+ * Durable sidecar with the fields the verification request needs to
+ * reach the gallery. Populated by `entryFromIntake` so the collector
+ * can tap "ask my gallery" on any unverified work without the intake
+ * output having to be re-resident in memory — the store is the
+ * single source of truth for the Room's projection + the verification
+ * submit path.
+ *
+ * `galleryFreeText` is null until the collector explicitly edits the
+ * gallery hint in the pre-submit surface; an edit replaces id + name
+ * with the typed text on the wire (the refinement in
+ * `VerificationRequestSchema` accepts any one of the three).
+ */
+export interface VerificationHint {
+  readonly galleryIdHint: string | null;
+  readonly galleryNameHint: string | null;
+  readonly galleryFreeText: string | null;
+  readonly detectedFrom: "email" | "certificate" | "visual" | "manual" | null;
+  readonly artworkSnapshot: ArtworkSnapshot;
+  /** Relative OPFS path to the rectified capture. */
+  readonly photoRef: string;
+  /** ISO timestamp of the capture. */
+  readonly capturedAt: string;
+}
+
 export interface CollectionEntry {
   readonly id: string;
   readonly imageUrl: string;
   readonly status: "verified" | "unverified";
   /** Wall footprint in metres, [width, height]. */
   readonly size: readonly [number, number];
+  /**
+   * Hint sidecar used by the verification submit path. Optional for
+   * backward compat with entries persisted before iteration #4; the
+   * AskGallery affordance is disabled for entries without a hint
+   * (they would land on the wall from a legacy prototype only — no
+   * production code path produces one today).
+   */
+  readonly verificationHint?: VerificationHint;
 }
 
 interface WorksStore {
@@ -67,6 +101,23 @@ interface WorksStore {
   removeEntry(id: string): void;
   /** Set or clear the focused work. */
   setFocusedId(id: string | null): void;
+  /**
+   * Flip an entry's `status`. The verification outcome chapter writes
+   * `"verified"` here when the gallery confirms; no-op if the id is
+   * not present.
+   */
+  setStatus(id: string, status: "verified" | "unverified"): void;
+  /**
+   * Patch an entry's `verificationHint`. The pre-submit edit surface
+   * writes `galleryFreeText` here; a hint with all three identifiers
+   * null would be rejected at the submit boundary, so callers are
+   * expected to preserve at least the originally-detected id or name
+   * (the edit UI only offers overwrite, not clear-all).
+   */
+  updateVerificationHint(
+    id: string,
+    patch: Partial<VerificationHint>,
+  ): void;
   /** Reset for testing; not wired to any user action. */
   clear(): void;
 }
@@ -86,6 +137,22 @@ export const useWorks = create<WorksStore>()(
         focusedId: state.focusedId === id ? null : state.focusedId,
       })),
     setFocusedId: (id) => set({ focusedId: id }),
+    setStatus: (id, status) =>
+      set((state) => ({
+        entries: state.entries.map((e) =>
+          e.id === id ? { ...e, status } : e,
+        ),
+      })),
+    updateVerificationHint: (id, patch) =>
+      set((state) => ({
+        entries: state.entries.map((e) => {
+          if (e.id !== id || !e.verificationHint) return e;
+          return {
+            ...e,
+            verificationHint: { ...e.verificationHint, ...patch },
+          };
+        }),
+      })),
     clear: () => set({ entries: [], focusedId: null }),
   })),
 );
@@ -133,17 +200,34 @@ const DEFAULT_SIZE_M: readonly [number, number] = [0.6, 0.8];
 export function entryFromIntake(
   output: IntakeOutput,
   blobUrl: string,
-  opts: { id?: string } = {},
+  opts: { id?: string; photoRef?: string; capturedAt?: string } = {},
 ): CollectionEntry {
   const d = output.artwork.dimensionsCm;
   const size: readonly [number, number] = d
     ? [Math.max(0.05, d.w / 100), Math.max(0.05, d.h / 100)]
     : DEFAULT_SIZE_M;
+  const id = opts.id ?? makeEntryId();
+  const hint: VerificationHint = {
+    galleryIdHint: output.galleryOfOrigin.galleryId,
+    galleryNameHint: output.galleryOfOrigin.galleryName,
+    galleryFreeText: null,
+    detectedFrom: output.galleryOfOrigin.detectedFrom,
+    artworkSnapshot: {
+      artist: output.artwork.artist,
+      title: output.artwork.title,
+      year: output.artwork.year,
+      medium: output.artwork.medium,
+      dimensionsCm: output.artwork.dimensionsCm,
+    },
+    photoRef: opts.photoRef ?? `works/${id}.png`,
+    capturedAt: opts.capturedAt ?? new Date().toISOString(),
+  };
   return {
-    id: opts.id ?? makeEntryId(),
+    id,
     imageUrl: blobUrl,
     status: "unverified",
     size,
+    verificationHint: hint,
   };
 }
 

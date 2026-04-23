@@ -53,6 +53,73 @@ export const CONTEXT_LABEL = "About the artist.";
 export const ATTRIBUTION_LABEL = "Recorded from.";
 
 /**
+ * Voice corpus for the ask-gallery affordance — the one-tap verification
+ * request the collector sends to their gallery. Every string is
+ * museumsschild-register: observational, sentence case, no imperative,
+ * no marketing. "ask" is the verb, not "request" or "verify".
+ *
+ * Lifecycle strings read as wall text in their own right — "the
+ * gallery has not yet answered" is complete as a sentence; it is not
+ * an apology for the gallery's silence.
+ */
+export const ASK_GALLERY = Object.freeze({
+  /** Initial affordance label — replaces the dormant chip. */
+  action: "ask my gallery",
+  /** Subhead under the action — the surface's own explanation. */
+  actionHint: "the gallery confirms. the work comes alive.",
+  /** Pre-submit edit button. */
+  edit: "edit the gallery",
+  /** Pre-submit "looks right" confirm button. */
+  confirm: "send",
+  /** Transient chip during the outbox/submit flight. */
+  pending: "sending the ask.",
+  /** Stable chip after ack, before the gallery decides. */
+  requested: "the gallery has been asked.",
+  /** Failed chip — retry is explicit on tap. */
+  failed: "the ask did not land.",
+  /** Failed chip action. */
+  failedAction: "try again",
+  /** Confirmation chip after the gallery confirms. */
+  confirmed: "the gallery confirmed.",
+  /** Decline chip after the gallery declines. */
+  declined: "the gallery did not confirm.",
+  /** Placeholder inside the free-text gallery editor. */
+  editPlaceholder: "the gallery the work came from",
+  /** Label above the edit field. */
+  editLabel: "the gallery",
+  /** Push-subscribe offer — shown once under the "requested" chip. */
+  pushOffer: "tell me when the gallery answers.",
+  /** Push-subscribe accept button. Sentence case. */
+  pushAccept: "notify me",
+  /** Push-subscribe dismissal — acknowledges the quiet choice. */
+  pushDismiss: "not now",
+  /** Chip after the subscription stored. */
+  pushGranted: "the notification is on.",
+  /** Chip after the subscription was refused (permission or error). */
+  pushDeclined: "the notification stays off.",
+}) satisfies Readonly<Record<string, string>>;
+
+/**
+ * Outcome chapter narration corpus — the wall-caption lines played
+ * when the gallery answers a verification request. Two variants:
+ *
+ *   - confirmation: the work's emissive has just risen from dormant
+ *     to verified-rest. The line acknowledges the fact of
+ *     confirmation, not the collector's action. It is a museum
+ *     caption, not a reward.
+ *   - decline: the work remains dormant. The line states the fact
+ *     without apology or reassurance. The collector is allowed to
+ *     feel the absence of confirmation.
+ *
+ * Both pass the Museumsschild test — observational, sentence case,
+ * no imperative, no marketing, no evaluation.
+ */
+export const OUTCOME_NARRATION = Object.freeze({
+  confirmation: "the gallery confirms this work.",
+  decline: "the gallery did not confirm this work.",
+}) satisfies Readonly<Record<"confirmation" | "decline", string>>;
+
+/**
  * The one affordance string — shown once the chapter has entered the
  * `ready` beat. Intentionally lowercase + terse; sits at the bottom
  * of the surface like a museum footer.
@@ -81,6 +148,9 @@ export const ARIA_ANNOUNCE = Object.freeze({
   attribution: (galleryName: string): string => `Recorded from ${galleryName}.`,
   context: "A note about the artist.",
   "null-reflection": "The wall holds the work.",
+  confirmation: "The gallery confirms this work.",
+  decline: "The gallery did not confirm this work.",
+  pause: "",
   settle: "The chapter settles.",
   ready: "tap to return.",
 });

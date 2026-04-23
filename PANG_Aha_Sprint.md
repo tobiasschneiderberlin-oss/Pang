@@ -12,9 +12,11 @@
 > training-mean implementation. See `CLAUDE.md` § *Reach forward, not
 > back*.
 >
-> Last updated: 2026-04-21 — post-reset. Clock reset to iteration #0
-> (PWA reset) and iteration #1 (Intake Agent, Option B). All prior
-> iterations archived.
+> Last updated: 2026-04-23 — iteration #4 (verification request)
+> landed on `iter-4-verification-request`; table re-ordered. Prior
+> 2026-04-21 — post-reset. Clock reset to iteration #0 (PWA reset)
+> and iteration #1 (Intake Agent, Option B). All prior iterations
+> archived.
 
 ---
 
@@ -25,12 +27,12 @@
 | 0 | PWA reset | Infra | Landed | Spine — ability — repeatable gates |
 | 1 | Intake Agent | Ceiling | Landed | Camera → arrival in one tap; zero-tap review (P25) |
 | 2 | The Room v2 | Ceiling | **Landed (2026-04-23)** | Room as backdrop; OPFS rehydration; RAF perf budget; dev Tweaks |
-| 3 | Arrival as chapter v2 | Ceiling | Queued (next) | — |
-| 4 | Enrichment Agent v1 | Ceiling | Queued | — |
-| 5 | Documents as evidence v1 | Ceiling | Queued | — |
-| 6 | Deep Zoom collection-wide | Principle | Queued | — |
-| 7 | Passkeys auth | Ceiling | Queued | — |
-| 8 | Verification request flow | Ceiling | Queued | — |
+| 3 | Arrival as chapter v2 | Ceiling | **Landed (2026-04-23)** | Chapter as pure `tMs`-in state machine; slot-based DOM; conservation-identity testing |
+| 4 | Verification request | Ceiling | **Landed (2026-04-23)** | Optimistic flip + OPFS outbox + planReconcile pure core; outcome chapters reuse chapter primitive |
+| 5 | Enrichment Agent v1 | Ceiling | Queued (next) | — |
+| 6 | Documents as evidence v1 | Ceiling | Queued | — |
+| 7 | Deep Zoom collection-wide | Principle | Queued | — |
+| 8 | Passkeys auth | Ceiling | Queued | — |
 | 9 | PANG Voice v1 wire-up | Principle | Queued | — |
 | 10 | Narrative Agent — monthly reading v1 | Ceiling | Queued | — |
 | 11 | Spatial audio + haptics (opt-in) | Principle | Queued | — |
@@ -55,17 +57,17 @@ actually walks. The split is:
 | 1 | Intake Agent | **Laura's hands** | The aha moment. The full stack in one vertical. |
 | 2 | The Room v2 | **Laura's hands** | The spine's home surface. Presence, not just pixels. |
 | 3 | Arrival as chapter v2 | **Laura's hands** | Emotional peak of the spine. Hands-only signal. |
-| 4 | Enrichment Agent | Gates only | Backend + contributor UI. No collector-facing surface on its own. |
-| 5 | Documents as evidence v1 | **Laura's hands** | Tactile feel; gestures; register of the CoA surface. |
-| 6 | Deep Zoom collection-wide | Gates only | Primitive uplift on an existing surface. |
-| 7 | Passkeys auth | Gates only | One-gesture contract; platform-chrome flow; gates cover it. |
-| 8 | Verification request flow | **Laura's hands** | Voice + viral gesture + cross-channel share sheet. |
+| 4 | Verification request | **Laura's hands** | Voice + viral gesture + outcome chapter. |
+| 5 | Enrichment Agent | Gates only | Backend + contributor UI. No collector-facing surface on its own. |
+| 6 | Documents as evidence v1 | **Laura's hands** | Tactile feel; gestures; register of the CoA surface. |
+| 7 | Deep Zoom collection-wide | Gates only | Primitive uplift on an existing surface. |
+| 8 | Passkeys auth | Gates only | One-gesture contract; platform-chrome flow; gates cover it. |
 | 9 | PANG Voice v1 wire-up | Gates only | String audit + prompt seed; A4/A5 cover it. |
 | 10 | Narrative Agent — monthly reading | **Laura's hands** | Does the paragraph feel like the room, or like a chatbot? |
 | 11 | Spatial audio + haptics | Gates only | Opt-in, doctrine-constrained; gate ensures off-by-default. |
 | 12 | Verify-for-club (conditional) | **Laura's hands** if built | Signal-dependent; only if iterations 1–10 warrant it. |
 
-**The six hands-on iterations (1, 2, 3, 5, 8, 10) carry the spine.**
+**The six hands-on iterations (1, 2, 3, 4, 6, 10) carry the spine.**
 The other seven are gates-only because they either (a) plumb
 infrastructure with no experiential surface, (b) uplift an existing
 surface behind an already-shipped experience, or (c) are
@@ -1681,6 +1683,222 @@ and the Declarative Web Push subscription-at-request-time rule
 (`CLAUDE.md` § *The cannot-do list* — extends the existing "no
 push beyond gallery-originated verification outcomes" line with
 the subscription timing).
+
+---
+
+## Iteration #4 — findings (2026-04-23)
+
+Landed in one pass on the `iter-4-verification-request` branch.
+Bench-tested against the new fixture corpus; `npm run verify`
+green end-to-end (48/48 gates, 400/400 unit tests, 1/1 intake
+eval, 3/3 verification eval). Laura's device walk is
+outstanding — the surface is ready for hands, not yet on them.
+
+### What landed
+
+- **Seven-phase vertical: schema → outbox → store → submit → outcome
+  chapters → reconcile → eval.** Each phase has its own module under
+  `src/verification/**` (plus the store slice, the UI, the API
+  routes, and the eval harness). Every module is small, tested in
+  isolation, and re-exported through `src/verification/index.ts` so
+  consumers see one boundary.
+- **Optimistic-with-outbox state machine.** `useVerification` flips
+  the work to `"requesting"` on tap; the OPFS outbox writes
+  immediately; the POST fires; a 2xx ack flips the store to
+  `"requested"` and pops the outbox; a push-delivered
+  confirmation/decline flips to the terminal state. The outbox is
+  durable, the store is a render cache, and the two are reconciled
+  on every boot. The surface never pretends a request landed when
+  it hasn't.
+- **`planReconcile` as a pure planner over the drift matrix.** Four
+  shapes are handled: outbox + `"none"` → rehydrate; outbox +
+  `"confirmed"`/`"declined"` → pop the stale record; outbox +
+  `"failed"` → pop the orphan; `"requesting"` + no record →
+  downgrade to `"failed"` with `reason: "reconcile/lost"` so the
+  ask-affordance returns. The planner takes `(records, byWorkId)`
+  and returns a `ReconcilePlan` (records to remove, rehydrates,
+  downgrades, summary); the procedural wrapper applies the plan
+  and fires `verification.reconcile` with tallies. Every drift
+  cell is a test cell.
+- **`ChapterPlanBase` generalises the chapter primitive.** Iteration
+  #3's `ChapterPlan` grew a `variant` tag and a `ChapterPlanBase`
+  interface; `OutcomeChapterPlan` (variant `"confirmation"` or
+  `"decline"`) joins it. Driver functions (`activeBeats`,
+  `findBeatByKind`, `isReady`) now accept `ChapterPlanBase` — one
+  path, two shapes. `planConfirmationChapter` and
+  `planDeclineChapter` are pure functions of `(workId, decidedAt)`
+  and the voice corpus; no model in the loop. Confirmation carries
+  a `place` beat (the work settles into its wall slot); decline
+  omits it (the work stays dormant — nothing to re-place).
+- **GL side: `setWorkVerified`.** One imperative handle on
+  `RoomScene` flips the emissive warm bias on confirmation. Decline
+  is silent in GL — no negative animation, per the Voice doctrine
+  (decline is a state, not a punishment).
+- **`window.online` replay.** `installOnlineDrain()` wires a listener
+  that calls `drainOutbox()` on reconnection. Returns an unsubscribe
+  for hot-reload / tests. `reconcileVerification()` calls
+  `drainOutbox()` itself at the end, so reconnection and boot both
+  fire the drain without double-dispatch (the outbox's FIFO + per-
+  entry `nextAttemptAt` gate handles the idempotency).
+- **`verification.*` OTel catalogue.** `outbox.enqueue`,
+  `outbox.drain.{start,step,complete}`, `request.{submit,ack,fail}`,
+  `push.subscribe`, `confirmation.received`, `decline.received`,
+  `reconcile`. Every surface edge emits; every event carries
+  `requestId` where applicable; the reconcile event carries the
+  four drift tallies. The failure-mode paragraph above is literal
+  in telemetry now — a silent desync is impossible.
+- **`evals/verification/run.ts` — deterministic outcome-chapter
+  eval.** Three fixtures (confirm-typical, decline-typical,
+  confirm-late-decision) × eleven structural checks each: variant
+  tag, workId plumb-through, `decidedAt` plumb-through, narration
+  beat presence, narration text matches `OUTCOME_NARRATION` corpus,
+  narration `source: "voice-corpus"`, last beat is `ready`, settle
+  beat present, `totalMs` in the `[8 000, 18 000]` band, place
+  beat presence matches variant, monotonic `startMs`. Emits the
+  same `pang.eval.*` JSON shape iteration #1's intake eval uses,
+  so a future dashboard ingests both without translation. No
+  network, no env dependency; runs on every push via
+  `npm run check:eval`.
+- **`npm run verify` green.** 26 P + 22 A gates, 400 unit tests
+  (up from 388 after the iteration #3 tail), 1/1 intake eval
+  (mock mode), 3/3 verification eval. The verify chain is the
+  merge gate.
+
+### What we learned
+
+- **Pure-core + procedural-wrapper beats "mock OPFS in the test."**
+  First draft of `reconcileVerification` was monolithic: it listed
+  the outbox, read the store, applied the plan, fired the event —
+  all in one function. Tests had to mock `navigator.storage` to
+  cover the four drift shapes. Extracting `planReconcile(records,
+  byWorkId): ReconcilePlan` let the unit tests cover every cell of
+  the drift matrix without touching OPFS at all; the wrapper
+  became a five-line applier. Pattern codifies as: *if a function
+  has a testable core and an I/O shell, extract the core as a
+  pure function that returns a plan object; the shell applies it.*
+  Names it separately, tests it separately.
+- **`ChapterPlanBase` was the right generalisation, not a parallel
+  `OutcomePlan`.** Iteration #3 left a `ChapterPlan` with arrival-
+  specific fields (`workImageUrl`, `arrivalLine`, `sourceOutput`).
+  Iteration #4 needed confirmation/decline shapes with different
+  specific fields (`narrationLine`, `decidedAt`) but the same beat
+  mechanics. A parallel `OutcomePlan` type would have forked the
+  driver (`activeBeats`, `findBeatByKind`, `isReady`) and doubled
+  the maintenance surface. Lifting the common shape into
+  `ChapterPlanBase` and making `ChapterPlan` / `OutcomeChapterPlan`
+  both extend it kept the driver at one code path. Discriminated
+  union by `variant` is the right carrier when the shapes share
+  mechanics but not semantics.
+- **Bash default glob matches one directory level only.** The
+  `npm test` script used `src/**/*.test.ts` in bash default mode
+  (no `shopt -s globstar`); it quietly matched `src/*/test.ts` +
+  `src/*/*/test.ts` and *missed* `src/ai/chapter/**/*.test.ts` and
+  `app/api/.../route.test.ts`. Caught because the test count stayed
+  at 192 after adding twelve chapter tests for the outcome
+  variants — it should have been 204+. Fixed by switching to
+  `$(find src app -name '*.test.ts' -not -path '*/node_modules/*')`.
+  Count jumped to 389/389 green, and iteration #4's own tests
+  brought it to 400. Lesson: *if a test-runner script uses a glob,
+  prove the expansion returns what you think it does before
+  trusting the green.* A test count that stays flat after new
+  tests land is a script bug, not a no-op test.
+- **`three/webgpu` touches `self` at module load.** `scene.ts`
+  imports the unified `three/webgpu` entry; Node test runners
+  crash trying to import it because `self` is undefined at module
+  scope. `setWorkVerified` (and `setWorkArrivalFactor` from
+  iteration #3) therefore rely on e2e coverage rather than unit
+  tests — the GL path can only be exercised in a real browser.
+  Noted; the compensating coverage is the eval (which tests the
+  *plan*, not the GL write) + the Playwright walk.
+- **Two sources of truth is honest; pretending it's one is
+  dangerous.** A first sketch tried to make the outbox a derived
+  view of the store. That's wrong: the store is the render cache
+  and the outbox is the wire queue, and they can drift after a
+  crash between an outbox write and a store flip, or between an
+  ack and an outbox pop. The right answer is to name both as
+  canonical and reconcile on boot with tallies. The reconcile
+  *is* the single-source-of-truth discipline; the tallies are
+  how drift becomes visible rather than cosmic.
+- **Subscription-at-request-time is the doctrine move.** The
+  Declarative Web Push subscription ask fires on the submission-
+  success tick, never on mount, never on landing. A denied
+  permission is a first-class outcome; the request still
+  submits. This is the literal reading of `CLAUDE.md` §
+  *cannot-do list* ("no push notifications beyond gallery-
+  originated verification outcomes the collector explicitly
+  subscribed to") — the subscription *is* the explicit
+  consent, offered only at the moment the collector asked for
+  the outcome.
+- **Reconcile summary in telemetry is worth more than reconcile
+  correctness in tests.** The four drift counters (`orphanOutboxEntries`,
+  `orphanStoreEntries`, `resubmitted`, `downgraded`) turn an
+  invisible class of bug (*the collector thinks they asked but no
+  request ever left the device*) into a visible one. If
+  `downgraded > 0` ever climbs in telemetry, we have a write-order
+  regression — and we have it *before* Laura notices.
+
+### Codify / iterate / drop
+
+- **Codify:**
+  - Pure-core + procedural-wrapper as the pattern for I/O-heavy
+    state transitions → `PANG_Primitives_2026.md` § *State*
+    (extends iteration #3's "`tMs` in, active-out" rule with the
+    analogous "records + store in, plan out" rule for reconcile-
+    shaped code).
+  - `ChapterPlanBase` + variant-tagged `ChapterPlan` /
+    `OutcomeChapterPlan` as the discriminated-union pattern for
+    surfaces that share beat mechanics but differ in domain →
+    `PANG_AI_Era_2026.md` § *Chapter primitive* (extends the
+    iteration #3 subsection with the generalisation).
+  - Outbox + store as two canonical truths with boot-time
+    reconcile + drift tallies as the observability contract →
+    `PANG_Architecture_2026.md` § *Data primitives* (the request
+    outbox primitive) and § *Observability* (the
+    `verification.reconcile` event with its four tallies).
+  - "Tap is the confirmation" for one-tap gestures where the
+    affordance copy is the intent declaration →
+    `PANG_Primitives_2026.md` § *Chrome*.
+  - Declarative Web Push subscription fires at
+    request-submission-success only → `CLAUDE.md` §
+    *The cannot-do list* (extends the existing push line with
+    subscription timing).
+  - Test-script globs must be proven to expand: in CI, use
+    `find` for recursive patterns, not bash default `**`. Noted
+    in `package.json` script comment and in
+    `PANG_Gates.md` § *Test infrastructure* (one line).
+- **Iterate once:** Laura's device walk. The device walk confirms
+  (a) the ask-affordance reads as a verb, not a CTA, in a
+  phone's focused-work panel; (b) the outcome chapters land at
+  the right timing band — neither rushed on confirmation nor
+  dragging on decline; (c) the "requesting" state chip is
+  legible as a state, not as an error; (d) a reconcile after
+  airplane mode does what the tallies say it does. One pass,
+  outcome is codify or drop.
+- **Drop:** nothing. The ceiling for iteration #4 is what
+  iteration #4 delivered.
+
+### What this tightens
+
+- Adds one subsection to `PANG_Primitives_2026.md` for the
+  pure-core + procedural-wrapper pattern.
+- Extends the iteration-#3 chapter subsection in
+  `PANG_AI_Era_2026.md` with the `ChapterPlanBase` generalisation
+  and the outcome variants.
+- Adds the request-outbox primitive and the
+  `verification.reconcile` event to `PANG_Architecture_2026.md`
+  § *Data primitives* / § *Observability*.
+- Extends the `CLAUDE.md` push-cannot-do line with subscription
+  timing.
+- Adds one line to `PANG_Gates.md` on test-script glob discipline.
+
+No new gates. No spine moves beyond what the iteration brief
+declared. The wall holds; the surface walked forward inside it.
+
+Static checks: `npm run verify` clean — typecheck, lint,
+`check:manifest`, `check:strings`, `check:gates` (48/48),
+`check:eval` (intake 1/1 at 100 %, verification 3/3 at 100 %),
+`node --test` (400/400 across the repo; 99 verification- and
+outcome-chapter-specific).
 
 ---
 

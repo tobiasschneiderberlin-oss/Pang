@@ -17,11 +17,11 @@
  */
 
 import { beatEnvelope, beatProgress } from "./envelope";
-import type { ActiveBeat, Beat, ChapterPlan } from "./types";
+import type { ActiveBeat, Beat, ChapterPlanBase } from "./types";
 
 /** Return the beats visible at `tMs`, paired with their envelope. */
 export function activeBeats(
-  plan: ChapterPlan,
+  plan: ChapterPlanBase,
   tMs: number,
 ): readonly ActiveBeat[] {
   const out: ActiveBeat[] = [];
@@ -44,7 +44,7 @@ export function activeBeats(
 
 /** Look up a single beat by kind. Returns the first match, or null. */
 export function findBeatByKind(
-  plan: ChapterPlan,
+  plan: ChapterPlanBase,
   kind: Beat["kind"],
 ): Beat | null {
   for (const b of plan.beats) if (b.kind === kind) return b;
@@ -52,7 +52,7 @@ export function findBeatByKind(
 }
 
 /** Has the chapter reached its terminal ready beat? */
-export function isReady(plan: ChapterPlan, tMs: number): boolean {
+export function isReady(plan: ChapterPlanBase, tMs: number): boolean {
   return tMs >= plan.readyAtMs;
 }
 
@@ -119,5 +119,12 @@ export function ariaLineForActive(
     case "camera":
     case "pose":
       return null;
+    default: {
+      // Exhaustiveness guard — any new BeatPayload kind must land
+      // here explicitly.
+      const _never: never = p;
+      void _never;
+      return null;
+    }
   }
 }

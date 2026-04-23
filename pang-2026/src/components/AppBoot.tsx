@@ -24,6 +24,15 @@ import {
   hydrateWorks,
   installWorksPersistence,
 } from "@/stores/works.persist";
+import { useVerification } from "@/stores/verification";
+import {
+  hydrateVerification,
+  installVerificationPersistence,
+} from "@/stores/verification.persist";
+import {
+  installOnlineDrain,
+  reconcileVerification,
+} from "@/verification/reconcile";
 import { registerServiceWorker } from "@/sw/register";
 import { detectCapabilityTier } from "@/auth/tier";
 import {
@@ -50,17 +59,48 @@ export function AppBoot(): null {
     // subscription installs so we don't over-write with an empty
     // snapshot. After that, the subscription keeps OPFS in sync.
     let unsubscribeWorks: (() => void) | null = null;
+    let unsubscribeVerification: (() => void) | null = null;
+    let unsubscribeOnline: (() => void) | null = null;
     let cancelled = false;
     void (async () => {
       try {
         await bootstrapOpfs();
         if (cancelled) return;
-        const hydrated = await hydrateWorks();
+        // Works + verification hydrate in parallel — the two stores
+        // are independent slices of OPFS.
+        const [hydratedWorks, hydratedVerification] = await Promise.all([
+          hydrateWorks(),
+          hydrateVerification(),
+        ]);
         if (cancelled) return;
-        for (const entry of hydrated) {
+        for (const entry of hydratedWorks) {
           useWorks.getState().addEntry(entry);
         }
+        // Rehydrate verification state entry-by-entry so the store's
+        // transition guards stay honest. `replaceState` accepts any
+        // shape the parser returns.
+        for (const [workId, state] of Object.entries(
+          hydratedVerification.entries,
+        )) {
+          useVerification.getState().replaceState(workId, state);
+        }
+        for (const [workId, decision] of Object.entries(
+          hydratedVerification.push,
+        )) {
+          useVerification.getState().setPushDecision(workId, decision);
+        }
         unsubscribeWorks = installWorksPersistence();
+        unsubscribeVerification = installVerificationPersistence();
+
+        // Reconcile the verification slice against the durable
+        // outbox. Any drift (orphan outbox records, lost optimistic
+        // flips) is resolved and logged via `verification.reconcile`.
+        // Reconcile kicks `drainOutbox` at the end, so any due
+        // records replay immediately.
+        await reconcileVerification();
+        // Replay on `online` transitions so an offline burst of
+        // requests flushes the moment connectivity returns.
+        unsubscribeOnline = installOnlineDrain();
       } catch (err) {
         reportFailure({
           errorKey: "persist/bootstrap",
@@ -78,6 +118,8 @@ export function AppBoot(): null {
     return () => {
       cancelled = true;
       unsubscribeWorks?.();
+      unsubscribeVerification?.();
+      unsubscribeOnline?.();
       unbindPrefs();
     };
   }, []);

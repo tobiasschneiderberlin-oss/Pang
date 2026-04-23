@@ -132,6 +132,11 @@ async function main(): Promise<void> {
     const src = await readFile(join(ROOT, f), "utf8");
     if (REGISTRY_FILES.has(f)) continue;
     const isAgent = f.startsWith("src/agents/") || f.startsWith("src/lib/agents/");
+    // Test files carry ban-list terms as deliberate fixtures — a
+    // verification-request test asserts that `"awesome"` is rejected
+    // at the boundary, which requires writing "awesome" in the
+    // fixture. The audit is about UI copy, not test fixtures.
+    const isTestFile = f.endsWith(".test.ts") || f.endsWith(".test.tsx");
     const literals = extractStringLiterals(src);
 
     for (const { value, line } of literals) {
@@ -146,14 +151,16 @@ async function main(): Promise<void> {
           snippet: value.slice(0, 60),
         });
       }
-      for (const term of MARKETING) {
-        if (lower.includes(term)) {
-          violations.push({
-            file: f,
-            line,
-            rule: `marketing term "${term.trim()}"`,
-            snippet: value.slice(0, 60),
-          });
+      if (!isTestFile) {
+        for (const term of MARKETING) {
+          if (lower.includes(term)) {
+            violations.push({
+              file: f,
+              line,
+              rule: `marketing term "${term.trim()}"`,
+              snippet: value.slice(0, 60),
+            });
+          }
         }
       }
       if (isAgent) {

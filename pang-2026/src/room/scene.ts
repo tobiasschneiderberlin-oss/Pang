@@ -93,6 +93,21 @@ export interface RoomScene {
    * camera, and motion" made literal.
    */
   setWorkArrivalFactor(id: string, t: number): void;
+  /**
+   * Mark a work as verified (or revert). On `verified=true` the work's
+   * resting emissive rises to `VERIFIED_EMISSIVE_SCALAR` immediately;
+   * on `verified=false` it falls to zero (the dormant rest). The
+   * *arrival factor* path (`setWorkArrivalFactor`) continues to scale
+   * the emissive while a chapter is in flight — this method sets the
+   * resting target the chapter lands on.
+   *
+   * The confirmation chapter drives the factor from 0 → 1 over its
+   * narration beat; a companion caller flips `setWorkVerified(id, true)`
+   * at the tick the chapter reaches `settle`, so the work stays warm
+   * after the chapter unmounts. Safe to call regardless of whether a
+   * chapter is in flight — no allocations.
+   */
+  setWorkVerified(id: string, verified: boolean): void;
   /** Dispose everything — geometries, materials, textures. */
   dispose(): void;
 }
@@ -219,6 +234,23 @@ export function buildRoomScene(
     }
   }
 
+  function setWorkVerified(id: string, verified: boolean): void {
+    const entry = works.get(id);
+    if (!entry) return;
+    entry.verified = verified;
+    // Flip the resting emissive synchronously. The confirmation
+    // chapter's `setWorkArrivalFactor(… , 1)` landed us at verified
+    // warmth a tick earlier; this just pins the rest state so the
+    // work keeps breathing after the chapter unmounts.
+    if (verified) {
+      entry.material.emissive
+        .copy(arrivalEmissiveWarm)
+        .multiplyScalar(VERIFIED_EMISSIVE_SCALAR);
+    } else {
+      entry.material.emissive.setHex(0x000000);
+    }
+  }
+
   function dispose(): void {
     for (const entry of works.values()) disposeWorkEntry(entry);
     works.clear();
@@ -243,6 +275,7 @@ export function buildRoomScene(
     getWorkMeshes,
     getWorkCentroid,
     setWorkArrivalFactor,
+    setWorkVerified,
     dispose,
   };
 }
