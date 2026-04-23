@@ -102,6 +102,11 @@ export default defineConfig({
           stdout: "ignore",
           stderr: "pipe",
           env: {
+            // Expose `window.__PANG.useWorks` so specs can seed store
+            // state without driving the scanner UI. Scoped to the e2e
+            // webServer; prod bundles with NEXT_PUBLIC_PANG_E2E unset
+            // ship no seed hook.
+            NEXT_PUBLIC_PANG_E2E: "1",
             ...(process.env["NEXT_PUBLIC_SUPABASE_HOST"]
               ? {
                   NEXT_PUBLIC_SUPABASE_HOST:

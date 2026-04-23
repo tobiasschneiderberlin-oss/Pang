@@ -41,6 +41,8 @@ import { opfsRead, opfsWrite } from "@/lib/storage/bootstrap";
 import {
   useWorks,
   type CollectionEntry,
+  type DocumentMime,
+  type DocumentRecord,
   type VerificationHint,
 } from "@/stores/works";
 import { ArtworkSnapshotSchema } from "@/verification/schema";
@@ -64,6 +66,7 @@ interface PersistedEntry {
   readonly status: CollectionEntry["status"];
   readonly size: readonly [number, number];
   readonly verificationHint?: VerificationHint;
+  readonly documents?: readonly DocumentRecord[];
 }
 
 /** Project an in-memory entry to its durable shape. Pure; testable. */
@@ -76,9 +79,12 @@ export function projectDurable(entry: CollectionEntry): PersistedEntry {
   // `exactOptionalPropertyTypes`: only attach the key when we have a
   // real hint — a `verificationHint: undefined` field would differ
   // structurally and trip the strict type checker.
-  return entry.verificationHint
+  const withHint = entry.verificationHint
     ? { ...base, verificationHint: entry.verificationHint }
     : base;
+  return entry.documents && entry.documents.length > 0
+    ? { ...withHint, documents: entry.documents }
+    : withHint;
 }
 
 /** Inverse projection — pure; validates shape and drops unknown fields. */
@@ -102,10 +108,70 @@ export function parseDurable(raw: unknown): PersistedEntry | null {
   // have no hint and continue to hydrate without one. The submit
   // affordance is disabled for those entries.
   const hintRaw = r["verificationHint"];
-  if (hintRaw === undefined) return base;
-  const hint = parseVerificationHint(hintRaw);
-  if (!hint) return base;
-  return { ...base, verificationHint: hint };
+  const withHint =
+    hintRaw !== undefined
+      ? (() => {
+          const hint = parseVerificationHint(hintRaw);
+          return hint ? { ...base, verificationHint: hint } : base;
+        })()
+      : base;
+
+  // Documents are optional and additive — entries persisted before
+  // iteration #6 simply have none. A malformed `documents` field
+  // drops silently so the rest of the entry still hydrates.
+  const docsRaw = r["documents"];
+  if (docsRaw === undefined) return withHint;
+  const docs = parseDocuments(docsRaw);
+  if (docs.length === 0) return withHint;
+  return { ...withHint, documents: docs };
+}
+
+function parseDocuments(raw: unknown): DocumentRecord[] {
+  if (!Array.isArray(raw)) return [];
+  const out: DocumentRecord[] = [];
+  for (const item of raw) {
+    const parsed = parseDocument(item);
+    if (parsed) out.push(parsed);
+  }
+  return out;
+}
+
+function parseDocument(raw: unknown): DocumentRecord | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const type = r["type"];
+  const fileRef = r["fileRef"];
+  const mime = r["mime"];
+  const extractedFields = r["extractedFields"];
+  if (type !== "coa" && type !== "invoice" && type !== "condition_report") {
+    return null;
+  }
+  if (typeof fileRef !== "string" || fileRef.length === 0) return null;
+  if (
+    mime !== "application/pdf" &&
+    mime !== "image/png" &&
+    mime !== "image/jpeg"
+  ) {
+    return null;
+  }
+  const fields = parseExtractedFields(extractedFields);
+  return {
+    type,
+    fileRef,
+    mime: mime as DocumentMime,
+    extractedFields: fields,
+  };
+}
+
+function parseExtractedFields(raw: unknown): Readonly<Record<string, string>> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (typeof v === "string" && v.length > 0 && v.length <= 240) {
+      out[k] = v;
+    }
+  }
+  return out;
 }
 
 function parseVerificationHint(raw: unknown): VerificationHint | null {
@@ -257,10 +323,13 @@ export async function hydrateWorks(): Promise<CollectionEntry[]> {
       status: p.status,
       size: p.size,
     } as const;
+    const withHint = p.verificationHint
+      ? { ...base, verificationHint: p.verificationHint }
+      : base;
     out.push(
-      p.verificationHint
-        ? { ...base, verificationHint: p.verificationHint }
-        : base,
+      p.documents && p.documents.length > 0
+        ? { ...withHint, documents: p.documents }
+        : withHint,
     );
   }
   return out;

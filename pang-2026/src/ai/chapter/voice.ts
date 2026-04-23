@@ -127,6 +127,42 @@ export const OUTCOME_NARRATION = Object.freeze({
 export const DISMISS_AFFORDANCE = "tap to return";
 
 /**
+ * Documents-chapter closing line — rendered on the `context` beat
+ * at the end of the procession. Sentence case. Museumsschild. Frames
+ * the documents as evidence, not chrome; not an instruction to read
+ * them, not a reassurance about their presence.
+ *
+ * Codified iteration #6: the spine's claim that "documents exist
+ * as evidence" gets a terminal wall-text. One line; no pair; no
+ * rotation yet (per doctrine, rotation lands with a second line's
+ * purpose, not the first line's opportunity).
+ */
+export const DOCUMENTS_CONTEXT_LINE = "papers of record.";
+
+/**
+ * Documents-chapter viewer strings — shown inside the canvas
+ * viewer overlay. Each passes the Museumsschild test; none is
+ * marketing, none evaluative.
+ *
+ * `missingBytes` is the honest state when a document's OPFS bytes
+ * are unavailable (eviction, migration loss). Rendered muji inside
+ * the viewer; the chapter keeps playing around it.
+ */
+export const DOCUMENTS_VIEWER = Object.freeze({
+  /** Muji fallback when the bytes are gone. */
+  missingBytes: "this document is no longer available.",
+  /** Muji footer when a multi-page document is truncated to page 1. */
+  morePages: (count: number): string =>
+    count === 1 ? "one more page." : `${count} more pages.`,
+}) satisfies Readonly<{
+  missingBytes: string;
+  morePages: (count: number) => string;
+}>;
+
+/** Screen-reader label for the documents chapter + overlay. */
+export const DOCUMENTS_LABEL = "documents";
+
+/**
  * The screen-reader label for the arrival surface. Landmarks that
  * name the place, not the action. `aria-label` on the `<main>`.
  */

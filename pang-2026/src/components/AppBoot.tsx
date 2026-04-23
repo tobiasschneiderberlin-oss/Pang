@@ -48,6 +48,18 @@ export function AppBoot(): null {
     // shows up in Vercel function logs. Idempotent.
     installGlobalErrorBeacons();
 
+    // E2E seed hook. Behind the `NEXT_PUBLIC_PANG_E2E=1` env var so
+    // the prod bundle ships no window surface. Lets Playwright seed
+    // works + focus + viewer state without driving the scanner end-
+    // to-end (the fake media stream is not a reliable source for
+    // full-stack intake in CI). Exposure is the minimal API — the
+    // store instance itself, no setters — because Zustand stores
+    // carry their own `.getState()` / `.setState()` already.
+    if (process.env["NEXT_PUBLIC_PANG_E2E"] === "1") {
+      (window as unknown as { __PANG?: { useWorks: typeof useWorks } }).__PANG =
+        { useWorks };
+    }
+
     const unbindPrefs = bindPreferencesToRoot();
 
     // Fire-and-observe. Each step is idempotent and logs its own

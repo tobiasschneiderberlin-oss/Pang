@@ -312,6 +312,8 @@ describe("ariaLineForActive", () => {
         kind: "coa",
         label: "certificate of authenticity",
         fields: [],
+        fileRef: null,
+        mime: null,
       },
     });
     assert.equal(

@@ -18,6 +18,10 @@ const config = [
       "out/**",
       "node_modules/**",
       "public/sw.js", // hand-authored worker; CSP forbids imports
+      // Playwright artifacts: bundled UI trace viewer + minified
+      // fixtures. Not source we author; lint rules don't apply.
+      "playwright-report/**",
+      "test-results/**",
     ],
   },
   {

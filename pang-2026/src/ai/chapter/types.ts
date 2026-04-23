@@ -100,6 +100,13 @@ export const BEAT_KIND_ORDER: Readonly<Record<BeatKind, number>> = Object.freeze
  * condition_report) and `extractedFields`, projected into a narrow
  * render-time shape so the UI doesn't re-derive `label` on every
  * frame.
+ *
+ * `fileRef` (added iteration #6) points at the OPFS-resident document
+ * bytes; null when the document surfaced in the intake without a file
+ * (field-only intake — the signature description survived the Q-LLM
+ * pass but the scan didn't). A null `fileRef` makes the artifact
+ * card tappable-as-no-op; the viewer never opens, and the chapter
+ * does not render a broken-image glyph.
  */
 export interface ChapterArtifact {
   /** Stable id (derived from the document's `fileRef` — see `plan.ts`). */
@@ -112,6 +119,16 @@ export interface ChapterArtifact {
    * renders at most three — the spine is the work, not the paperwork.
    */
   readonly fields: ReadonlyArray<readonly [string, string]>;
+  /**
+   * OPFS path to the document bytes, or null when no scan exists.
+   * Drives whether the artifact card opens a `DocumentViewer` on tap.
+   */
+  readonly fileRef: string | null;
+  /**
+   * MIME of the document bytes. `application/pdf` when `fileRef`
+   * targets a PDF, image MIMEs otherwise. Null when `fileRef` is null.
+   */
+  readonly mime: "application/pdf" | "image/png" | "image/jpeg" | null;
 }
 
 /** Discriminated union of per-beat payloads. Narrow at render time. */
@@ -202,6 +219,38 @@ export interface OutcomeChapterPlan extends ChapterPlanBase {
   readonly narrationLine: string;
   /** ISO-8601 timestamp of the gallery's decision. */
   readonly decidedAt: string;
+}
+
+/**
+ * Documents chapter — plays when the collector focuses a work that
+ * carries documents (CoA, invoice, condition report). Iteration #6's
+ * render-discipline moment: the arrival chapter primitive (iter #3)
+ * and the outcome chapter (iter #4) now extend to *evidence*.
+ *
+ * Shape:
+ *   - `settle` (~600 ms) — opening breath before the procession.
+ *   - `artifact/0..n-1` — staggered reveal, one per document. Each
+ *     beat carries the document's label + extracted fields + OPFS
+ *     ref; the renderer maps this to a tactile card.
+ *   - `context` (~2.5 s) — a closing voice-corpus line that frames
+ *     the documents ("papers of record.") as evidence, not chrome.
+ *   - `ready` — terminal; the chapter waits. No dismiss affordance:
+ *     the collector's gesture is the dismiss.
+ *
+ * Budget: `totalMs` in [6000, 12000], scaling with document count.
+ *
+ * Zero-tap (P25): the chapter plays on focus, not on a separate
+ * "view documents" tap. The cards are evidence sitting beside the
+ * work, not a hidden drawer.
+ */
+export interface DocumentsChapterPlan extends ChapterPlanBase {
+  readonly variant: "documents";
+  /** Ordered by beat index; mirrors the `artifact/i` beats' payloads. */
+  readonly artifacts: readonly ChapterArtifact[];
+  /** The voice-corpus closing line rendered during the context beat. */
+  readonly contextLine: string;
+  /** ISO-8601 timestamp of the focus that kicked off the chapter. */
+  readonly focusedAt: string;
 }
 
 /** Structural summary of the planned chapter. Pure data. */

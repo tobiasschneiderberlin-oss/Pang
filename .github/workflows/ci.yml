@@ -97,6 +97,16 @@ jobs:
       # Serve the prod build via `next start` for parity with Vercel.
       # Playwright's webServer respects CI=1 and runs `npm run start`.
       CI: "1"
+      # `NEXT_PUBLIC_*` env vars are inlined by Next.js at **build**
+      # time, not read at runtime. The webServer env in
+      # `playwright.config.ts` is enough for local `next dev` (evaluates
+      # env live), but CI pre-builds with `npm run build` and then
+      # `next start` serves a static bundle — so the flag has to be
+      # present during the Build step below to compile the E2E seed
+      # hook (`window.__PANG.useWorks`, installed by `AppBoot`) into
+      # the production bundle. Without it, the hook is dead code and
+      # Playwright hangs waiting for `window.__PANG`.
+      NEXT_PUBLIC_PANG_E2E: "1"
     defaults:
       run:
         working-directory: pang-2026

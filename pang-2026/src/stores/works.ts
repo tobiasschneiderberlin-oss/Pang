@@ -32,6 +32,31 @@ import type { IntakeOutput } from "@/ai/tools/artwork";
 import type { ArtworkSnapshot } from "@/verification/schema";
 
 /**
+ * A durable document attached to a work. Iteration #1's intake extracts
+ * the structured fields via a quarantined model + the rectified PDF /
+ * image bytes land at `fileRef` in OPFS under `/documents/`. Rendering
+ * lives in iteration #6's `DocumentsChapter` + `DocumentViewer`; the
+ * store only holds the tagged references. `mime` is narrower than the
+ * wire schema so a viewer can pick the right loader without a hop.
+ */
+export type DocumentKind = "coa" | "invoice" | "condition_report";
+
+export type DocumentMime = "application/pdf" | "image/png" | "image/jpeg";
+
+export interface DocumentRecord {
+  readonly type: DocumentKind;
+  readonly fileRef: string;
+  readonly mime: DocumentMime;
+  /**
+   * Q-LLM extracted fields. Plain strings — the untrusted brand lives
+   * on the intake record one level up; these are the sanitised values
+   * that survive the quarantine. Ordered; the renderer reads the top
+   * three into the artifact card, not a table.
+   */
+  readonly extractedFields: Readonly<Record<string, string>>;
+}
+
+/**
  * A domain entry — what the collector *has*. Image is a URL (blob:,
  * OPFS-derived, or remote). Size is the physical wall footprint in
  * metres; the scene draws the work at that scale so depth reads
@@ -80,6 +105,16 @@ export interface CollectionEntry {
    * production code path produces one today).
    */
   readonly verificationHint?: VerificationHint;
+  /**
+   * Documents attached to the work — the CoA, invoice, condition
+   * report. Populated by `entryFromIntake` from the intake's
+   * `IntakeOutput.documents`, capped at 8 (A3 / `DocumentSchema.max`).
+   * Optional for backward compat with iteration #3 entries and for
+   * entries whose intake surfaced no documents. The documents chapter
+   * (iteration #6) renders nothing when the list is empty or absent —
+   * the spine is the work, not the paperwork.
+   */
+  readonly documents?: readonly DocumentRecord[];
 }
 
 interface WorksStore {
@@ -95,12 +130,27 @@ interface WorksStore {
    * wall overview, not to the last-focused work.
    */
   readonly focusedId: string | null;
+  /**
+   * The document currently open in the `DocumentViewer` overlay, or
+   * `null` when no viewer is active. Carries the composite
+   * `${workId}:${fileRef}` so the viewer component can hydrate from
+   * the works store without a second selector hop. When non-null,
+   * the Room canvas's RAF loop pauses (see `TheRoomCanvas`'s gate on
+   * this selector) — the viewer owns the screen, and there is no
+   * point spending GPU on a scene nobody can see.
+   *
+   * Persistence: in-memory. A refresh returns to the Room, not to
+   * the viewer — the document is evidence, not the surface.
+   */
+  readonly activeViewer: string | null;
   /** Idempotent on `id` — adding an existing id replaces. */
   addEntry(entry: CollectionEntry): void;
   /** No-op if the id is not present. Clears focus if the removed id was focused. */
   removeEntry(id: string): void;
   /** Set or clear the focused work. */
   setFocusedId(id: string | null): void;
+  /** Set or clear the active document-viewer overlay. */
+  setActiveViewer(composite: string | null): void;
   /**
    * Flip an entry's `status`. The verification outcome chapter writes
    * `"verified"` here when the gallery confirms; no-op if the id is
@@ -126,6 +176,7 @@ export const useWorks = create<WorksStore>()(
   subscribeWithSelector((set) => ({
     entries: [],
     focusedId: null,
+    activeViewer: null,
     addEntry: (entry) =>
       set((state) => {
         const filtered = state.entries.filter((e) => e.id !== entry.id);
@@ -135,8 +186,24 @@ export const useWorks = create<WorksStore>()(
       set((state) => ({
         entries: state.entries.filter((e) => e.id !== id),
         focusedId: state.focusedId === id ? null : state.focusedId,
+        // A removed work's viewer (if any) closes with it — the
+        // composite key prefixes `workId:`, so the match is exact.
+        activeViewer:
+          state.activeViewer && state.activeViewer.startsWith(`${id}:`)
+            ? null
+            : state.activeViewer,
       })),
-    setFocusedId: (id) => set({ focusedId: id }),
+    setFocusedId: (id) =>
+      set((state) => ({
+        focusedId: id,
+        // A focus change dismisses any open viewer; the viewer is
+        // always tied to the currently-focused work and survives a
+        // same-work re-focus only (no-op). This mirrors the iter #4
+        // contract: focus is the spine of the session.
+        activeViewer:
+          id !== state.focusedId ? null : state.activeViewer,
+      })),
+    setActiveViewer: (composite) => set({ activeViewer: composite }),
     setStatus: (id, status) =>
       set((state) => ({
         entries: state.entries.map((e) =>
@@ -153,7 +220,8 @@ export const useWorks = create<WorksStore>()(
           };
         }),
       })),
-    clear: () => set({ entries: [], focusedId: null }),
+    clear: () =>
+      set({ entries: [], focusedId: null, activeViewer: null }),
   })),
 );
 
@@ -222,13 +290,51 @@ export function entryFromIntake(
     photoRef: opts.photoRef ?? `works/${id}.png`,
     capturedAt: opts.capturedAt ?? new Date().toISOString(),
   };
-  return {
+  const documents = output.documents.map((doc) => projectDocument(doc));
+  const base = {
     id,
     imageUrl: blobUrl,
-    status: "unverified",
+    status: "unverified" as const,
     size,
     verificationHint: hint,
   };
+  // `exactOptionalPropertyTypes`: only attach `documents` when the
+  // intake produced at least one — a `documents: []` field differs
+  // structurally from an absent field and ripples into persistence
+  // diffs for no user-visible gain.
+  return documents.length > 0 ? { ...base, documents } : base;
+}
+
+/**
+ * Project an intake document into the store's `DocumentRecord`. The
+ * intake schema doesn't carry `mime` on the extracted side (it lives
+ * only on the request metadata before the Q-LLM pass), so iteration
+ * #6 infers it from the `fileRef` extension — deterministic, no I/O
+ * required, and the intake endpoint owns the extension contract
+ * (`/documents/<id>.pdf|.png|.jpg`).
+ */
+function projectDocument(
+  doc: IntakeOutput["documents"][number],
+): DocumentRecord {
+  return {
+    type: doc.type,
+    fileRef: doc.fileRef,
+    mime: inferMime(doc.fileRef),
+    extractedFields: { ...doc.extractedFields },
+  };
+}
+
+/**
+ * Map a document's `fileRef` suffix to its MIME. Unknown suffixes
+ * fall back to `application/pdf` — the viewer's PDF path handles
+ * a corrupt file honestly (muji "not available") whereas the image
+ * path silently renders a broken-image glyph; honesty beats silence.
+ */
+function inferMime(fileRef: string): DocumentMime {
+  const lower = fileRef.toLowerCase();
+  if (lower.endsWith(".png")) return "image/png";
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+  return "application/pdf";
 }
 
 /**
