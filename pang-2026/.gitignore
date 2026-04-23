@@ -48,3 +48,11 @@ yarn-error.log*
 
 # opfs scratch (should never be checked in, but be safe)
 .opfs-cache/
+
+# next --experimental-https self-signed certs (dev:device)
+/certificates/
+
+# playwright (e2e — Tier 2)
+/test-results/
+/playwright-report/
+/playwright/.cache/

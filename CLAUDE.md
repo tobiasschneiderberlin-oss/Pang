@@ -11,12 +11,18 @@
 > Nine docs. No more. Everything else is in `_archive/` because it was
 > distracting us from building the app.
 >
-> Last updated: 2026-04-22 (second pass) — gates extended to 48
-> (P25 — zero-tap review — codified from iteration #1; see
-> `PANG_Gates.md` and `.pang/gates.yaml`). Earlier the same day:
-> gates extended to 47 (P23 a11y floor, A21 retry policy, A22
-> eval corpus, A23 cost cap); new § 6 on how guardrails and agile
-> iteration coexist.
+> Last updated: 2026-04-23 — kickoff brief gains a fifth declaration
+> (*failure mode*, § 9), codified after iteration #1's Pixel-10
+> scanner regression made try-and-error debugging visible as the
+> real bottleneck. Testing/feedback infrastructure (`/api/telemetry`
+> beacon, Playwright e2e on every push, A22 eval corpus with mock
+> mode in CI + live mode on dispatch, `npm run dev:device` for
+> real-device HMR over LAN) ships alongside. Previously, 2026-04-22
+> (second pass): gates extended to 48 (P25 — zero-tap review —
+> codified from iteration #1; see `PANG_Gates.md` and
+> `.pang/gates.yaml`). Earlier 04-22: gates extended to 47 (P23
+> a11y floor, A21 retry policy, A22 eval corpus, A23 cost cap);
+> new § 6 on how guardrails and agile iteration coexist.
 
 ---
 
@@ -172,10 +178,10 @@ neither.
    2026 code you can imagine.
 
 2. **The kickoff brief is the freedom-and-constraint joint.**
-   Scope / Stack / Reference / Canvas commit the iteration to the
-   2026 surface. Test criteria + out-of-scope + outcome gate let it
-   iterate without re-planning. Within those rails, the
-   implementation is yours to find.
+   Scope / Stack / Reference / Canvas / Failure-mode commit the
+   iteration to the 2026 surface. Test criteria + out-of-scope +
+   outcome gate let it iterate without re-planning. Within those
+   rails, the implementation is yours to find.
 
 3. **Codify / Iterate once / Drop is the metabolism.** Every
    discovery during the build lands somewhere — it becomes a doc
@@ -220,7 +226,7 @@ neither.
 ### The rhythm
 
 ```
-Brief (4 declarations) → Build (free inside the rails) → Laura → Codify | Iterate once | Drop
+Brief (5 declarations) → Build (free inside the rails) → Laura → Codify | Iterate once | Drop
 ```
 
 The wall holds. Inside the wall, you move.
@@ -298,12 +304,26 @@ with a named reason. Unnamed ambition loses to the timeline.
 ## 9. Process: Plan → Execute → Review, each in its own context
 
 1. **Plan.** Produce a written kickoff brief for the iteration.
-   Four declarations — scope, stack, reference, canvas. Open
-   questions listed. Gates named. Test criteria named. No code yet.
+   Five declarations — scope, stack, reference, canvas, **failure
+   mode**. Open questions listed. Gates named. Test criteria named.
+   No code yet.
 2. **Execute.** Write code strictly against the brief in a clean
    context. Don't mix planning with debugging in the same session.
 3. **Review.** In a fresh session, compare what was built against
    the brief. Run the gates. Hand to Laura.
+
+### The fifth declaration: failure mode
+
+Added 2026-04-23 after iteration #1's Pixel-10 scanner regression
+surfaced try-and-error debugging as the real bottleneck. The brief
+must name, in one short paragraph, *what has to be observable when
+this surface breaks* — the specific telemetry, logs, fixtures, or
+eval signals that turn "it doesn't work" into a diagnosable event.
+For intake it was the `/api/telemetry` beacon + the A22 fixture
+run. For the Room it will be WebGPU adapter info + frame-time
+histograms. For persistence it will be OPFS quota + key-count
+snapshots. If an iteration ships without naming its failure mode,
+the next regression costs a week of redeploys to locate.
 
 Never carry conversational history or debugging context into a new
 execution phase. The prompt cache is not a substitute for a written

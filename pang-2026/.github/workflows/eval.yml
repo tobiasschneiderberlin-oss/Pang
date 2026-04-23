@@ -1,0 +1,35 @@
+name: eval-intake-live
+
+# Live A22 eval — real Anthropic calls, real cost. Runs on explicit
+# dispatch only (plus a weekly schedule so we catch model-side drift
+# without babysitting it). Mock-mode runs on every PR in ci.yml.
+#
+# To trigger manually: Actions → eval-intake-live → Run workflow.
+on:
+  workflow_dispatch:
+  schedule:
+    # Sunday 04:00 UTC — cheap off-hours.
+    - cron: "0 4 * * 0"
+
+jobs:
+  eval:
+    name: A22 intake eval (live)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_PUBLIC_SUPABASE_HOST: "example.supabase.co"
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    defaults:
+      run:
+        working-directory: pang-2026
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: pang-2026/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Run live eval
+        run: npm run eval:intake

@@ -122,6 +122,10 @@ async function main(): Promise<void> {
     "src/ai/camel/sanitize.ts",
     "src/ai/prompts/voice.ts",
     "src/ai/prompts/intake.ts",
+    // Test fixtures that contain the ban list as data to assert
+    // against — the strings are the vocabulary under review, not
+    // UI copy.
+    "src/ai/prompts/failure.test.ts",
   ]);
 
   for (const f of files) {

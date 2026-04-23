@@ -9,15 +9,21 @@
   },
   "scripts": {
     "dev": "next dev --turbopack",
+    "dev:device": "tsx scripts/dev-device.ts",
     "build": "next build --turbopack && tsx scripts/build-sw.ts",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "tsx --test src/**/*.test.ts",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
     "check:manifest": "tsx scripts/check-manifest.ts",
     "check:gates": "tsx scripts/check-gates.ts",
     "check:strings": "tsx scripts/check-strings.ts",
-    "rebuild:voice-prompt": "tsx scripts/rebuild-voice-prompt.ts"
+    "rebuild:voice-prompt": "tsx scripts/rebuild-voice-prompt.ts",
+    "eval:intake": "tsx evals/intake/run.ts",
+    "eval:intake:mock": "PANG_EVAL_MOCK=1 tsx evals/intake/run.ts",
+    "check:eval": "npm run eval:intake:mock"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.60.0",
@@ -42,6 +48,7 @@
     "@types/three": "^0.170.0",
     "eslint": "^9.20.0",
     "eslint-config-next": "^16.2.4",
+    "qrcode-terminal": "^0.12.0",
     "tailwindcss": "^4.1.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
