@@ -29,7 +29,9 @@ jobs:
           node-version-file: pang-2026/.nvmrc
           cache: npm
           cache-dependency-path: pang-2026/package-lock.json
+      # See ci.yml for the `npm install` rationale (cross-platform
+      # lockfile vs. Linux x64 optional binaries).
       - name: Install
-        run: npm ci
+        run: npm install --no-audit --no-fund --prefer-offline
       - name: Run live eval
         run: npm run eval:intake
