@@ -57,8 +57,37 @@ jobs:
       - name: Gate runner (P1\u2013P10, P23\u2013P25 + A1\u2013A4, A7, A8, A16, A21)
         run: npm run check:gates
 
+      - name: Debug — native binary presence (remove after green)
+        run: |
+          echo "::group::node_modules native bindings"
+          ls node_modules/lightningcss/node/ 2>&1 | head -20 || true
+          echo "---"
+          ls node_modules/lightningcss-*/ 2>&1 | head -20 || true
+          echo "---"
+          ls node_modules/@next/swc-*/ 2>&1 | head -20 || true
+          echo "---"
+          ls node_modules/@tailwindcss/oxide-*/ 2>&1 | head -20 || true
+          echo "---"
+          npm ls lightningcss --all 2>&1 | head -30 || true
+          echo "::endgroup::"
+
       - name: Build
-        run: npm run build
+        run: npm run build 2>&1 | tee /tmp/build.log
+        continue-on-error: true
+
+      - name: Upload build log (remove after green)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: /tmp/build.log
+          retention-days: 3
+          if-no-files-found: warn
+
+      - name: Fail if build failed (remove after green)
+        run: |
+          grep -qE 'Build error|Error:' /tmp/build.log && exit 1 || true
+          test -d .next || { echo "no .next — build did not produce output"; exit 1; }
 
       - name: A22 eval (mock — harness sanity)
         run: npm run check:eval
