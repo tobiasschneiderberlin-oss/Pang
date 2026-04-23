@@ -47,6 +47,15 @@ export const AGENT_BUDGETS: Record<AgentName, AgentBudget> = {
     maxOutputTokens: 1_024,
     maxCostUsd: 0.15,
   },
+  // Enrichment's Q-LLM is called once per record with an untrustedNote.
+  // A submission carries at most 16 records; per-call budget is narrow
+  // so a full batch still sits comfortably under the enrichment cost
+  // ceiling even before the P-LLM round-trip.
+  enrichmentQuarantine: {
+    maxInputTokens: 4_000,
+    maxOutputTokens: 256,
+    maxCostUsd: 0.02,
+  },
   narrative: {
     maxInputTokens: 4_000,
     maxOutputTokens: 512,
