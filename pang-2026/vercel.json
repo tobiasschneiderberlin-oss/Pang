@@ -3,7 +3,7 @@
   "framework": "nextjs",
   "buildCommand": "npm run build",
   "devCommand": "npm run dev",
-  "installCommand": "npm install",
+  "installCommand": "npm install && npm install --no-save --no-audit --no-fund lightningcss-linux-x64-gnu @tailwindcss/oxide-linux-x64-gnu",
   "regions": ["fra1"],
   "github": {
     "silent": true
