@@ -13,8 +13,17 @@
 
 # --- Workspace wrapper --------------------------------------------
 
-# Editor-agent session state (per-machine).
-.claude/
+# Editor-agent session state.
+#
+# `.claude/settings.json` is shared (committed) — it holds the dev-loop
+# allow-list every contributor and every fresh Claude Code session needs,
+# so known-safe commands stop re-prompting. See that file's header for
+# the rules on what belongs there vs. `settings.local.json`.
+#
+# Everything else in `.claude/` is per-machine state: the local
+# permissions overlay, scheduled-task locks, editor launch config.
+.claude/*
+!.claude/settings.json
 
 # Legacy prototypes + reference scrapes. Kept locally for lookups.
 _archive/
