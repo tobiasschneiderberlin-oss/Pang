@@ -71,6 +71,15 @@ jobs:
         run: npm run build 2>&1 | tee /tmp/build.log
         continue-on-error: true
 
+      - name: Upload build log (remove after green)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: /tmp/build.log
+          retention-days: 3
+          if-no-files-found: warn
+
       - name: Build log tail on failure (remove after green)
         if: always()
         run: |
