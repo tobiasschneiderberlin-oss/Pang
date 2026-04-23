@@ -27,11 +27,18 @@
 
 import dynamic from "next/dynamic";
 import type { ReactElement } from "react";
+import type { TheRoomClientProps } from "@/room/dom/TheRoomClient";
 
 // Lazy import with SSR disabled. The chunk is code-split naturally and
 // fetched on client bootstrap. `loading` returns `null` because the
 // home route already renders the empty `<main>` shell; flashing a
 // different placeholder would disturb the paper baseline.
+//
+// Props (including React 19 `ref`) flow through to the inner
+// `TheRoomClient` verbatim — the arrival chapter drives per-frame
+// scene state via the imperative handle (`setArrivalFactor`) and
+// that contract must survive the dynamic boundary. The prop type is
+// imported as type-only so this file stays SSR-safe.
 const TheRoomClient = dynamic(
   () =>
     import("@/room/dom/TheRoomClient").then((m) => ({
@@ -43,6 +50,8 @@ const TheRoomClient = dynamic(
   },
 );
 
-export function TheRoomClientDynamic(): ReactElement {
-  return <TheRoomClient />;
+export function TheRoomClientDynamic(
+  props: TheRoomClientProps = {},
+): ReactElement {
+  return <TheRoomClient {...props} />;
 }
