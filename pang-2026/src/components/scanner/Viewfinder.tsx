@@ -151,13 +151,18 @@ export function Viewfinder(props: ViewfinderProps): React.ReactElement {
           latestSegmentRef.current = null;
           return;
         case "error":
-          // Worker crashes are not Laura's fault. Classify as
-          // `unknown` so the corpus line does not accuse the camera
-          // when the detector itself tripped.
-          onErrorRef.current(
-            "unknown",
-            new Error(`${event.source}: ${event.message}`),
+          // Worker crash: auto-capture is degraded (no detection
+          // signal) but manual capture is unaffected — it calls
+          // cam.grabFrame() directly and never touches the CV workers.
+          // Log for observability; clear any stale detection so the
+          // frame loop doesn't act on a ghost reading; do NOT call
+          // onError — that would kill the scan flow entirely for a
+          // failure that only disables the passive path.
+          console.error(
+            `[pang] cv worker error (${event.source}): ${event.message}`,
           );
+          latestRectangleRef.current = null;
+          latestSegmentRef.current = null;
           return;
       }
     });
