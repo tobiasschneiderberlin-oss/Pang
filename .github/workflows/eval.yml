@@ -29,9 +29,13 @@ jobs:
           node-version-file: pang-2026/.nvmrc
           cache: npm
           cache-dependency-path: pang-2026/package-lock.json
-      # See ci.yml for the `npm install` rationale (cross-platform
-      # lockfile vs. Linux x64 optional binaries).
+      # See ci.yml for the install rationale (cross-platform lockfile
+      # vs. Linux x64 optional binaries).
       - name: Install
-        run: npm install --no-audit --no-fund --prefer-offline
+        run: |
+          npm ci --no-audit --no-fund --prefer-offline
+          npm install --no-save --no-audit --no-fund \
+            lightningcss-linux-x64-gnu \
+            @tailwindcss/oxide-linux-x64-gnu
       - name: Run live eval
         run: npm run eval:intake
