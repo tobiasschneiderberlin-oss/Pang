@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# PANG — pre-push hook.
+#
+# Runs the same gates CI does, locally, before the push hits
+# GitHub. Catches typos / broken gates / regressed evals in ~30 s
+# instead of a 3–5 min CI round-trip.
+#
+# Wire up once per clone: `npm run setup:hooks` (inside pang-2026/).
+# This sets `core.hooksPath` to this directory for the whole repo.
+#
+# Skip an individual push: `git push --no-verify` (e.g. when you're
+# iterating on CI config itself and need to push broken states).
+#
+# CI remains the authority — this hook is a speed-up, not a gate.
+
+set -euo pipefail
+
+# The hook runs from git root. cd into pang-2026 so `npm run verify`
+# finds the right package.json.
+cd "$(git rev-parse --show-toplevel)/pang-2026"
+
+echo "pre-push: running npm run verify (typecheck + lint + gates + eval)..."
+echo "skip with: git push --no-verify"
+echo ""
+
+npm run verify
+
+echo ""
+echo "pre-push: ok — pushing."

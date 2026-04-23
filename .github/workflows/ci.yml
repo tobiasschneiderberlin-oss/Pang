@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version-file: pang-2026/.nvmrc
           cache: npm
           cache-dependency-path: pang-2026/package-lock.json
 
@@ -55,6 +55,19 @@ jobs:
       - name: A22 eval (mock — harness sanity)
         run: npm run check:eval
 
+      # Share the built app with the downstream `e2e` job instead of
+      # rebuilding. `.next/` + generated `public/sw.js` are all
+      # `next start` needs. Saves ~2 min per PR.
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: next-build
+          path: |
+            pang-2026/.next/
+            pang-2026/public/sw.js
+          retention-days: 1
+          if-no-files-found: error
+
   e2e:
     name: Playwright e2e (Tier 2)
     runs-on: ubuntu-latest
@@ -62,10 +75,9 @@ jobs:
     needs: gates
     env:
       NEXT_PUBLIC_SUPABASE_HOST: "example.supabase.co"
-      # Build+start the production server for e2e (faster + closer
-      # to prod than next dev). Playwright's webServer config starts
-      # `npm run dev` by default, but CI uses `next start` for
-      # parity with Vercel.
+      # Serve the prod build (downloaded from gates) via `next start`
+      # for parity with Vercel. Playwright's webServer respects CI=1
+      # and runs `npm run start`.
       CI: "1"
     defaults:
       run:
@@ -74,18 +86,41 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version-file: pang-2026/.nvmrc
           cache: npm
           cache-dependency-path: pang-2026/package-lock.json
 
       - name: Install
         run: npm ci
 
-      - name: Install Playwright browsers
+      # Reuse the `.next/` and `public/sw.js` that `gates` built.
+      # download-artifact unpacks preserving archived paths, so files
+      # land back at `pang-2026/.next/` and `pang-2026/public/sw.js`.
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: next-build
+
+      # Cache Playwright browsers across runs. The key is tied to
+      # `package-lock.json` (Playwright version moves with the lock).
+      # Cache hit → skip browser download, only install apt deps.
+      # Cache miss → full `install --with-deps`.
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pang-2026/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Install Playwright browsers (cache miss)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
 
-      - name: Build
-        run: npm run build
+      - name: Install Playwright system deps (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
 
       - name: Run Playwright (headless)
         run: npm run test:e2e

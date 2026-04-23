@@ -1,0 +1,78 @@
+# PANG — Dependabot config.
+#
+# Keeps npm + GitHub Actions dependencies fresh without manual
+# bookkeeping. Runs weekly (Monday 04:00 UTC — same cheap off-hours
+# slot as the live eval cron). Groups minor+patch into one PR per
+# ecosystem so the review surface stays small.
+#
+# Major bumps are opened individually (no grouping) so breaking
+# changes get their own PR and their own human review. Dev-loop
+# deps (eslint, typescript, playwright, tsx) are grouped together
+# because they move in lockstep; runtime deps (next, react, zod,
+# anthropic SDK) each land on their own.
+
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /pang-2026
+    schedule:
+      interval: weekly
+      day: monday
+      time: "04:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    groups:
+      dev-tooling:
+        applies-to: version-updates
+        patterns:
+          - "eslint*"
+          - "@eslint/*"
+          - "typescript"
+          - "tsx"
+          - "@playwright/test"
+          - "@types/*"
+          - "prettier"
+        update-types:
+          - "minor"
+          - "patch"
+      build-tooling:
+        applies-to: version-updates
+        patterns:
+          - "@tailwindcss/*"
+          - "tailwindcss"
+          - "workbox-*"
+          - "postcss"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # Major bumps get manual review — they're not grouped.
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "04:00"
+      timezone: "UTC"
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "chore(ci)"
+      include: "scope"
