@@ -291,17 +291,33 @@ test.describe("settings-overlay-persistence — audioSpatial rehydrates", () => 
     await audioToggle.click();
     await expect(audioToggle).toHaveAttribute("data-state", "on");
 
-    // Wait for the 120 ms persist debounce to land in OPFS. iter #16:
-    // bumped from 750 ms → 2000 ms after a chromium-mobile-only flake
-    // surfaced post the outcome-chapter fix. Pixel-7 emulation under
-    // cold-cache CI can stretch both setTimeout granularity and the
-    // async OPFS write (directory handle → file create → flush) past
-    // a 750 ms margin; the failure mode then is *no* persisted file,
-    // post-reload hydrate returning `DEFAULT_PREFERENCES` (silence
-    // wins), and the rehydrate-poll polling forever for a transition
-    // that will never happen. A real regression still trips the
-    // explicit 15 s `waitForFunction` timeout below.
-    await page.waitForTimeout(2000);
+    // iter #16 (3rd extension): poll OPFS *directly* until the file
+    // contains audioSpatial="on". A fixed `waitForTimeout` covers
+    // an unknown variance — on chromium-mobile cold-cache CI both
+    // setTimeout granularity and the async `opfsWrite` chain
+    // (directory handle → file create → write → flush) can push
+    // past 2000 ms, masking under Playwright's automatic retry. By
+    // observing the file directly, we're deterministic: the wait
+    // ends *exactly* when persistence has landed, never sooner,
+    // never later. A real persistence regression now fails fast at
+    // the inner `waitForFunction` budget (10 s), not as an
+    // unexplained `Test timeout exceeded`.
+    await page.waitForFunction(
+      async () => {
+        try {
+          const root = await navigator.storage.getDirectory();
+          const dir = await root.getDirectoryHandle("prefs");
+          const handle = await dir.getFileHandle("index.json");
+          const file = await handle.getFile();
+          const text = await file.text();
+          return text.includes('"audioSpatial":"on"');
+        } catch {
+          return false;
+        }
+      },
+      undefined,
+      { timeout: 10_000 },
+    );
 
     // Reload.
     await page.reload();
