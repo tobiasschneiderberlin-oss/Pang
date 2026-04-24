@@ -64,6 +64,14 @@ export const PreferencesSchema = z.object({
       message: "letters, apostrophe, hyphen, space only",
     })
     .or(z.literal("")),
+
+  // Silence-default opt-ins (iter #15, primitive 73). Both default
+  // `"off"` — cold install is dead silent. Consumed in JS (the audio
+  // graph factory reads `audioSpatial`; the haptic dispatcher reads
+  // `haptics`) so no `:root` projection is needed. The shipping
+  // SettingsOverlay is the only surface that flips them.
+  audioSpatial: z.enum(["on", "off"]),
+  haptics: z.enum(["on", "off"]),
 });
 
 export type Preferences = z.infer<typeof PreferencesSchema>;
@@ -80,6 +88,11 @@ export const DEFAULT_PREFERENCES: Preferences = {
   radii: KNOB_DEFAULTS.radii,
   appearance: "auto",
   displayName: "",
+  // Primitive 73 — silence-default. `DEFAULT_PREFERENCES` is the
+  // single source of truth; tests pin these to `"off"`. Hydration
+  // can override; the default cannot drift without a failing test.
+  audioSpatial: "off",
+  haptics: "off",
 };
 
 // --- Named-preset → numeric mapper -------------------------------

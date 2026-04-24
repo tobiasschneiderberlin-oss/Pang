@@ -17,7 +17,11 @@
  */
 
 import { useEffect } from "react";
-import { bindPreferencesToRoot } from "@design/preferences";
+import { bindPreferencesToRoot, usePreferences } from "@design/preferences";
+import {
+  hydratePreferences,
+  installPreferencesPersistence,
+} from "@design/preferences.persist";
 import { bootstrapOpfs } from "@/lib/storage/bootstrap";
 import { useWorks } from "@/stores/works";
 import {
@@ -86,10 +90,17 @@ export function AppBoot(): null {
             useWorks: typeof useWorks;
             useVerification: typeof useVerification;
             useNarrative: typeof useNarrative;
+            usePreferences: typeof usePreferences;
             authSeed: typeof authSeed;
           };
         }
-      ).__PANG = { useWorks, useVerification, useNarrative, authSeed };
+      ).__PANG = {
+        useWorks,
+        useVerification,
+        useNarrative,
+        usePreferences,
+        authSeed,
+      };
     }
 
     const unbindPrefs = bindPreferencesToRoot();
@@ -104,6 +115,7 @@ export function AppBoot(): null {
     // snapshot. After that, the subscription keeps OPFS in sync.
     let unsubscribeWorks: (() => void) | null = null;
     let unsubscribeVerification: (() => void) | null = null;
+    let unsubscribePreferences: (() => void) | null = null;
     let unsubscribeOnline: (() => void) | null = null;
     let unsubscribeDispatchedWalker: (() => void) | null = null;
     let unsubscribeOutcomeBroadcast: (() => void) | null = null;
@@ -113,6 +125,15 @@ export function AppBoot(): null {
       try {
         await bootstrapOpfs();
         if (cancelled) return;
+        // Preferences hydrate ahead of any other surface so the
+        // :root projection (which already mounted above) reflects
+        // the collector's prior choices the first paint after boot.
+        // Silence-default (primitive 73) wins on fresh install because
+        // the OPFS file does not exist yet.
+        const persistedPrefs = await hydratePreferences();
+        if (cancelled) return;
+        usePreferences.getState().hydrate(persistedPrefs);
+        unsubscribePreferences = installPreferencesPersistence();
         // Works + verification hydrate in parallel — the two stores
         // are independent slices of OPFS.
         const [hydratedWorks, hydratedVerification] = await Promise.all([
@@ -191,6 +212,7 @@ export function AppBoot(): null {
       cancelled = true;
       unsubscribeWorks?.();
       unsubscribeVerification?.();
+      unsubscribePreferences?.();
       unsubscribeOnline?.();
       unsubscribeDispatchedWalker?.();
       unsubscribeOutcomeBroadcast?.();
