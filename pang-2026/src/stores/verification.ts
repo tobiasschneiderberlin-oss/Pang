@@ -47,12 +47,25 @@ export type VerificationState =
       requestId: string;
       submittedAt: string;
       decidedAt: string;
+      /**
+       * Iteration #11 — ISO-8601 timestamp of the tick the outcome
+       * chapter's `ready` beat fired, or `null` if the chapter has not
+       * yet played. Per-work latch: idempotent re-mounts of the Room
+       * with a non-null timestamp skip the chapter. A mid-chapter
+       * force-quit loses the timestamp and replays on next Room entry,
+       * which is the correct failure mode — the chapter is short and
+       * a once-and-only-once guarantee is neither deliverable nor
+       * desirable.
+       */
+      outcomeChapterShownAt: string | null;
     }
   | {
       kind: "declined";
       requestId: string;
       submittedAt: string;
       decidedAt: string;
+      /** Iteration #11 — see `confirmed.outcomeChapterShownAt`. */
+      outcomeChapterShownAt: string | null;
     }
   | {
       kind: "expired";
@@ -154,6 +167,17 @@ export interface VerificationStore {
 
   /** Gallery declined. */
   markDeclined(workId: string, decidedAt: string): void;
+
+  /**
+   * Iteration #11 — latch the outcome-chapter play on the store entry.
+   * Only applies to `"confirmed"` and `"declined"` states; all others
+   * are a no-op. Idempotent: a second call with the same (workId,
+   * shownAt) is a no-op (same reference — the store's set reuses the
+   * same entry object shape), and a second call with a different
+   * `shownAt` leaves the first (the chapter played once; re-latching
+   * would mutate a durable timestamp with no semantic win).
+   */
+  markOutcomeChapterShown(workId: string, shownAt: string): void;
 
   /** Signed link's TTL elapsed without action. */
   markExpired(workId: string, decidedAt: string): void;
@@ -280,6 +304,7 @@ export const useVerification = create<VerificationStore>()(
         requestId: current.requestId,
         submittedAt: current.submittedAt,
         decidedAt,
+        outcomeChapterShownAt: null,
       };
       set((state) => ({
         byWorkId: { ...state.byWorkId, [workId]: next },
@@ -302,6 +327,25 @@ export const useVerification = create<VerificationStore>()(
         requestId: current.requestId,
         submittedAt: current.submittedAt,
         decidedAt,
+        outcomeChapterShownAt: null,
+      };
+      set((state) => ({
+        byWorkId: { ...state.byWorkId, [workId]: next },
+      }));
+    },
+
+    markOutcomeChapterShown(workId, shownAt) {
+      const current = get().byWorkId[workId];
+      if (!current) return;
+      if (current.kind !== "confirmed" && current.kind !== "declined") return;
+      // Idempotent: if already latched, leave the stored timestamp.
+      // The chapter plays once; re-latching would mutate a durable
+      // record with no semantic gain. This also protects against
+      // StrictMode double-mount of the chapter component.
+      if (current.outcomeChapterShownAt !== null) return;
+      const next: VerificationState = {
+        ...current,
+        outcomeChapterShownAt: shownAt,
       };
       set((state) => ({
         byWorkId: { ...state.byWorkId, [workId]: next },

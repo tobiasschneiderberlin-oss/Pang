@@ -120,6 +120,7 @@ describe("beginRequest", () => {
       requestId: "req-1",
       submittedAt: "2026-04-23T10:00:00.000Z",
       decidedAt: "2026-04-24T10:00:00.000Z",
+      outcomeChapterShownAt: null,
     });
     const next = store.beginRequest({
       workId: workA,
@@ -136,6 +137,7 @@ describe("beginRequest", () => {
       requestId: "req-1",
       submittedAt: "2026-04-23T10:00:00.000Z",
       decidedAt: "2026-04-24T10:00:00.000Z",
+      outcomeChapterShownAt: null,
     });
     const next = store.beginRequest({
       workId: workA,
@@ -243,6 +245,7 @@ describe("markFailed", () => {
       requestId: "req-1",
       submittedAt: "2026-04-23T10:00:00.000Z",
       decidedAt: "2026-04-24T10:00:00.000Z",
+      outcomeChapterShownAt: null,
     });
     store.markFailed(workA, "shouldnt-apply");
     const s = store.stateOf(workA);
@@ -321,6 +324,7 @@ describe("markConfirmed", () => {
       requestId: "req-1",
       submittedAt: "2026-04-23T10:00:00.000Z",
       decidedAt: "2026-04-24T10:00:00.000Z",
+      outcomeChapterShownAt: null,
     });
     store.markConfirmed(workA, "2026-04-25T10:00:00.000Z");
     const s = store.stateOf(workA);
@@ -338,6 +342,7 @@ describe("markConfirmed", () => {
       requestId: "req-1",
       submittedAt: "2026-04-23T10:00:00.000Z",
       decidedAt: "2026-04-24T10:00:00.000Z",
+      outcomeChapterShownAt: null,
     });
     store.markConfirmed(workA, "2026-04-25T10:00:00.000Z");
     assert.equal(store.stateOf(workA).kind, "declined");
@@ -375,6 +380,7 @@ describe("markDeclined", () => {
       requestId: "req-1",
       submittedAt: "2026-04-23T10:00:00.000Z",
       decidedAt: "2026-04-24T10:00:00.000Z",
+      outcomeChapterShownAt: null,
     });
     store.markDeclined(workA, "2026-04-25T10:00:00.000Z");
     assert.equal(store.stateOf(workA).kind, "confirmed");
@@ -479,6 +485,7 @@ describe("markExpired", () => {
       requestId: "req-1",
       submittedAt: "2026-04-23T10:00:00.000Z",
       decidedAt: "2026-04-24T10:00:00.000Z",
+      outcomeChapterShownAt: null,
     });
     store.markExpired(workA, "2026-05-23T10:05:00.000Z");
     assert.equal(store.stateOf(workA).kind, "confirmed");
@@ -535,6 +542,7 @@ describe("replaceState", () => {
       requestId: "req-b",
       submittedAt: "2026-04-23T10:00:00.000Z",
       decidedAt: "2026-04-24T10:00:00.000Z",
+      outcomeChapterShownAt: null,
     });
     assert.equal(store.stateOf(workA).kind, "requested");
     assert.equal(store.stateOf(workB).kind, "confirmed");
