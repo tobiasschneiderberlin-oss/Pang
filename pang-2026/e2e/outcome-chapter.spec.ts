@@ -118,6 +118,17 @@ async function seedVerifiedWork(
 
 test.use({ viewport: { width: 1280, height: 800 } });
 
+// iter #16: per-file test timeout bumped from the config-level 30 s
+// to 60 s. On `chromium-mobile` (Pixel 7 device emulation) the
+// chapter-mount → narration-attach delay is ~4.2 s of real time
+// (vs ~1.5 s on desktop) due to slower hydration + first-RAF
+// latency. Combined with the 14 s chapter duration + ~2 s of
+// teardown, the default 30 s leaves no margin for the ready +
+// dismiss beat. 60 s is enough to carry the full ceremony
+// without masking a genuine regression (a real break still
+// fails fast on the first assertion).
+test.setTimeout(60_000);
+
 // ---------- Spec 1: confirmation ---------------------------------
 
 test.describe("outcome-chapter-confirmation — confirms mount the ceremony", () => {
@@ -145,14 +156,19 @@ test.describe("outcome-chapter-confirmation — confirms mount the ceremony", ()
       "confirmation",
     );
 
-    // Narration slot appears on the `confirmation` beat — kind's
-    // ActiveBeat envelope drives the opacity, so we wait for the slot
-    // to be attached, then check the voice-corpus text matches.
-    const narration = outcome.locator('[data-pang-outcome-narration="true"]');
-    await expect(narration).toBeAttached({ timeout: 10_000 });
-    const narrationText = (await narration.innerText()).toLowerCase().trim();
+    // iter #16: atomic (locator-resolves ∧ text-matches) retry,
+    // not the old two-step `toBeAttached` → `innerText`. The
+    // narration slot attaches at chapter-t=1500 ms and detaches
+    // at chapter-t=7000 ms — a 5.5 s window. On chromium-mobile
+    // it can take ~4.2 s to attach, leaving the old two-step
+    // pattern racing a React re-commit that detaches the node
+    // between the two calls and hangs `innerText` under
+    // Playwright's implicit retry. `toContainText` retries the
+    // whole (resolve + read + match) combination in one
+    // evaluator pass, eliminating the race.
     // Voice corpus: "the gallery confirms this work."
-    expect(narrationText).toContain("confirms");
+    const narration = outcome.locator('[data-pang-outcome-narration="true"]');
+    await expect(narration).toContainText(/confirms/i, { timeout: 15_000 });
 
     // Once the chapter reaches its `ready` beat, the dismiss
     // affordance appears. The total chapter length is ~14 s; we give
@@ -197,15 +213,15 @@ test.describe("outcome-chapter-decline — declines mount a silent ceremony", ()
       "decline",
     );
 
-    // Decline narration mounts; corpus text is the "not confirmed"
-    // line (voice.ts OUTCOME_NARRATION.decline). We don't hard-code
-    // the string — the corpus owns it — but we assert the line is
-    // visibly different from the confirm text.
-    const narration = outcome.locator('[data-pang-outcome-narration="true"]');
-    await expect(narration).toBeAttached({ timeout: 10_000 });
-    const text = (await narration.innerText()).toLowerCase().trim();
+    // iter #16: atomic (locator-resolves ∧ text-matches) retry,
+    // same fix as the confirmation spec above — the decline
+    // narration window is the same 5.5 s beat, and the same
+    // Pixel 7 timing race applies.
     // Voice corpus: "the gallery did not confirm this work."
-    expect(text).toContain("did not confirm");
+    const narration = outcome.locator('[data-pang-outcome-narration="true"]');
+    await expect(narration).toContainText(/did not confirm/i, {
+      timeout: 15_000,
+    });
 
     // Dismiss affordance still appears (ready state is reached with
     // or without the place beat).
@@ -268,6 +284,22 @@ test.describe("outcome-chapter-surface-gate — off-Room transitions queue", () 
     // Outcome surface must NOT be visible on /scan.
     const outcome = page.locator('main[aria-label="outcome"]');
     await expect(outcome).toBeHidden({ timeout: 3_000 });
+
+    // iter #16 (3rd extension): wait for the seed's OPFS persistence
+    // debounce to land before navigating away. `seedVerifiedWork`
+    // mutates `useWorks` + `useVerification` in memory; the
+    // 120 ms-debounced persistence subscriptions write to OPFS. A
+    // bare `goto("/")` here can outrun that write on chromium-mobile
+    // cold cache (Pixel 7 emulation stretches both setTimeout
+    // granularity and async `opfsWrite`), in which case the Room
+    // page rehydrates from a stale OPFS — no transition queued, the
+    // surface flip to "room" finds an empty queue, the chapter never
+    // mounts, and `toBeVisible` below times out at 15 s. The
+    // `toBeHidden` check above returns the moment Playwright sees
+    // the element absent (≈ tens of ms), so it doesn't itself buy
+    // the OPFS write any wall time. 2000 ms = 16× the debounce; same
+    // budget the settings-overlay-persistence spec uses.
+    await page.waitForTimeout(2000);
 
     // Navigate to the Room — the surface claim flips to "room" and
     // the hook flushes the queue head.
