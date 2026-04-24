@@ -282,3 +282,84 @@ export const NarrativeCurrentResponseSchema = z
 export type NarrativeCurrentResponse = z.infer<
   typeof NarrativeCurrentResponseSchema
 >;
+
+/**
+ * POST /api/narrative/current body. The client (or the cron runner)
+ * forwards the deterministic collector state the assembler needs —
+ * works, provenance entries, bio-muji paragraphs. `collectorId` is
+ * carried explicitly here rather than inferred from the session so
+ * the dev-cron script can target any collector.
+ *
+ * Server-side: `collectorId` is validated against the authenticated
+ * `userId` on the session-gated path; the cron-gated path accepts
+ * arbitrary ids (the CaMeL boundary is the assembler, not the route).
+ */
+export const NarrativeTickRequestSchema = z
+  .object({
+    collectorId: z.string().min(1).max(128),
+    verifiedWorks: z
+      .array(
+        z
+          .object({
+            id: z.string().min(1),
+            title: z.string().min(1),
+            artistId: z.string().min(1),
+            artist: z.string().min(1),
+            year: z.union([z.number().int(), z.null()]),
+            medium: z.union([z.string().min(1), z.null()]),
+          })
+          .strict(),
+      )
+      .max(512),
+    provenanceEntries: z
+      .array(
+        z
+          .object({
+            workId: z.string().min(1),
+            kind: z.string().min(1),
+            year: z.union([z.number().int(), z.null()]),
+            summary: z.string().min(1).max(240),
+          })
+          .strict(),
+      )
+      .max(2048),
+    bioMujiParagraphs: z.record(z.string().min(1), z.string().min(1).max(4096)),
+  })
+  .strict();
+
+export type NarrativeTickRequest = z.infer<typeof NarrativeTickRequestSchema>;
+
+/**
+ * POST /api/narrative/current response. Either "generated" (a new
+ * reading landed), "cached" (marker already existed — no new
+ * round-trip), or "skipped" (assembler / agent declined, with the
+ * reason surfaced to telemetry).
+ */
+export const NarrativeTickResponseSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      kind: z.literal("generated"),
+      month: z.string().regex(/^\d{4}-\d{2}$/),
+      decidedAt: z.string().min(1),
+      collectionHash: z.string().min(8),
+      paragraphLength: z.number().int().nonnegative(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("cached"),
+      month: z.string().regex(/^\d{4}-\d{2}$/),
+      decidedAt: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("skipped"),
+      month: z.string().regex(/^\d{4}-\d{2}$/),
+      reason: NarrativeSkipReasonSchema,
+      decidedAt: z.string().min(1),
+    })
+    .strict(),
+]);
+
+export type NarrativeTickResponse = z.infer<typeof NarrativeTickResponseSchema>;
