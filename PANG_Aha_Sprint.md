@@ -9375,9 +9375,140 @@ a known-flaky build." Splitting here would have shipped iter
 single run (10 outcome-chapter × 2 projects + 12
 settings-overlay across both projects but 6 specs per project).
 
----
+### Mid-iter expansion #3: deterministic OPFS-poll (2026-04-24)
 
-## Archived iterations
+The third push (surface-gate seed→goto wait) green-passed
+outcome-chapter but settings-overlay-persistence flunked again:
+both attempts (original + retry) hit the explicit 15 s
+`waitForFunction` timeout. CI conclusion `failure`. Trace
+artifact confirmed the page loaded fine ("an empty wall" copy +
+trigger button visible) but `audioSpatial` stayed at the default
+`"off"` — meaning the OPFS write never landed before reload, and
+post-reload `hydratePreferences()` fell back to
+`DEFAULT_PREFERENCES`.
+
+The 2000 ms fixed wait is the wrong shape. CI variance is
+unbounded; any fixed timeout is either too short (flake) or
+wasteful (slow). Replace with a deterministic poll:
+
+```typescript
+await page.waitForFunction(async () => {
+  try {
+    const root = await navigator.storage.getDirectory();
+    const dir = await root.getDirectoryHandle("prefs");
+    const handle = await dir.getFileHandle("index.json");
+    const file = await handle.getFile();
+    const text = await file.text();
+    return text.includes('"audioSpatial":"on"');
+  } catch {
+    return false;
+  }
+}, undefined, { timeout: 10_000 });
+```
+
+The wait ends *exactly* when the OPFS file contains the new
+state. No fixed budget, no race against CI variance.
+
+**Codified principle** (lifts to keeper docs at iter close): for
+e2e specs that round-trip through OPFS, *poll the file
+directly*. A `waitForTimeout` covering an async write is a
+guess; a `waitForFunction` reading the file is a fact. The
+former masks regressions on slow CI; the latter fails fast and
+clear.
+
+**Verification**: persistence spec 2/2 across both projects in
+6.5 s combined (vs 4 s minimum under the fixed wait pattern).
+
+### Findings + close-out (2026-04-24)
+
+PR #26 merged into `main` as `0d78d7e` after the fourth push
+(commit `317225f`) landed CI green on first attempt:
+**74/74 passed, no flaky retries.**
+
+The iteration absorbed three flake families through one diagnose
+loop each:
+
+1. **Two-step locator races** (outcome-chapter narration). Fix
+   shape: replace `toBeAttached` → `innerText` with
+   `toContainText(regex, { timeout })`. The atomic matcher
+   retries the whole (resolve + read + match) combination in
+   one evaluator pass, eliminating the React-commit race.
+
+2. **OPFS write-before-navigation races** (outcome-chapter
+   surface-gate). Fix shape: 2 s wait between seed and second
+   goto. Subsumed when the principle below was codified.
+
+3. **OPFS write-before-reload races** (settings-overlay
+   persistence). Two failed attempts at fixed-wait sizing
+   (750 ms, 2000 ms) before the deterministic OPFS-poll pattern
+   landed. Same pattern now applies anywhere e2e specs
+   round-trip through OPFS persistence.
+
+#### Codified principles (next contributors inherit these)
+
+These are added to `pang-2026/.pang/doctrine.md` § *Pending
+doctrine edits* immediately; lift to DS HTML at the next
+revision.
+
+**E2E pattern: atomic matchers over two-step locators.** When
+asserting on text that lives inside a transient DOM node (one
+that React mounts, populates, and unmounts on a beat), use
+`expect(locator).toContainText(regex, { timeout })`. Never use
+`expect(locator).toBeAttached()` followed by `locator.innerText()`
+— the locator can detach between the two calls and `innerText`
+hangs under Playwright's implicit retry until the test budget
+exhausts.
+
+**E2E pattern: poll OPFS directly for persistence
+round-trips.** When an e2e spec triggers a state change that
+must persist via the 120 ms-debounced OPFS write subscription,
+the wait between the change and the next observation (reload,
+navigation, second store read) must be a *file-content poll*,
+not a `waitForTimeout`. Pattern:
+
+```typescript
+await page.waitForFunction(async () => {
+  try {
+    const root = await navigator.storage.getDirectory();
+    const dir = await root.getDirectoryHandle("<store-dir>");
+    const handle = await dir.getFileHandle("<file>.json");
+    const text = await (await handle.getFile()).text();
+    return text.includes('<expected-substring>');
+  } catch { return false; }
+}, undefined, { timeout: 10_000 });
+```
+
+Fixed waits are guesses; OPFS reads are facts. CI variance is
+unbounded.
+
+**No new gate.** The two patterns above are conventions for the
+e2e suite, not enforcement points the CI gate runner can check
+mechanically. They live in `_archive/legacy_docs/` candidate
+patterns — the suite itself is the authority. A new flake
+recurrence is the signal to apply the pattern; not a precondition.
+
+#### What did NOT need a fix
+
+- **Product code.** Zero product changes shipped in iter #16.
+  The outcome-chapter narration window, the OPFS persistence
+  layer, the surface-gate hook — all behaved correctly. The
+  flakes were spec-side timing assumptions, not regressions.
+- **Playwright config** (timeout, retries, workers). The
+  config-level retry policy (1 in CI) is a safety net; iter
+  #16 fixes restore the property that the *first* attempt
+  passes, so the retry never has to fire on these specs.
+
+#### Outcome gate status
+
+The brief committed to "no admin-merges, CI green on next 3
+consecutive pushes." With PR #26 merged:
+
+- **Push 1/3**: post-merge run on `main` for commit `0d78d7e`
+  is in flight at iter close. Will be observed in the next
+  iter's window.
+- **Push 2/3, 3/3**: pending future contributions to `main`.
+  Iter #16 reopens as #16b on a single recurrence inside that
+  window.
 
 The pre-reset sprint family (A1–A11, iterations #1–#13 of the old
 order) is archived at `_archive/legacy_docs/PANG_Aha_Sprint.md`. A

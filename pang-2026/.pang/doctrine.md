@@ -208,6 +208,56 @@ named here so the next contributor inherits the vocabulary:
 
 Codified 2026-04-24. Staged here pending DS revision.
 
+### E2E patterns from iteration #16 (test-suite conventions)
+
+Iteration #16 was a test-infrastructure repair (no product
+code). It diagnosed and fixed three chronic chromium-mobile
+e2e flakes by codifying two patterns the next contributor
+inherits. These are *suite conventions*, not CI-enforced
+gates — the e2e files are the authority.
+
+**Atomic matchers over two-step locators.** When asserting on
+text inside a transient DOM node (mounted on one beat,
+unmounted on the next), use
+`expect(locator).toContainText(regex, { timeout })`. Never use
+`expect(locator).toBeAttached()` followed by
+`locator.innerText()` — under chromium-mobile (Pixel 7 device
+emulation), the React-commit window is wide enough that the
+locator detaches between the two calls and `innerText` hangs
+under Playwright's implicit retry until the test budget
+exhausts. The atomic matcher retries the whole (resolve +
+read + match) cycle in one evaluator pass.
+
+**Poll OPFS directly for persistence round-trips.** When an
+e2e spec triggers a state change that must persist via the
+120 ms-debounced OPFS write subscription, the wait between
+the change and the next observation (reload, navigation,
+second store read) must be a *file-content poll*, not a
+`waitForTimeout`. Pattern:
+
+```typescript
+await page.waitForFunction(async () => {
+  try {
+    const root = await navigator.storage.getDirectory();
+    const dir = await root.getDirectoryHandle("<store-dir>");
+    const handle = await dir.getFileHandle("<file>.json");
+    const text = await (await handle.getFile()).text();
+    return text.includes('<expected-substring>');
+  } catch { return false; }
+}, undefined, { timeout: 10_000 });
+```
+
+CI variance is unbounded; any fixed `waitForTimeout` covering
+an async write is a guess. The OPFS read is a fact. The wait
+ends *exactly* when persistence has landed; a real regression
+fails fast at the inner timeout, not as a generic test-budget
+exhaustion.
+
+Codified 2026-04-24. No new gate (the two patterns are suite
+conventions; CI cannot mechanically enforce). The e2e files
+themselves carry an `iter #16:` comment block over each
+migrated assertion as the next-contributor signal.
+
 ---
 
 ## When in doubt
