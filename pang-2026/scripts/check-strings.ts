@@ -23,6 +23,10 @@
 
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
+import {
+  BANNED_VOCABULARY,
+  EVALUATIVE_VOCABULARY,
+} from "../src/ai/camel/banned";
 
 const ROOT = process.cwd();
 const ROOTS = ["src", "app"];
@@ -31,30 +35,40 @@ const EXTS = /\.(ts|tsx|mdx)$/;
 const EMOJI_RE =
   /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F000}-\u{1F02F}\u{1F0A0}-\u{1F0FF}]/u;
 
-const MARKETING = [
-  "awesome",
-  "amazing",
-  "love ",
-  "welcome back",
-  "get started",
-  "easy",
-  "simple",
-  "powerful",
-  "unlock",
-  "unleash",
-  "supercharge",
-  "magical",
-  "delightful",
-];
+/**
+ * Marketing vocabulary the scanner flags in UI strings.
+ *
+ * Iter #12 single-sourced this list: it is derived from
+ * `src/ai/camel/banned.ts#BANNED_VOCABULARY` — the same list that gates
+ * sanitised agent output (A5). The two lists used to drift; now an
+ * edit to `banned.ts` propagates into both places at compile time.
+ *
+ * Entries filtered out here:
+ *   - First-person-plural sentinels (` we `, ` our `, ` us `) —
+ *     boundary matching is a different rule (they need whitespace
+ *     context in a sentence, not in arbitrary substrings).
+ *   - Emoji sentinels — the file's EMOJI_RE scans the full codepoint
+ *     range, and the sentinels themselves are codepoint literals
+ *     that would false-positive.
+ */
+const MARKETING: readonly string[] = BANNED_VOCABULARY.filter((term) => {
+  // Drop first-person-plural sentinels (space-padded) — those are
+  // boundary-matching by whitespace and are handled elsewhere if
+  // needed. Substring-containment for them generates noise inside
+  // legitimate text ("our" inside "ours", "colours", etc.).
+  if (term.startsWith(" ") || term.endsWith(" ")) return false;
+  // Drop emoji codepoint sentinels — EMOJI_RE covers them.
+  if (term.length === 1 && term.codePointAt(0)! > 0x7f) return false;
+  return true;
+});
 
-const EVALUATIVE = [
-  "beautiful",
-  "striking",
-  "vibrant",
-  "stunning",
-  "masterful",
-  "breathtaking",
-];
+const EVALUATIVE = EVALUATIVE_VOCABULARY.map((t) =>
+  // The scanner does a substring containment test, so multi-word
+  // evaluative phrases (e.g. "powerful work") fold to their
+  // head token for the scan. The full phrases stay in the camel
+  // module for sanitize()'s stricter matching.
+  t.split(/\s+/)[0]!,
+);
 
 interface Violation {
   file: string;
