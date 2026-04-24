@@ -1,19 +1,21 @@
 /**
- * PANG — invite landing.
+ * PANG — invite landing (iter #9).
  *
- * Route: `/i/:token`. This is the URL the gallery shares. The landing
- * validates the token server-side, sets the session cookie, and
- * redirects into The Room. The arrival ceremony (Primitive §6 View
- * Transitions) plays on the next navigation, not here — so the token
- * can be invalidated without leaving a half-ceremony on screen.
+ * Route: `/i/:token`. This is the URL the gallery shares.
  *
- * Iteration #0 ships the shell and the redirect only. Token
- * validation against Supabase lands with the intake agent (iteration
- * #1) because the two share an auth surface.
+ * Flow:
+ *   1. Server-side validate the token shape (cheap short-circuit).
+ *   2. Render a client component that binds the token and runs the
+ *      passkey enroll ceremony in one screen.
+ *
+ * The ceremony is the whole route. There is no confirmation sheet,
+ * no "welcome" paragraph. If the user already has a session cookie,
+ * the client component redirects into the Room without calling bind
+ * (a re-visit of the invite link after enrollment is a no-op).
  */
 
-import { redirect } from "next/navigation";
 import type { ReactElement } from "react";
+import { InviteLandingClient } from "./InviteLandingClient";
 
 export const dynamic = "force-dynamic";
 
@@ -21,18 +23,19 @@ interface InvitePageProps {
   params: Promise<{ token: string }>;
 }
 
+// JWT shape check — three base64url segments separated by dots. Keeps
+// obvious garbage out of the bind route. Real verification is
+// server-side in the bind handler.
+const JWT_SHAPE = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+
 export default async function InviteLanding({
   params,
 }: InvitePageProps): Promise<ReactElement> {
   const { token } = await params;
-
-  // Placeholder validation. Iteration #1 wires Supabase RLS + passkey
-  // enrollment here. For the scaffold we simply gate on token shape.
-  if (!/^[A-Za-z0-9_-]{16,64}$/.test(token)) {
-    redirect("/");
+  if (!JWT_SHAPE.test(token) || token.length > 2048) {
+    // No server-side redirect — the client handles the "invite
+    // didn't work" state with a voice-compliant line.
+    return <InviteLandingClient token="" malformed />;
   }
-
-  // TODO(iteration-1): exchange token → session, enroll passkey,
-  // then redirect. For now the redirect is the whole route.
-  redirect("/");
+  return <InviteLandingClient token={token} />;
 }
