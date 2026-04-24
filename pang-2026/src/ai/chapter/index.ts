@@ -44,6 +44,8 @@ export {
   isReady,
   diffActiveBeats,
   ariaLineForActive,
+  persistentSlots,
+  persistentArtifactSlots,
 } from "./driver";
 
 export {

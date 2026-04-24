@@ -48,14 +48,12 @@ import {
 import type { ReactNode } from "react";
 import {
   activeBeats,
-  beatEnvelope,
-  beatProgress,
   diffActiveBeats,
   isReady,
+  persistentArtifactSlots,
   planDocumentsChapter,
   DOCUMENTS_LABEL,
   type ActiveBeat,
-  type Beat,
   type DocumentsChapterPlan,
 } from "@/ai/chapter";
 import type { ChapterArtifact } from "@/ai/chapter";
@@ -390,35 +388,6 @@ function pickSlot(
     if (picked) return picked;
   }
   return null;
-}
-
-/**
- * Walk the plan's artifact beats and return one `ActiveBeat`-shaped
- * entry per beat that has already revealed (startMs <= tMs). Past-end
- * cards hold at rest (envelope 1, progress 1) so the tap surface
- * survives the reveal — the chapter is the reveal + the resting
- * evidence, not only the reveal.
- */
-function persistentArtifactSlots(
-  beats: readonly Beat[],
-  tMs: number,
-): readonly ActiveBeat[] {
-  const out: ActiveBeat[] = [];
-  for (const beat of beats) {
-    if (beat.kind !== "artifact") continue;
-    if (tMs < beat.startMs) continue;
-    const endMs = beat.startMs + beat.durationMs;
-    if (tMs >= endMs) {
-      out.push({ beat, envelope: 1, progress: 1 });
-      continue;
-    }
-    out.push({
-      beat,
-      envelope: beatEnvelope(beat, tMs),
-      progress: beatProgress(beat, tMs),
-    });
-  }
-  return out;
 }
 
 function clamp01(x: number): number {
