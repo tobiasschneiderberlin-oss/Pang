@@ -140,12 +140,36 @@ gates; they are `PANG_Voice.md`.
 - **Failure:** rounded utility leaks; `backdrop-filter` in a random
   component.
 
-### P10 — Passkey primary, no `<input type="password">`
+### P10 — Passkey primary, `requireSession` on every non-public API route
 
-- **Rationale:** one-gesture-to-open (`Primitives § 16`).
-- **Check:** grep for `type="password"` returns empty. Playwright
-  auth test uses `navigator.credentials.create`.
-- **Failure:** any password input in the tree.
+- **Rationale:** one-gesture-to-open + session identity as the
+  session-state boundary (`Primitives § 16`, § 17).
+- **Check (iter #9 uplift, 2026-04-24):**
+  1. Grep for `type="password"` in user-facing JSX returns empty.
+  2. `@simplewebauthn/server` + `@simplewebauthn/browser` +
+     `jose` are present in `package.json`; `src/auth/webauthn/
+     {options,verify}.ts` + `src/auth/server/{session,invite,
+     store,rate-limit}.ts` all exist.
+  3. `scripts/check-gates.ts` walks every `app/api/**/route.ts`
+     and confirms `requireSession()` is the first meaningful
+     statement of every non-allowlisted handler. The ALLOWLIST
+     names the ceremony routes explicitly (`invite/bind`,
+     `invite/mint-dev`, `passkey/{options,enroll,assert}`,
+     `session`, `logout`, `e2e-seam`) plus the telemetry
+     beacon. Opt-in, not opt-out.
+  4. `e2e/passkey.spec.ts` exists and covers invite → bind →
+     enroll → session → logout on the chromium CDP virtual
+     authenticator.
+- **Failure:** any password input; any missing auth primitive;
+  any `app/api/**/route.ts` outside the ALLOWLIST without
+  `requireSession()`; the passkey e2e spec missing. CI message
+  names the exact file path on regression.
+- **Was:** trivial-pass (grep for `type="password"`) — the old
+  gate was satisfied by a codebase with no auth at all.
+  Uplifted 2026-04-24 from iter #9. Gate-authoring lesson: a
+  gate that only checks for absence is half a gate; prefer
+  positive adoption walks over negative absence checks, and
+  allowlists over denylists. Codified in iter #9 findings.
 
 ### P11 — OKLCH only; no hex literals in `src/`
 

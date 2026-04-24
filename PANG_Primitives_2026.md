@@ -295,23 +295,66 @@ cache
 ### 16. WebAuthn passkeys, not passwords or social SSO
 
 - **Forbidden default:** email + password form; *"Continue with
-  Google"* button.
+  Google"* button; passkey button composed *next to* a password
+  field (the 2018 compromise — passkey as one option among many).
 - **Required primitive:** `navigator.credentials.create/get` with
-  `publicKey` + `userVerification: 'required'`.
-- **Adapter path:** `usePasskey()` hook.
+  `publicKey` + `userVerification: 'required'` + `residentKey:
+  'required'` + `authenticatorAttachment: 'platform'`. Conditional
+  UI via `<input autocomplete="username webauthn">` is the
+  sanctioned assertion affordance on cookie-less cold start.
+- **Adapter path:** `usePasskey()` hook wraps
+  `@simplewebauthn/browser@11`'s `startRegistration` /
+  `startAuthentication` with a structured failure shape
+  (`NotAllowedError → "cancelled"`, `InvalidStateError →
+  "already-enrolled"`, anything else → `"unexpected"`). Server
+  verification uses `@simplewebauthn/server@11` wrapped in
+  `src/auth/webauthn/{options,verify}.ts`.
+- **Session design:** opaque 32-byte hex bearer cookie
+  (HttpOnly + SameSite=Strict + Path=/, `Secure` in prod),
+  backed by a server-side session record. Not a JWT — JWT-as-
+  session makes revocation a deny-list; the opaque design makes
+  revocation a file delete. Rotation on every assert. 14-day TTL.
+- **Counter-rollback detection is doctrinal, not optional.**
+  `verifyAuthenticationResponse`'s new counter must be strictly
+  greater than the stored counter; on rollback, the credential
+  moves to a revoked directory (tombstone by move, primitive 50)
+  and the assert returns 410 Gone.
 - **Enforcement:** no `<input type="password">` anywhere in the
-  codebase. Gate **P10** (also in `PANG_Architecture_2026.md` §
-  Auth).
+  codebase. Gate **P10** (landed iter #9 upgrade): walks every
+  `app/api/**/route.ts` and confirms `requireSession()` is the
+  first meaningful statement of every non-allowlisted handler.
+  Codified 2026-04-24, iter #9.
 
-### 17. Gallery-signed JWT invite tokens, not magic links as primary
+### 17. Gallery-signed JWT invite tokens, single-use, not magic links as primary
 
 - **Forbidden default:** *"Enter your email to continue"* on the
-  landing page.
-- **Required primitive:** the gallery's invite URL embeds a signed
-  JWT (5 min TTL) identifying the collector + gallery pairing.
-- **Adapter path:** `app/i/[token]/page.tsx` verifies and mints a
-  session.
-- **Enforcement:** code-review level (one route, one verifier).
+  landing page; long-lived bearer tokens that survive a first
+  successful bind.
+- **Required primitive:** the gallery's invite URL embeds an
+  HS256 JWT (14-day TTL, signed via `jose@5`) identifying the
+  gallery + optional recipient metadata. The JWT carries a `jti`
+  that's consumed on first successful bind; replays fail closed
+  with 409.
+- **Adapter path:** `src/auth/server/invite.ts` — `signInvite` /
+  `verifyInvite` / `consumeInvite`. The landing page at `app/i/
+  [token]/page.tsx` validates the three-segment shape server-
+  side (cheap check, no verify) then hands off to
+  `InviteLandingClient` which calls `/api/auth/invite/bind`. Bind
+  is always client-side so CSRF-tokened cookies flow through in
+  the right order.
+- **Single-use marker commits before the session issues.** The
+  consumed-`jti` file is written inside the same span as the
+  session-cookie write; a crash between them reads as "invite
+  consumed, session not issued" and the collector retries (which
+  correctly fails closed — they ask the gallery for a new link).
+  "Commit after" re-opens the replay window. General rule:
+  **idempotency markers commit before the side effect they
+  guard** (primitive 51).
+- **Enforcement:** `app/api/auth/invite/bind/route.ts` is the
+  single verifier; consumption is a file-exists check at
+  `.pang/server-invites/<jti>.consumed`. Replay test in
+  `e2e/passkey.spec.ts` proves the contract. Codified 2026-04-24,
+  iter #9.
 
 ---
 
@@ -1085,6 +1128,99 @@ chunks
   regression. Surface-specific wrappers (the *override* in
   the deep-zoom case) are the right home for telemetry
   wiring. Codified 2026-04-24 from iter #8.
+
+---
+
+## Storage continued
+
+### 50. Tombstone by move, never by delete — live and archived live in two directories
+
+- **Forbidden default:** a store that "deletes" a record by
+  calling `unlink` (or `DELETE FROM …`) at the store level,
+  removing the byte trail that answers forensic questions
+  later. Works in an isolated test; fails the first time
+  someone asks *"did this credential ever authenticate?"* or
+  *"when was this invite consumed, and by whom?"*.
+- **Required primitive:** the store has two directories (or
+  two row-states with a discriminator) — live and archived.
+  Revocation / consumption / soft-delete is a **move**, not
+  an unlink. The store's public API treats archived-as-gone
+  for every read path; forensics walks the archive directly.
+- **Adapter path:** canonical references:
+  `.pang/server-credentials/` → `.pang/server-credentials-revoked/`
+  on counter-rollback detection (`src/auth/server/store.ts`);
+  `.pang/server-outbox/pending/` → `.pang/server-outbox/delivered/`
+  on successful drain (iter #4). Both use the same shape:
+  `renameSync` from live to archived; the live `loadX(id)`
+  returns `null` so the caller sees the credential/row as
+  gone.
+- **Enforcement:** code-review level. Signal: a store helper
+  in `src/` calls `unlink`, `rm`, or `DELETE` against its
+  durable backing. Redirect to a move-to-archived shape
+  unless the record is genuinely ephemeral (session tokens,
+  challenges — both of which *are* `unlink`ed because they
+  have no forensic value). Codified 2026-04-24 from iter #9.
+
+### 51. Idempotency markers commit before the side effect they guard
+
+- **Forbidden default:** write the side effect (issue a
+  session cookie, send an email, charge a card), then write
+  the "this was processed" marker. A crash between the two
+  re-opens the window for replay.
+- **Required primitive:** the marker commits **first**, in
+  the same span / transaction as the side effect where
+  possible. If the marker commits and the effect crashes,
+  the retry correctly fails closed (the caller sees
+  "already processed") and escalates to the human path
+  (ask the gallery for a new invite; call the support
+  desk). That's a strictly better failure mode than the
+  replay window.
+- **Adapter path:** canonical reference:
+  `app/api/auth/invite/bind/route.ts` writes
+  `.pang/server-invites/<jti>.consumed` before calling
+  `createSession()`; a replay test in `e2e/passkey.spec.ts`
+  proves the contract. The pattern applies to every
+  single-use token, outbox dispatcher, and "exactly-once"
+  claim in the codebase.
+- **Enforcement:** code-review level. Signal: a handler
+  that reads *"if processed return; else do the thing;
+  mark processed"* has the order wrong. The correct order
+  is *"if processed return; else mark processed; do the
+  thing"*. Codified 2026-04-24 from iter #9.
+
+### 52. Filesystem-backed server stand-in for durable state in dev, row-shape 1:1 with production
+
+- **Forbidden default:** waiting on the production
+  database (Supabase / Postgres / whatever) to wire the
+  durable server-side state an iteration needs. Blocks the
+  iteration on infra. The alternative — an in-memory
+  `Map` — is worse: restarting `next dev` loses every
+  record, and the migration-to-prod is a rewrite.
+- **Required primitive:** any durable server-side store
+  in dev lives under `.pang/server-<name>/` as one file
+  per record. JSON shape is literally the production row
+  shape (same field names, same types). The directory is
+  `.gitignore`d with a `.gitkeep` stub so the shape is
+  tracked but the contents never are. The migration to
+  production is a helper swap: `JSON.parse(readFile(path))`
+  becomes `await supabase.from(table).select(…)`; the call
+  site doesn't change because the store helpers
+  (`loadUser`, `saveSession`, `consumeInvite`, etc.)
+  already hide the I/O.
+- **Adapter path:** canonical references: `.pang/server-outbox/`
+  (iter #4, verification request dispatcher) and
+  `.pang/server-{users,credentials,sessions,invites,
+  challenges,credentials-revoked}/` (iter #9, auth). Six
+  directories, one pattern. Rate-limit state also lives
+  there (`.pang/server-rate-limit/`) so it survives `next
+  dev` restarts within a development session.
+- **Enforcement:** code-review level. Signal: a new
+  iteration that needs durable server state proposes an
+  in-memory `Map` or blocks on Supabase wiring. Redirect
+  to `.pang/server-<name>/`; the migration cost is zero
+  because the call sites are already store-helper-hidden.
+  Codified 2026-04-24 from iter #9; used three times
+  across iters #4, #9, and reserved for future iters.
 
 ---
 

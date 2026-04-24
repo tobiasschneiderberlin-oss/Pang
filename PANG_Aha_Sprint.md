@@ -4696,6 +4696,330 @@ above (iterate once or drop the failing sub-flow).
 
 ---
 
+## Iteration #9 — findings (2026-04-24)
+
+**Status:** landed at ceiling and opened as
+https://github.com/tobiasschneiderberlin-oss/Pang/pull/19 (squash
+pending). `npm run verify` clean (26/26 gates, 651/651 unit tests,
+9/9 eval fixtures across intake + enrichment + verification).
+Playwright e2e 30/30 on both `chromium-mobile` and
+`chromium-desktop`, including the new `passkey.spec.ts` (4 tests
+covering the full ceremony via chromium's CDP WebAuthn virtual
+authenticator — invite→bind→enroll→session, logout revocation,
+malformed-invite landing, replayed-invite landing). Spine moment
+#7 is closed: the collector's device holds the passkey, the
+session is an opaque bearer cookie backed by a server-side record,
+and every non-public API route refuses an unauthenticated caller.
+The two principle-scope deferrals (Magic Link OTP; Supabase
+persistence) remain deferred as planned. Laura's hands: queued for
+the first real-device session on the merged preview.
+
+### What landed
+
+- `src/auth/schema.ts` — Zod shapes for `User`, `CredentialRecord`,
+  `SessionRecord`, `InvitePayload`, `SessionReply`. The client-
+  exposed `SessionReply` is deliberately narrow (userId + method +
+  expiresAt) so a stolen `GET /api/auth/session` never leaks
+  enrollment metadata.
+- `src/auth/ids.ts` — base58-ish user id (`u_` + 22 chars). The
+  format mirrors what Supabase will produce; keeping it stable now
+  avoids a migration later.
+- `src/auth/config.ts` — single source of cookie names + TTLs
+  (`pang_session`, `pang_bind`, 14d / 10min). Imported by
+  `e2e/support/auth.ts`; drift here breaks the E2E seam.
+- `src/auth/server/store.ts` — user + credential store with a
+  filesystem stand-in under `.pang/server-{users,credentials,
+  credentials-revoked}/`. One file per record, JSON shape 1:1 with
+  the future Supabase row. Counter-rollback moves the credential
+  file from live → revoked, never deletes.
+- `src/auth/server/session.ts` — opaque 32-byte hex bearer
+  sessions. `createSession` / `readSession` / `rotateSession` /
+  `revokeSession` / `requireSession`. Cookie is HttpOnly +
+  SameSite=Strict + Path=/; `Secure` gated on
+  `NODE_ENV==="production"` so Playwright-against-localhost sees
+  the cookie.
+- `src/auth/server/invite.ts` — HS256 JWT via `jose@5`, 14d TTL,
+  single-use via `.pang/server-invites/<jti>.consumed` markers.
+  Signing key from `PANG_AUTH_INVITE_SECRET`. `signInvite` /
+  `verifyInvite` / `consumeInvite`.
+- `src/auth/server/rate-limit.ts` — per-route sliding window,
+  disk-backed so it survives `next dev` restarts. `invite/bind`,
+  `passkey/assert`, `passkey/enroll` get the tight window; other
+  routes get a soft cap.
+- `src/auth/webauthn/{options,verify}.ts` — thin wrappers around
+  `@simplewebauthn/server@11`. Enrollment asks for platform
+  authenticator + resident key + required UV; assertion is RP-
+  scoped to `APP_ORIGIN`. Challenge persisted to
+  `.pang/server-challenges/` keyed on the bind session.
+- `app/api/auth/` — eight routes: `invite/bind` (unauth), `invite/
+  mint-dev` (E2E+dev seam), `passkey/{options,enroll,assert}`,
+  `session`, `logout`, `e2e-seam` (synthetic session for non-
+  passkey specs). Every route Zod-parses input (A3), emits
+  `gen_ai.*` + `auth.*` spans (A10), and either calls
+  `requireSession` or is on the ceremony allowlist. The two E2E/
+  dev-only surfaces are double-gated:
+  `NEXT_PUBLIC_PANG_E2E=1` at build time and an `x-pang-e2e:
+  <PANG_AUTH_E2E_TOKEN>` bearer per request; production bundles
+  with the env var unset strip the surface entirely.
+- `app/i/[token]/page.tsx` + `InviteLandingClient.tsx` — invite
+  landing state machine (`malformed → binding → ready → enrolling
+  → done → used`). Server shell validates the three-segment JWT
+  shape before render; the bind is always client-side so the CSRF-
+  tokened cookies flow through in the right order. Copy passes
+  voice + Museumsschild checks: *"Create passkey."*, *"This
+  invite is not valid."*, *"This invite has been used."*.
+- `src/hooks/usePasskey.ts` — wraps `@simplewebauthn/browser@11`'s
+  `startRegistration` / `startAuthentication` with a structured
+  failure shape: `NotAllowedError → "cancelled"`, `InvalidStateError
+  → "already-enrolled"`, anything else → `"unexpected"` with the
+  raw message for telemetry.
+- `src/components/AppBoot.tsx` — behind `NEXT_PUBLIC_PANG_E2E=1`,
+  exposes `window.__PANG.authSeed(...)` that POSTs `/api/auth/
+  e2e-seam` with the shared bearer. Lets every non-passkey spec
+  skip the ceremony by seeding a synthetic session before
+  `page.goto`. Production bundles without the env var never
+  install the surface.
+- `scripts/check-gates.ts` — P10 rewrite: walks every `app/api/**/
+  route.ts`, confirms `requireSession()` is the first meaningful
+  statement of each non-allowlisted handler, fails CI with the
+  file path on regression. Allowlist names the ceremony routes
+  explicitly (opt-in, not opt-out).
+- Four gated-route uplifts: `intake`, `enrichment/submit`,
+  `verification/push/subscribe`, `verification/request` now call
+  `requireSession` at the top. Their unit tests pick up a seeded
+  session fixture via `src/test/{next-headers-mock,seed-session}
+  .ts`; the assertion shape stays the same, only setup moved.
+- `e2e/passkey.spec.ts` — four Playwright tests over a chromium
+  CDP virtual authenticator (ctap2 / internal transport / resident
+  key + UV required). Proves the session cookie shape, the logout
+  revocation, the malformed-invite no-bind guarantee, and the
+  replayed-invite 409 landing. `e2e/support/auth.ts` ships the
+  `authSeed` / `authClear` helpers the other 26 specs use.
+- `playwright.config.ts` — `PANG_AUTH_E2E_TOKEN` +
+  `PANG_AUTH_INVITE_SECRET` plumbed into both the test-runner env
+  and the `next dev` webServer env, so the helpers and the routes
+  see the same values. Deterministic dev fallback for both so
+  local + CI are consistent.
+- `package.json` — `@simplewebauthn/{server,browser}@11`, `jose@5`
+  land. Test script moves to `node --experimental-test-module-
+  mocks --import tsx --test --test-concurrency=1` (module mocks
+  leak across parallel test files in the default runner).
+
+### What execution exposed
+
+Eight discoveries, each with its verdict:
+
+1. **Next.js app router silently 404s `_`-prefixed folders.** The
+   first attempt named the E2E surfaces `app/api/auth/__e2e/` and
+   `app/api/auth/invite/__dev/` — plausible (it's the same
+   "underscore = private" convention Python uses). Both routes
+   returned 404 with env vars correctly plumbed; a `console.log`
+   at the top of each handler never fired. The cause: Next 16's
+   app router treats any segment folder whose name starts with
+   `_` as a **private folder** — excluded from routing entirely,
+   no handler ever compiled. Fix: renamed to `e2e-seam/` and
+   `mint-dev/`. Cost half an evening to locate because the 404
+   arrives before any user code runs. General shape: **routable
+   Next.js folders must never start with `_`**. The convention is
+   documented but not surfaced by dev-server diagnostics, and the
+   404 is indistinguishable from a missing route. Codify in
+   `PANG_Architecture_2026.md` § 10.5 (Build + testing seams) as
+   a footgun note so the next underscore-named route doesn't cost
+   another evening.
+
+2. **Third use of the filesystem-backed server-store pattern — it
+   is the sanctioned dev stand-in.** Iter #4 wrote the outbox
+   under `.pang/server-outbox/` as one file per record. Iter #9
+   reuses the exact shape for users, credentials, sessions,
+   invites, challenges, revoked-credentials, and rate-limit state
+   — six directories, all with `.gitkeep` stubs and gitignored
+   contents. The migration path to Supabase is now a literal
+   swap: `JSON.parse(readFile(path))` becomes `supabase.from(
+   table).select(...)`; the call site doesn't change because the
+   store helpers (`loadUser`, `saveUser`, `revokeCredential`,
+   etc.) already hide the I/O. A pattern used three times across
+   three iterations has earned primitive status. Codified in
+   `PANG_Primitives_2026.md` and `PANG_Architecture_2026.md` §
+   10.5.
+
+3. **Opaque bearer cookie + server-side session record beats
+   JWT-as-session at the ceiling.** The kickoff brief named the
+   tradeoff; the iteration proves it. Revocation is a file
+   delete (and a `Set-Cookie` with `Max-Age=0`); rotation is a
+   file rename + new cookie write. No deny-list. No "revoked
+   before expiry" edge case. The 14-day TTL with rotation-on-
+   assert is an idle-session safety net without friction for
+   active collectors (rotation reads as a no-op to the
+   collector). JWTs stay where they earn their keep — the invite
+   boundary, where "signed and single-use" is the contract.
+   Codified in `PANG_Architecture_2026.md` § 8 as a clarifying
+   clause on the existing "rotating server-side token" line.
+
+4. **Revocation is a move, not a delete.** Counter-rollback clone
+   detection moves the credential file from
+   `.pang/server-credentials/` to
+   `.pang/server-credentials-revoked/` rather than deleting. A
+   later forensics question ("did this credential ever
+   authenticate?") still has an answer. A support question
+   ("why did the collector's sign-in suddenly break?") has a
+   file to point at. The audit trail is a directory listing, not
+   a log grep. Generalises: **any store that deletes at the
+   store level is one forensic question away from a hole; a
+   two-directory live/archived shape gives you the same
+   semantics plus history for free**. Codified in
+   `PANG_Primitives_2026.md` as "tombstone by move, never by
+   delete" — noted as the pattern the outbox (iter #4) already
+   uses implicitly (delivered rows move to `delivered/`, never
+   get unlinked).
+
+5. **P10 uplift — a trivial-pass gate is half a gate.** Before
+   iter #9, P10 checked `src/auth/` existed and no `type=
+   "password"` appeared. Both conditions hold for a codebase
+   with no auth at all. The uplift walks every `app/api/**/
+   route.ts`, confirms `requireSession()` is the first
+   meaningful statement of each non-allowlisted handler, and
+   fails with the file path on regression. The ALLOWLIST is
+   explicit (the ceremony routes and the telemetry beacon) —
+   opt-in, not opt-out, so a new gated route can't "accidentally"
+   bypass the check by sitting on an existing allowlist. General
+   shape: **a gate that walks the surface is strictly stronger
+   than a gate that checks for absence**. Codify as a gate-
+   authoring principle in `PANG_Gates.md`: prefer positive
+   adoption over negative absence; allowlists over denylists;
+   file-path error messages over pass/fail.
+
+6. **Node test-module mocks need `--test-concurrency=1`.** The
+   route unit tests mock `next/headers` so `cookies()` returns a
+   seeded cookie jar. Under the old `--test-reporter=spec` runner
+   without `--test-concurrency=1`, the mock leaked across parallel
+   test files — one file's mocked `cookies()` occasionally
+   returned another file's seeded value. The fix: `node
+   --experimental-test-module-mocks --import tsx --test
+   --test-concurrency=1`. Cost: test duration ~3s → ~5s. Worth
+   it; flaky tests are strictly worse than slow tests, and the
+   auth seam has no parallelism benefit to recover. General
+   shape: **module mocks in node's test runner are process-global
+   — parallel files race on the registry**. Noted in
+   `PANG_Architecture_2026.md` § 10.5 (testing seams) alongside
+   the Playwright config clauses.
+
+7. **Idempotency markers commit before the side effect.** The
+   invite `bind` route writes the `.pang/server-invites/<jti>
+   .consumed` marker **before** it issues the session cookie,
+   inside the same span. A crash between the two reads as
+   "invite consumed, session not issued" — the collector retries
+   the invite, the retry correctly fails closed (409), and the
+   collector asks the gallery for a new link. The "commit after"
+   shape has the opposite failure mode (session issued, invite
+   not marked consumed), which re-opens the replay window for
+   the window between success and marker-write. Playwright
+   replay test proves the invariant. General shape: **an
+   idempotency marker that commits after its guarded side effect
+   is doing nothing** — by the time the marker exists, the
+   attacker has the effect. Noted in
+   `PANG_Architecture_2026.md` § 10.5 as a seam-authoring rule.
+
+8. **WebAuthn virtual-authenticator config must mirror the RP
+   exactly — misconfiguration surfaces as `NotAllowedError`
+   with no detail.** First draft of `addVirtualAuthenticator`
+   had `hasResidentKey: false`. `startRegistration` rejected
+   with `NotAllowedError` and the DOMException message was an
+   empty string. The RP's enroll options declare `residentKey:
+   "required"` + `authenticatorAttachment: "platform"` +
+   `userVerification: "required"`; the virtual authenticator
+   has to declare the equivalent flags (`hasResidentKey: true`,
+   `hasUserVerification: true`, `isUserVerified: true`,
+   `transport: "internal"`). The debug loop is "does the virtual
+   authenticator mirror the RP exactly?" — there is no more
+   specific diagnostic available. Codified inline in
+   `passkey.spec.ts`'s `addVirtualAuthenticator` docstring so
+   the next iteration reaching for CDP WebAuthn sees the
+   constraint up front.
+
+### Codification — what moves into the keeper docs
+
+- **`PANG_Primitives_2026.md` — two new primitives.**
+  - "Passkeys + opaque bearer session" joins the auth section.
+    Clauses: WebAuthn is the sole primary auth path; invite JWT
+    is the only JWT (session continuation is an opaque bearer);
+    conditional UI via `autocomplete="username webauthn"` is
+    the sanctioned assertion affordance on cookie-less cold
+    start; **forbidden composition: passkey button next to
+    password field** (the 2018 compromise P10 now mechanically
+    forbids).
+  - "Filesystem-backed server stand-in" joins the build-infra
+    section. Clauses: any durable server-side store in dev
+    lives under `.pang/server-*/` as one-file-per-record JSON;
+    the directory is `.gitignore`d with a `.gitkeep` stub so
+    the shape is in the repo but the contents are not; the
+    Supabase row shape matches the JSON shape 1:1 so the
+    migration is a call-site-preserving swap. Used three times
+    (iter #4 outbox, iter #9 auth, anticipated for everything
+    that follows).
+  - "Revocation is a move, not a delete" joins the store
+    discipline section. Live vs archived is two directories;
+    the store's public API returns archived-as-gone; forensics
+    walks the archive directly.
+
+- **`PANG_Architecture_2026.md` — three clarifying clauses.**
+  - § 8 Auth: clarifies the existing "rotating server-side
+    token" line to call out that session state is opaque-bearer
+    + server-record (JWT for the invite boundary only); lists
+    `requireSession` as the sole helper every non-public route
+    adopts.
+  - § 10.5 Build + testing seams: adds the private-folder
+    footgun (no underscore-prefixed routable folders); adds the
+    node test-module-mocks + `--test-concurrency=1` clause;
+    adds the "idempotency marker commits before side effect"
+    rule.
+  - § 10 top note: session auth is now a landed ceiling, not a
+    waiting primitive.
+
+- **`PANG_Spine.md` § *Build order*.** Moment #7 graduates from
+  "next up" to "landed 2026-04-24, iter #9" with the ceremony
+  shape summarised. Moment #8 (verification request flow) is
+  still in the queue; the gated routes are now session-aware
+  and the verification-outbox `userId` hook is in place.
+
+- **`PANG_Gates.md`.** P10's description in the 48-gate
+  table updates from "no password surfaces" to "no password
+  surfaces + every API route either gated with requireSession
+  or on the ceremony allowlist + Playwright passkey spec
+  present". Fail condition expands. Gate count stays 48.
+
+### What stayed deferred (on purpose)
+
+- **Magic Link OTP fallback.** Still principle-scope-deferred.
+  The `auth.passkey.enroll.failed { reason: "not-supported" }`
+  span is wired and the rails (`method: "passkey" | "otp"` in
+  `SessionRecord`) are in place; the OTP branch lights up the
+  day the observability signal shows a Tier-C device arriving.
+- **Supabase persistence.** Still deferred. The filesystem
+  stand-ins and their gitignore rules are in; the Supabase
+  migration path is "swap the store helper bodies, same call
+  sites." The iter that turns on Supabase will be small.
+- **Multi-device passkey sync UX.** Platform authenticators
+  sync through iCloud Keychain / Google Password Manager / 1P
+  already; we inherit the sync, we don't render it. A "your
+  devices" surface stays out until a Laura-hands signal asks
+  for it.
+- **Passkey management screen.** Same — out of scope until a
+  concrete ask.
+
+### What comes next
+
+Spine moment #8 — **Verification request flow.** The outbox
+from iter #4, the correspondence lane from iter #5, and the
+session identity from iter #9 finally compose: Laura taps a
+dormant work, PANG pre-writes the message, Correspondence
+Agent owns the prose, one tap to send via the collector's
+preferred channel (email / WhatsApp). The gallery's side is a
+two-tap confirm surface that rides the same session auth. The
+spine's verification line — *"Ask your gallery to confirm"* —
+becomes a real gesture instead of a promise.
+
+---
+
 ## Known debts
 
 Named so they're not invisible. Not iterations in themselves —
