@@ -9120,6 +9120,161 @@ iter #16 tuning pass.
 
 ---
 
+## Iteration #16 — Playwright flake-fix (opened 2026-04-24)
+
+> CI-correctness iteration. The e2e job has been red on every push
+> since iter #11 landed — the `outcome-chapter.spec.ts` confirmation
+> and decline specs time out at 30 s on the `chromium-mobile`
+> project while passing cleanly on `chromium-desktop`. Three PRs
+> (#23, #24, #25) were admin-merged past the red job. That habit
+> needs to end before it becomes default. This iteration makes CI
+> trustworthy again — not by retry-hiding the flake, not by
+> expanding the timeout, but by fixing the race the failure is
+> actually exposing.
+
+### Scope — *principle*
+
+One surface (the outcome narration read in the e2e suite), one
+primitive (atomic text capture via `page.waitForFunction` or the
+equivalent `toContainText` matcher), and a single side-effect: no
+more admin-merges, no more "just rerun it," and the chromium-mobile
+run passes on the first attempt from a cold cache for at least the
+next three consecutive pushes.
+
+This is an infrastructure-correctness iteration, not a spine
+moment. The outcome chapter (iter #11) already works — Laura's
+hands confirmed the ceremony lands. What doesn't work is our
+ability to *prove* it still works from CI as the surface evolves.
+Ceiling scope on a flake-fix would be "rebuild the e2e harness in
+Cypress" — that's out of scope, the principle scope is right.
+
+### Stack
+
+- `@playwright/test` (already wired; version pinned via
+  `package-lock.json`).
+- `page.waitForFunction` for atomic DOM + text capture, OR
+  `expect(locator).toContainText(regex, { timeout })` — both retry
+  the combination (locator-resolves AND text-matches). Single
+  evaluation in the page context, no race between a separate
+  attach-check and a later `.innerText()` read.
+- `test.setTimeout(60_000)` at the file or test level to give
+  mobile emulation's slower hydration room to breathe without
+  masking the real race.
+- No product changes. The narration beat window of 5.5 s
+  (chapter-t `[1500, 7000)`) is a spine-timing decision (iter #11);
+  shrinking it to accommodate a test would be the wrong valence.
+
+### Reference
+
+Playwright docs, *Best Practices → Avoid the two-step race*
+(fetching an element then reading it separately). The idiomatic
+fix is a single assertion that retries on the combination.
+
+The adjacent internal reference is iter #11's outcome-chapter
+plan: narration beat is 5500 ms wide, opacity envelope fades in
+and out, and the outer `<main aria-label="outcome">` stays
+mounted through ready at chapter-t = 14000 ms. The test already
+observes this shape correctly — the bug is in the observation
+method, not the subject.
+
+### Canvas
+
+No canvas change. The outcome surface is DOM-over-canvas (already
+landed in iter #11). The test edit lives in `e2e/`; the product
+tree at `src/components/intake/OutcomeChapter.tsx` and
+`src/ai/chapter/plan.ts` stays untouched.
+
+### Failure mode
+
+If this iteration ships but CI goes red again tomorrow, what has
+to be observable to diagnose it in under ten minutes?
+
+- The Playwright HTML report must attach to every CI run (already
+  configured; verify the artifact is still uploading).
+- The failing spec must emit a page snapshot on timeout (already
+  default; verify by reading the existing `error-context.md` in
+  `/tmp/pang-iter16-trace`).
+- `toBeAttached` → `innerText` two-step is removed; only the
+  atomic matcher remains. A future regression reads the matcher
+  line in the stack trace and knows precisely which assertion
+  failed, not which implicit locator retry hung.
+- A short `// iter #16:` comment above each migrated assertion
+  documents *why* the old shape was wrong, so the next contributor
+  doesn't revert to the two-step form on a naive cleanup pass.
+
+### Test criteria
+
+- `npm run test:e2e -- --project=chromium-mobile e2e/outcome-chapter.spec.ts`
+  passes locally on a cold cache, all 5 specs, no `retries`.
+- `npm run test:e2e` (both projects) passes on CI on the first
+  attempt of the next three consecutive pushes.
+- No product file changes (the spec edit is self-contained).
+- The replaced assertion emits a single Playwright call per test
+  (one `expect(narration).toContainText(...)` or one
+  `waitForFunction`), not a `toBeAttached` → `innerText` chain.
+- Test timeout extended to 60 s at the spec-file level — enough
+  headroom for chromium-mobile's ~4 s narration-attach delay plus
+  the full 14 s chapter duration plus buffer; not so much that a
+  genuine regression takes over a minute to fail.
+
+### Out of scope
+
+- Product changes to the chapter plan (beat windows, envelope
+  curves, ready timing). The chapter is correct; the test is not.
+- Moving specs to a different framework. Playwright stays.
+- Retry-based flake hiding. CI `retries: 1` stays (it's a
+  reasonable transient-network fallback) but the fix must make the
+  first attempt pass reliably; the retry is not the fix.
+- Coverage expansion. This iteration touches two assertions in two
+  specs, not the whole e2e suite. If other specs are flaky,
+  they're a separate iter.
+
+### Root cause (diagnosed before brief close)
+
+Downloaded the failing trace zip from CI run `24887186158` and
+parsed the action timeline. Key numbers:
+
+```
+t0=22.28s  t1=22.41s  dur=0.13s  expect(outcome).toBeVisible
+t0=22.43s  t1=26.64s  dur=4.20s  expect(narration).toBeAttached  ← 4.2 s!
+t0=26.64s  t1=30.00s  dur=3.36s  narration.innerText  ← hung until test timeout
+```
+
+On `chromium-desktop`, the `toBeAttached` step takes ~1.5 s
+(matches the chapter-t=1500 ms narration beat start). On
+`chromium-mobile` (Pixel 7 device emulation), it takes 4.2 s —
+2.7 s of additional delay attributable to slower hydration,
+mobile-viewport layout cost, and the RAF loop's first-tick
+latency under device emulation.
+
+That leaves only ~2.6 s of narration-attached window before the
+beat closes (chapter-t=7000 ms ≈ wall-t=29.3 s). `innerText()`'s
+auto-retry mechanism then hangs the instant the narration
+unmounts in the next React commit — it keeps polling for a
+locator that will never re-resolve (the beat is one-shot, not
+recurring), until the 30 s test timer kills the action.
+
+The CI error-context `.md` files confirm: at timeout, the page
+snapshot shows the outcome `<main>` with `role="button"` and the
+dismiss affordance visible — meaning the chapter has reached
+ready (chapter-t ≥ 14000 ms). The narration has been gone for
+multiple seconds.
+
+The fix is atomic observation: capture text in a single page-side
+poll that holds the element reference for the duration of the
+read, so a concurrent React commit can't detach the element
+between locate and read.
+
+### Outcome gate (signal, not Laura's hands)
+
+This iteration doesn't earn Laura's hands — infrastructure
+correctness is a tools-layer concern, not a spine moment. The
+gate is CI signal over time: three consecutive green e2e runs on
+pushes to `main`, measured from merge. A single flake recurrence
+inside that window re-opens the iter as #16b.
+
+---
+
 ## Archived iterations
 
 The pre-reset sprint family (A1–A11, iterations #1–#13 of the old
