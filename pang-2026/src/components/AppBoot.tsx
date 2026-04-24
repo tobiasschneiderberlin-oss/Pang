@@ -29,6 +29,7 @@ import {
   hydrateVerification,
   installVerificationPersistence,
 } from "@/stores/verification.persist";
+import { useNarrative } from "@/stores/narrative";
 import {
   installDispatchedVisibilityWalker,
   installOnlineDrain,
@@ -84,10 +85,11 @@ export function AppBoot(): null {
           __PANG?: {
             useWorks: typeof useWorks;
             useVerification: typeof useVerification;
+            useNarrative: typeof useNarrative;
             authSeed: typeof authSeed;
           };
         }
-      ).__PANG = { useWorks, useVerification, authSeed };
+      ).__PANG = { useWorks, useVerification, useNarrative, authSeed };
     }
 
     const unbindPrefs = bindPreferencesToRoot();
