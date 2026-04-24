@@ -7979,8 +7979,13 @@ introduces it. The audit-sweep iteration pattern is a one-time
 cost, not a recurring one — future voice discipline lands as
 commit-level enforcement.
 
-**Merge.** Squashed to commit `<filled after merge>` on main,
-PR `#<filled after merge>`.
+**Merge.** Squashed to commit `15d9df3` on main, PR `#23`. Two
+pre-existing `e2e/outcome-chapter.spec.ts` Playwright failures
+inherited from main (same file, same two tests failing on iter
+#12 findings commit and iter #11 findings commit) were not
+regressed by iter #13; merged with admin override. The flake is
+outside iter #13's scope and queues for a Playwright-stability
+iteration if it recurs.
 
 ---
 
