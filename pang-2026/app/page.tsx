@@ -33,6 +33,7 @@ import { DeepZoomOverlay } from "@/components/deep-zoom/DeepZoomOverlay";
 import { RoomSurfaceClaim } from "@/components/room/RoomSurfaceClaim";
 import { NarrativeOverlayConnector } from "@/components/room/NarrativeOverlayConnector";
 import { OutcomeChapterMount } from "@/components/intake/OutcomeChapterMount";
+import { SettingsOverlay } from "@/components/chrome/SettingsOverlay";
 import { ROOM_MAIN_LABEL } from "@/ai/room/voice";
 
 export default function TheRoom(): ReactElement {
@@ -76,6 +77,11 @@ export default function TheRoom(): ReactElement {
        *  and hasn't been dismissed this session. Passive surface —
        *  silence is the default register. */}
       <NarrativeOverlayConnector />
+      {/* Iteration #15 — Quiet settings overlay. A small chrome
+       *  affordance in the Room's top-right opens a Popover-API
+       *  panel carrying the two silence-default opt-ins (spatial
+       *  audio + haptics). Cold install: both off, panel closed. */}
+      <SettingsOverlay />
     </main>
   );
 }
