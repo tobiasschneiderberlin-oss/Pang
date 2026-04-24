@@ -170,7 +170,15 @@ async function main(): Promise<void> {
       // characters is a code identifier and exempt from the
       // marketing scan. Prose (has spaces) and Title Case stay in.
       const isCodeIdentifier = /^[a-z0-9]+(?:-[a-z0-9]+)+$/.test(value);
-      if (!isTestFile && !isCodeIdentifier) {
+      // Import specifiers (`@simplewebauthn/server`, `next/headers`),
+      // URLs (`https://...`), and paths carry substrings that collide
+      // with the ban list ("simple" inside `@simplewebauthn/...`).
+      // These aren't prose — a string containing `/` is a path-like
+      // value by construction. The title-case check already excludes
+      // them; doing the same for marketing scans keeps the gate
+      // precise without opening a hole in UI copy.
+      const isPathLike = value.includes("/");
+      if (!isTestFile && !isCodeIdentifier && !isPathLike) {
         for (const term of MARKETING) {
           if (lower.includes(term)) {
             violations.push({
