@@ -875,21 +875,53 @@ async function p25(): Promise<GateResult> {
     }
   }
   // "Add to wall" entry point must be present and unconditional.
+  // Iter #13 moved the literal into the intake corpus
+  // (`src/ai/intake/voice.ts`), so the gate now checks two shapes:
+  //   1. IntakeReview.tsx references `aria-label={INTAKE_ADD_TO_WALL.label}`
+  //      (or the pre-corpus literal form for legacy branches).
+  //   2. The corpus resolves `INTAKE_ADD_TO_WALL.label` to "add to wall".
+  // Either form passes; a rename of the corpus value still fails loudly.
   if (!(await exists("src/components/intake/IntakeReview.tsx")))
     return fail(id, title, "IntakeReview.tsx missing");
   const review = await read("src/components/intake/IntakeReview.tsx");
-  if (!/aria-label=["']add to wall["']/.test(review))
+  const literalForm = /aria-label=["']add to wall["']/;
+  const corpusForm = /aria-label=\{INTAKE_ADD_TO_WALL\.label\}/;
+  const isLiteral = literalForm.test(review);
+  const isCorpus = corpusForm.test(review);
+  if (!isLiteral && !isCorpus)
     return fail(
       id,
       title,
-      'IntakeReview.tsx must expose a button with aria-label="add to wall"',
+      'IntakeReview.tsx must expose a button with aria-label="add to wall" (or aria-label={INTAKE_ADD_TO_WALL.label})',
     );
+  if (isCorpus) {
+    // Validate that the corpus value still resolves to "add to wall".
+    // A simple regex on the corpus file suffices — the corpus is a
+    // frozen literal record, not computed.
+    if (!(await exists("src/ai/intake/voice.ts")))
+      return fail(
+        id,
+        title,
+        "src/ai/intake/voice.ts missing; cannot verify INTAKE_ADD_TO_WALL.label",
+      );
+    const corpus = await read("src/ai/intake/voice.ts");
+    const m = corpus.match(
+      /INTAKE_ADD_TO_WALL\s*=\s*Object\.freeze\(\{[\s\S]*?label:\s*["']([^"']+)["']/,
+    );
+    if (!m || m[1] !== "add to wall")
+      return fail(
+        id,
+        title,
+        `INTAKE_ADD_TO_WALL.label in src/ai/intake/voice.ts must equal "add to wall" (got ${m ? `"${m[1]}"` : "no match"})`,
+      );
+  }
   // Guard against a disabled= gate creeping onto the arrival button.
-  // Flag any `disabled=` within five lines of the aria-label="add to
-  // wall" marker — correct, simple, and easy to override intentionally
-  // (move the disabled prop further in the JSX if genuinely needed).
+  // Flag any `disabled=` within five lines of the aria-label marker —
+  // correct, simple, and easy to override intentionally (move the
+  // disabled prop further in the JSX if genuinely needed).
   const lines = review.split("\n");
-  const idx = lines.findIndex((ln) => /aria-label=["']add to wall["']/.test(ln));
+  const marker = isCorpus ? corpusForm : literalForm;
+  const idx = lines.findIndex((ln) => marker.test(ln));
   if (idx >= 0) {
     const window = lines.slice(Math.max(0, idx - 5), idx + 5).join("\n");
     if (/\bdisabled=/.test(window))
