@@ -959,6 +959,135 @@ chunks
 
 ---
 
+## Client components
+
+### 46. Components that touch browser globals at module load ship via `next/dynamic({ ssr: false })`
+
+- **Forbidden default:** a `"use client"` component that
+  statically imports a module touching `document`, `window`,
+  `self`, or other browser-only globals at module evaluation
+  time. The App Router evaluates client modules on the server
+  during prerender; the directive only marks hydration
+  boundaries, not SSR skipping.
+- **Required primitive:** the **dynamic-wrapper split**. A
+  thin outer file `Foo.tsx` exports `function Foo()` that
+  renders `<FooClient />` obtained through
+  `next/dynamic(() => import("./FooClient"), { ssr: false })`.
+  The inner `FooClient.tsx` holds the real component and may
+  import the offending module freely.
+- **Adapter path:** canonical references:
+  - `src/components/deep-zoom/DeepZoomOverlay{,Client}.tsx`
+    (OpenSeadragon touches `document` at load).
+  - `src/room/dom/TheRoomCanvas{,Dynamic}.tsx` (three/webgpu
+    touches `self`).
+  - `app/deep-zoom-smoke/DeepZoomSmokeClient{,Dynamic}.tsx`.
+- **Enforcement:** code-review level. Signal: a Playwright
+  webServer boot fails with `ReferenceError: document is not
+  defined` (or `window`/`self`) originating from a client
+  module's static import. When the failure surfaces, introduce
+  the wrapper split; do not reach for `typeof window !==
+  "undefined"` guards or lazy `useEffect` imports. The split
+  is the sanctioned shape. Codified 2026-04-24 from iter #8.
+
+---
+
+## Canvas surfaces continued (again)
+
+### 47. Third-party canvas engine cache-throughs install via a per-viewer override on the engine's own dispatch seam
+
+- **Forbidden default:** a Service Worker fetch handler, a
+  custom `fetch` interceptor, or a proxy server in front of
+  the engine's tile/page requests. Each loses the
+  `source: "opfs" | "network"` attribution on the main
+  thread — by the time the downstream event fires, the
+  decision context is gone, and cross-thread message plumbing
+  to reconstruct it costs more than the cache itself.
+- **Required primitive:** the adapter around a third-party
+  canvas engine installs a per-viewer override on the engine's
+  own dispatch seam. The override rides the same call stack
+  that decides to fetch, so attribution is trivially correct.
+  Canonical shapes:
+  - OpenSeadragon: `viewer.world.getItemAt(0).source
+    .downloadTileStart = (context) => { ... }` from
+    `viewer.addOnceHandler("open", ...)`. Reference:
+    `src/deep-zoom/opfs-override.ts`.
+  - PDF.js: the `getDocument({ fetch })` option (iter #6
+    DocumentViewer).
+- **Adapter path:** the override emits
+  `<surface>.cache.{hit,miss,evict}` + a load-span with
+  `source: "opfs" | "network"` attribution in the same
+  function that resolved the bytes. Object URLs from blob
+  caches are revoked in `queueMicrotask` after the engine's
+  synchronous copy-in.
+- **Enforcement:** code-review level. Signal: a `tile.load`
+  span emits `source` values that don't match the byte source
+  (e.g., `"network"` on a warm cache), or the cache-hit path
+  needs cross-thread attribution plumbing. When the override
+  seam exists on the engine, use it; when it doesn't, the
+  adapter has chosen the wrong engine. Codified 2026-04-24
+  from iter #8.
+
+### 48. Second meaning on the existing gesture, not a new gesture, when escalation is discrete and state-dependent
+
+- **Forbidden default:** introducing long-press, double-tap,
+  pinch-out-past-threshold, or hover-intent as a second
+  escalation channel from a selected state. Each grows the
+  controller's surface and muddies the handoff with
+  third-party engines that own their own variants of those
+  gestures (OSD pinch, PDF.js scroll, etc.).
+- **Required primitive:** when escalation is discrete and
+  occurs on an already-selected target, the second firing of
+  the existing selection gesture *is* the escalation. The
+  gesture's meaning is state-dependent; the grammar stays
+  single-primitive.
+- **Adapter path:** `src/room/gestures.ts` carries an
+  `onSecondTap?(workId)` binding alongside `onTap`. A tap on
+  an already-focused work fires the second-tap signal and
+  keeps focus; every other tap path retains its prior
+  meaning. The controller field is one line; the test branch
+  is one describe.
+- **Enforcement:** code-review level. Signal: a feature that
+  needs a discrete escalation from a selected state proposes
+  a new gesture name. Redirect to the second-firing pattern
+  unless the escalation is continuous (pinch escalation
+  across overlay handoffs is genuinely a different problem —
+  deferred to its own iteration). Codified 2026-04-24 from
+  iter #8.
+
+---
+
+## State continued
+
+### 49. Reusable storage primitives expose observability via caller-configurable hooks, never by importing the telemetry surface
+
+- **Forbidden default:** a reusable cache / queue / WAL
+  module that imports `src/**/otel.ts` (or any
+  surface-specific telemetry catalogue) and emits spans
+  directly. The module stops being reusable — a second caller
+  gets the first caller's span names.
+- **Required primitive:** the primitive accepts
+  caller-configurable hooks (`onEvict`, `onWrite`,
+  `onQuotaLow`, etc.) and invokes them wrapped in try/catch
+  so a caller's throw can't poison storage state. The
+  caller wires the hook to the telemetry catalogue for its
+  surface.
+- **Adapter path:** canonical reference:
+  `src/deep-zoom/opfs-cache.ts` exports
+  `putTileBlob(url, blob, options)` and
+  `fetchTileCached(url, init, options)` with
+  `options.onEvict?(count, bytesFreed, bytesRemaining)`.
+  `src/deep-zoom/opfs-override.ts` wires the hook to
+  `deepZoomCacheEvictEvent`. A future document-tile cache
+  can reuse `opfs-cache.ts` and wire its hook to a
+  document-surface span without changing the cache module.
+- **Enforcement:** code-review level. Signal: a storage
+  primitive in `src/` that imports a `*/otel.ts` is the
+  regression. Surface-specific wrappers (the *override* in
+  the deep-zoom case) are the right home for telemetry
+  wiring. Codified 2026-04-24 from iter #8.
+
+---
+
 ## Active references
 
 The enablers from `CLAUDE.md` § *Reach forward, not back*, in one

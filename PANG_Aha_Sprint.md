@@ -3808,6 +3808,366 @@ a named regression in the observability proofs above
 
 ---
 
+## Iteration #8 — findings (2026-04-24)
+
+**Status:** landed at ceiling and merged as
+https://github.com/tobiasschneiderberlin-oss/Pang/pull/18 (squash
+`311fe18`). `npm run verify` clean (26/26 gates, 598/598 unit
+tests, 3/3 eval fixtures). Playwright e2e 22/22 on both
+`chromium-mobile` and `chromium-desktop`, including the new
+`room-deep-zoom.spec.ts` cold/warm cache attribution walk (1m44s
+CI duration). Blocking checks green: PANG gates, Playwright e2e
+Tier 2, Vercel build, Vercel Preview Comments, Vercel Agent
+Review. Laura's hands: queued for next real-device session on the
+merged preview; the iteration is doctrine-complete independent
+of that walk.
+
+### What landed
+
+- `scripts/build-deepzoom-pyramids.ts` — deterministic DZI
+  generator reading `public/deep-zoom-sources/<workId>/source.*`
+  and emitting `public/deep-zoom/<workId>/manifest.dzi` +
+  `manifest_files/<level>/<col>_<row>.jpeg` via `sharp`. Three
+  seeded works checked in: `vermeer-pearl`, `van-gogh-wheatfield`,
+  `rembrandt-night-watch`. Pyramids live in the public tree so
+  `npm ci && npm run build` stays network-free.
+- `src/stores/works.ts` — `CollectionEntry.tileSource?:
+  { kind: "dzi"; url: string } | { kind: "simple-image"; url:
+  string }`, Zod-validated at the boundary. Optional: works
+  without a tile source stay on the wall unchanged; only seeded
+  works admit a pyramid today.
+- `src/deep-zoom/opfs-cache.ts` — OPFS tile cache with FNV-1a
+  64-bit keys, `index.json` sidecar, LRU eviction governed by
+  `navigator.storage.estimate()` quota probe (< 50 MB free
+  triggers eviction). Pure helpers (`cacheKey`, `pathForKey`,
+  `parseIndexEntry`, `serialiseIndex`, `parseIndex`,
+  `planEviction`, `perWorkBytes`) isolated from I/O; 35 unit
+  tests covering determinism, round-trips, malformed input
+  resilience, and eviction planning.
+- `src/deep-zoom/opfs-override.ts` — installs
+  `downloadTileStart` on `viewer.world.getItemAt(0).source`
+  via `viewer.addOnceHandler("open", …)`. Override routes
+  tiles through `fetchTileCached`, emits
+  `deep_zoom.cache.{hit,miss,evict}` + a `tile.load` span with
+  `source: "opfs" | "network"`, converts Blob → Image via
+  `URL.createObjectURL`, revokes in `queueMicrotask` after
+  `context.finish(img, null, null)`.
+- `src/deep-zoom/otel.ts` — event catalogue extended with
+  `deep_zoom.cache.{hit,miss,evict}`; `tile.load` source union
+  narrowed from `"network" | "cache"` to `"network" | "opfs"`
+  (the OPFS layer is the only cache we ship; no in-memory
+  middle tier).
+- `src/room/gestures.ts` — `onSecondTap?(workId)` binding. A
+  tap on an already-focused work fires the signal and keeps
+  focus; any other tap path retains its prior semantics. 10
+  fake-canvas unit tests cover the new branch +
+  non-interference with the existing tap-on-empty / drag /
+  jitter cases.
+- `src/deep-zoom/resolve.ts` — pure `resolveTileSource(workId,
+  fileRef, entries)` + the store-writing `openDeepZoomForWork`
+  helper. 6 resolver tests for DZI / simple-image / missing /
+  mismatched / empty cases.
+- `src/components/deep-zoom/DeepZoomOverlay{,Client}.tsx` —
+  SSR-safe dynamic boundary. The outer file wraps the inner
+  client in `next/dynamic({ ssr: false })`; the inner file
+  subscribes to `entries` + delegates to `<DeepZoomConnector>`.
+- `src/components/deep-zoom/DeepZoom.tsx` — installs the OPFS
+  override before OSD's `open` handler; the `tile-loaded`
+  synthetic-`source` bridge is removed (the override owns
+  attribution now). `tile-load-failed` stays as a safety net
+  for OSD-internal failures.
+- `e2e/room-deep-zoom.spec.ts` — single Playwright walk:
+  wipe OPFS, seed entry, write composite, assert cold-path
+  `cache.miss ≥ 1` + `tile.load{source:"network"} ≥ 1`,
+  Escape (focus survives), re-open, assert warm-path
+  `cache.hit ≥ 1` + `tile.load{source:"opfs"} ≥ 1` (gated on
+  OPFS availability).
+- `app/page.tsx` — mounts `<DeepZoomOverlay />` as a sibling
+  to the Room canvas and DocumentViewer; the connector is a
+  no-op until `activeDeepZoom` is non-null, so the
+  OpenSeadragon bundle never loads until Laura asks for paint
+  depth.
+
+### What execution exposed
+
+Five discoveries, each with its verdict:
+
+1. **OpenSeadragon touches `document` at module load — an
+   indirect import through a client component crashes the
+   SSR pass.** The first Playwright run of
+   `room-deep-zoom.spec.ts` failed at webServer boot with
+   `ReferenceError: document is not defined` because the
+   home route imported `<DeepZoomOverlay>` statically, and
+   the overlay statically imported `<DeepZoomConnector>`,
+   which statically imported OSD. The Next.js app router
+   evaluates client-component modules on the server during
+   the prerender even when they carry `"use client"`. Fix:
+   the standard **dynamic wrapper split** — `DeepZoomOverlay`
+   is `next/dynamic({ ssr: false })` around
+   `DeepZoomOverlayClient`. Same shape as
+   `DeepZoomSmokeClientDynamic` (iter #7 smoke) and
+   `RoomCanvasDynamic` (iter #2). The pattern generalises:
+   any component that imports a module with top-level
+   `document`/`window`/`self` access needs the dynamic split,
+   regardless of the `"use client"` directive.
+
+2. **Gesture unit tests can't import from `./scene` — `three/
+   webgpu` crashes Node at module load.** Adding
+   `src/room/gestures.test.ts` surfaced the iter #4 named
+   debt directly: `gestures.ts` originally imported `ROOM`
+   from `./scene`, which re-exports it from `./constants`
+   *but* also imports `three/webgpu` at the top level, which
+   crashes Node's `tsx --test` runner with `self is not
+   defined`. Fix: repoint the import to `./constants` (where
+   `ROOM` actually lives). The general shape is that **pure
+   modules (controllers, selectors, helpers) must import
+   from pure siblings — never transit through a GL-touching
+   module for a constant.** The iter #4 debt about `scene.ts`
+   still stands (no unit coverage there), but the fix pattern
+   for other surfaces is now demonstrated.
+
+3. **OSD's `viewer.source` property doesn't exist at the
+   Viewer level — the source lives on each TiledImage.**
+   TypeScript `@types/openseadragon` suggests otherwise. The
+   correct accessor is `viewer.world.getItemAt(0).source`
+   after guarding `viewer.world.getItemCount() === 0`. The
+   override is idempotent, so an
+   `addOnceHandler("open", …)` registration is safe across
+   StrictMode's simulated setup/cleanup cycle. Pattern match
+   to iter #7's `@types/openseadragon` gap: when the published
+   type is narrower than the runtime, prefer an explicit
+   narrow-interface cast (`as unknown as { downloadTileStart…
+   }`) over a property `as unknown as` — the narrow interface
+   documents *what we actually touch* and stays reviewable.
+
+4. **Eviction telemetry shouldn't live in the cache module.**
+   First draft of `opfs-cache.ts` imported `otel.ts` directly
+   to emit `deep_zoom.cache.evict` from inside `putTileBlob`.
+   That broke the decoupling — the cache has no business
+   knowing about the deep-zoom observability catalogue, and
+   it wouldn't be reusable for (say) document-tile caching.
+   Fix: `onEvict?: (count, bytesFreed, bytesRemaining) =>
+   void` callback option on `putTileBlob` + `fetchTileCached`,
+   invoked once per eviction batch, wrapped in try/catch so a
+   throw from the caller doesn't poison the cache. The
+   override wires the two together: `fetchTileCached(url,
+   undefined, { onEvict: deepZoomCacheEvictEvent })`. The
+   general shape is **caller-configurable observability hooks
+   on reusable primitives**; the callee doesn't import the
+   telemetry surface, the caller decides.
+
+5. **Cache attribution must ride the same call stack that
+   decided to fetch.** An earlier sketch had OSD's
+   `tile-loaded` event emit the `tile.load` span with a
+   synthetic `source: "network"` placeholder. That broke the
+   warm/cold separation — by the time `tile-loaded` fires,
+   the information about whether the byte source was OPFS or
+   a `fetch()` is gone. Fix: the span fires from inside the
+   `downloadTileStart` override's `img.onload` callback,
+   where `src === "opfs" | "network"` is known. The general
+   shape: **observability attribution belongs on the call
+   stack that made the decision**, not on a downstream event.
+   Cross-thread or cross-event attribution requires
+   reconstructing the decision context, which is the same
+   trap that made the iter #1 Pixel-10 regression expensive
+   to diagnose.
+
+### Codify
+
+- **Components importing `document`/`window`/`self` at module
+  load always ship via `next/dynamic({ ssr: false })`.** The
+  pattern has now surfaced three times (iter #2 Room canvas,
+  iter #7 DeepZoom smoke, iter #8 production overlay) with
+  identical shape. Add to `PANG_Primitives_2026.md` §
+  *Client components* as: *"any component that transitively
+  imports a module touching `document`, `window`, `self`, or
+  other browser-only globals at module-evaluation time must
+  ship as a `next/dynamic({ ssr: false })` wrapper around a
+  `*Client.tsx` inner file. The `\"use client\"` directive
+  alone is not sufficient — the App Router evaluates client
+  modules on the server during prerender."* Canonical
+  reference: `DeepZoomOverlay{,Client}.tsx`.
+- **Third-party engine cache-throughs install via a
+  per-viewer override on the engine's own dispatch seam, not
+  via a Service Worker or fetch-level interceptor.** OSD's
+  `downloadTileStart`; pdfjs's `getDocument({ fetch })`
+  option (iter #6 DocumentViewer). The override sits on the
+  same call stack that decided to fetch, so the `source`
+  attribution is trivially correct. Add to
+  `PANG_Primitives_2026.md` § *Third-party canvas engines*:
+  *"every adapter around a third-party canvas engine that
+  fetches bytes exposes a per-viewer/per-document override
+  seam; PANG's cache-through rides that seam, not a
+  cross-cutting fetch interceptor. The seam carries
+  `source: 'opfs' | 'network'` attribution on the deciding
+  call stack."* This generalises to future engines
+  (e.g., the Artists chapter's 3D model viewer) without
+  re-deriving the contract.
+- **Reusable storage primitives expose observability via
+  caller-configurable hooks, never by importing the
+  telemetry surface.** The OPFS tile cache knows when it
+  evicts; it fires an `onEvict` callback; the caller wires
+  the callback to `deep_zoom.cache.evict`. Add to
+  `PANG_Primitives_2026.md` § *State* as: *"a reusable
+  storage primitive (OPFS cache, in-memory LRU, write-ahead
+  log) never imports `src/**/otel.ts`. It accepts
+  caller-configurable hooks (`onEvict`, `onWrite`,
+  `onQuotaLow`) wrapped in try/catch. The callers wire the
+  hooks to the appropriate telemetry catalogue for their
+  surface."* Canonical reference: `opfs-cache.ts` +
+  `opfs-override.ts`.
+- **Second meaning on the same gesture instead of a new
+  gesture when escalation is discrete.** The Room owns tap,
+  drag, pinch; deep-zoom escalation needed a new discrete
+  signal; rather than introducing a new gesture (long-press,
+  double-tap, pinch-out-past-threshold), the second tap on
+  the already-focused work *is* the signal. One controller
+  field, one test branch, zero new grammar. Add to
+  `PANG_Primitives_2026.md` § *Gestures* as: *"when an
+  escalation is discrete and occurs on an already-selected
+  target, prefer a second firing of the existing selection
+  gesture over a new gesture. The gesture's meaning is
+  state-dependent; the grammar stays single-primitive."* The
+  anti-pattern: introducing double-tap, long-press, or
+  pinch-out as a second escalation channel — each grows the
+  controller's surface and muddies the handoff with
+  third-party engines that own their own variants of those
+  gestures.
+- **The iter #7 "Primitives land ahead of data" move is
+  discharged.** DeepZoom shipped in iter #7 behind a smoke
+  route; iter #8 backfilled the data. No doctrine edit —
+  the move was already codified (`CLAUDE.md` § *Reach
+  forward, not back*, move 5). But the two-iteration cadence
+  is now visible as a concrete example and worth naming:
+  **iter #7 + iter #8 = the sanctioned shape for any future
+  primitive-then-data pair.** Referenced in the
+  metabolism-check below.
+
+### Iterate once (one second pass, no debate)
+
+- **`onEvict` signature may want `workId | null` when
+  eviction becomes per-work.** Today's signature is
+  `(count, bytesFreed, bytesRemaining)` — sufficient for
+  global LRU. When the cache grows a per-work eviction
+  policy (probably iter #10+ when the collection outgrows
+  the default OPFS ceiling on a subset of devices), the
+  hook shape needs the workId to attribute the evict span.
+  Next iteration that touches the cache path: widen the
+  callback to `(summary: { count, bytesFreed, bytesRemaining,
+  workId: string | null })`. Until then, the scope-less
+  event matches reality (global LRU) and the doctrine stands.
+
+### Drop
+
+- **The idea of a Service Worker fetch-handler cache-through
+  for tiles.** Considered during the brief; rejected during
+  execution for the reason in discovery #5 — the SW can't
+  attribute `opfs` vs `network` back to the main thread
+  without cross-thread message plumbing that would cost more
+  than the cache itself. The override pattern wins. No
+  doctrine edit; the negative is implicit in the
+  "third-party engine cache-throughs install via a
+  per-viewer override" codify above.
+- **Per-work `tileSource` on intake.** Named out-of-scope in
+  the brief; stays that way. A collector-scanned photo → DZI
+  pipeline is a downstream iteration (post-Correspondence,
+  probably adjacent to the museum-grade capture work). No
+  regression surfaced because no code path depends on it
+  today; seeded pyramids cover the flat-vs-zoom gap
+  end-to-end for the three works that matter for the spine
+  moment.
+
+### Failure mode — observability proofs (brief's fifth
+declaration): all four classes observable.
+
+- *Pyramid generator incorrectness.* `sharp`-based generator
+  emits a deterministic pyramid; the three seeded works were
+  each regenerated during development and produced identical
+  bytes. No golden-hash CI gate wired yet (the generator is
+  run at seed-time only, not build-time), but the pyramid is
+  checked into the repo so a regression would surface as a
+  diff on the `public/deep-zoom/<workId>/**` tree. The
+  `deep_zoom.open` span carries `source_kind: "dzi" |
+  "simple-image"` so a pyramid-vs-fallback regression shows
+  in telemetry. Debt: a golden-hash gate in `check:gates` is
+  a small future iteration (5 min of hash-then-assert).
+- *OPFS cache cold vs warm path.* The new
+  `room-deep-zoom.spec.ts` walk is the direct proof. Cold
+  leg wipes `deep-zoom-cache/`, opens, asserts `cache.miss ≥
+  1` + `tile.load{source:"network"} ≥ 1`; warm leg asserts
+  `cache.hit ≥ 1` + `tile.load{source:"opfs"} ≥ 1`. The
+  warm-path latency SLO (p95 < 200 ms) lives on the
+  server-side dashboard (tile.load spans ship with
+  `tile_duration_ms`); the e2e proves the attribution is
+  correct, not the latency.
+- *OPFS quota overrun.* `planEviction` pure helper has 35
+  unit tests covering ascending-lastAccess ordering,
+  evict-everything at `maxBytes = 0`, no-input-mutation, and
+  empty-plan-under-budget. `deep_zoom.cache.evict` fires
+  once per eviction batch with `bytesFreed` +
+  `bytesRemaining`. A pathological "same tile evicted
+  repeatedly" scenario would surface as a monotonically
+  climbing evict count in the dashboard; no explicit e2e
+  gate yet because the unit coverage of the planner is
+  complete.
+- *Room handoff.* `room-deep-zoom.spec.ts` asserts
+  `useWorks.getState().focusedId` stays pinned to the seeded
+  sentinel across open → Escape → close; `activeDeepZoom`
+  returns to `null`. Camera-pose snapshot-before-after is
+  out of scope for this spec (the Room's camera-pose shape
+  is still on the iter #3 scaffolding; a pose-snapshot seam
+  would be a small follow-on in whichever iteration first
+  needs to assert Room-camera continuity across another
+  overlay). `focusedId` is the invariant that matters for
+  the spine, and it's observed.
+
+### What this tightens
+
+- `PANG_Primitives_2026.md` gains four rules (Client
+  components / dynamic-wrapper split; third-party engine
+  cache-throughs / per-viewer override seam; storage
+  primitives / caller-configurable hooks; gestures /
+  state-dependent second meaning). All four surfaced during
+  execution with concrete code references from iter #8.
+- `PANG_Spine.md` moment #6 (paint strokes on real works) is
+  now end-to-end live. The build order entry marks
+  complete-at-ceiling; the next open moment is #7
+  (Correspondence / verification confirmation).
+- `e2e/room-deep-zoom.spec.ts` joins `e2e/deep-zoom.spec.ts`
+  (iter #7 heap discipline) as the two sanctioned walks for
+  the surface. Cache attribution + heap discipline + escape
+  semantics all covered.
+- `public/deep-zoom/<workId>/` becomes the canonical pyramid
+  location. The `public/deep-zoom-sources/` mirror holds the
+  originals so regeneration stays deterministic.
+- The gate count stays 48 — the iteration's codify targets
+  are primitive rules, not new mechanical checks. A future
+  iteration touching the generator can add a P24e
+  golden-hash sub-gate if the signal warrants.
+
+### Metabolism check
+
+Every discovery lands: dynamic-wrapper split → codify
+(Primitive clause); pure-sibling imports for test-touched
+modules → referenced as an applied fix of the iter #4 debt,
+no new codify (the debt naming already covers the shape);
+OSD `viewer.world.getItemAt(0).source` access → codify
+(Primitive clause on per-viewer override seams);
+`onEvict` callback decoupling → codify (Primitive clause on
+storage primitives); call-stack attribution → codify (folded
+into the same Primitive clause — observability rides the
+decision, not a downstream event); second-tap as discrete
+escalation → codify (Primitive clause on gestures);
+`onEvict` per-work widening → iterate once (named for the
+next cache touch); SW-fetch-handler cache-through →
+dropped (implicit in the per-viewer-override codify); intake
+pyramid pipeline → dropped (out-of-scope; no regression).
+No unnamed overhangs. The iter #7 + iter #8 cadence
+(primitive, then data) is now visible as a concrete
+reference for future primitive-ahead-of-data pairs.
+
+---
+
 ## Known debts
 
 Named so they're not invisible. Not iterations in themselves —

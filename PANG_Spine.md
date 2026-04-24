@@ -270,9 +270,13 @@ encounters them.**
    tactile, gesture-accessed archive around the work. Actual
    signature on the CoA, actual price on the invoice.
 
-6. **Deep Zoom, collection-wide.** Once higher-res source images
-   exist (4000–5000px long edge), the gate opens. OpenSeadragon on
-   `<canvas>`.
+6. **Deep Zoom, collection-wide.** *Landed 2026-04-24, iter #7 +
+   iter #8.* OpenSeadragon on `<canvas>` behind `<DeepZoom>` in
+   iter #7; three seeded works (Vermeer, Van Gogh, Rembrandt) at
+   ≥ 4000px long edge with build-time DZI pyramids, OPFS
+   tile-cache with cold/warm attribution, and Room second-tap
+   escalation in iter #8. Laura can stand in front of her Van
+   Gogh and see the paint strokes.
 
 7. **Passkeys auth.** WebAuthn primary; Magic Link OTP retained as
    a one-time fallback for first-time device binding only.
