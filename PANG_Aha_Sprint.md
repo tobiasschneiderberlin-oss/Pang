@@ -4168,6 +4168,534 @@ reference for future primitive-ahead-of-data pairs.
 
 ---
 
+## Iteration #9 — Passkeys auth (opened 2026-04-24)
+
+**Status:** kickoff brief. Scope is **ceiling on WebAuthn UX**
+with two explicitly named principle-scope deferrals (Magic
+Link OTP fallback; Supabase server persistence). This
+iteration closes spine moment #7 (`PANG_Spine.md` § *Build
+order*): the gallery's invite link binds to a passkey on the
+collector's device, the session survives a relaunch, and
+every non-public API route refuses an unauthenticated caller.
+From here on, "Laura is the baseline" stops being a seed-data
+statement and becomes a session-identity statement — the app
+knows it's *her* collection.
+
+**Why now:** six spine moments sit in the codebase with no
+door on them. `/api/verification/request` accepts a POST from
+anyone who can reach the origin. `/api/intake/classify` same.
+The `app/i/[token]/page.tsx` shell validates a token shape
+and redirects — there is no binding between the token and the
+device that opened it, so forwarding the invite link means
+forwarding the collection. The architecture doc has fixed the
+answer (*"Passkeys primary; `credentials.create({ publicKey,
+... })` with user verification required; HttpOnly SameSite=
+Strict cookie + rotating server-side token; gallery invite
+JWT signed with rotating HMAC; tokens single-use"* — § 8
+Auth). The P10 gate has the name reserved. The `usePasskey`
+hook slot is pre-declared in § 7 of the architecture doc.
+Everything is waiting. This is the iteration that wires it.
+
+**Scope:** **ceiling** on the passkey UX itself — enrollment,
+assertion, conditional UI (passkey autofill in the email /
+identifier field where the browser offers it), session cookie,
+rotating server token, every existing API route gated through a
+`requireSession(req)` helper, E2E auth-bypass seam so iter
+#2–#8 specs keep passing. **Two principle-scope lines,
+each with a named reason:**
+
+- **Magic Link OTP fallback is out of scope for this
+  iteration.** Rationale: the spine's auth path is
+  *Passkeys primary; OTP only as first-bind fallback on a
+  device that can't do platform passkeys*. The primary path
+  is proven first because it's the 99% case on Tier-A/B
+  devices (Chrome / Safari / iOS ≥ 16 / Android ≥ 9 all ship
+  platform passkeys). OTP lands when the first Tier-C device
+  shows up in the observability signal — and the failure
+  mode below names how we'll see that signal. The rails are
+  left in place: `src/auth/session.ts` admits
+  `method: "passkey" | "otp"` from day one, and the invite
+  landing flows through a `chooseBindMethod(capabilities)`
+  selector so the OTP branch is a future path addition, not
+  a refactor.
+- **Supabase server persistence is out of scope.** Rationale:
+  no Supabase client is wired in the codebase today
+  (`.env.example` declares the vars, no imports resolve
+  them); wiring it alongside a new auth surface would mix
+  two classes of risk in one iteration. The sanctioned
+  pattern from iter #4 — filesystem-backed server stores
+  under `.pang/server-users/` + `.pang/server-credentials/`
+  + `.pang/server-sessions/` — is the dev stand-in. The
+  route interface (`POST /api/auth/passkey/enroll`,
+  `POST /api/auth/passkey/assert`, `GET /api/auth/session`,
+  `POST /api/auth/logout`) is the contract Supabase will
+  honour when it lands. Same discipline iter #4 used for
+  the verification outbox.
+
+Landing shape:
+
+- `POST /api/auth/invite/bind` — trades an invite JWT for
+  a `bindSessionId` cookie (short TTL, 10 min) that the
+  enrollment ceremony reads. Invite JWT signed with
+  rotating HMAC (env-configured key; rotates on
+  `deployment.boot` span); `jose` for sign/verify; single-
+  use enforced via `.pang/server-invites/<jti>.consumed`
+  marker file. Consumed marker persists regardless of
+  outcome so replay always fails closed.
+- `GET /api/auth/passkey/options?purpose=enroll|assert` —
+  issues `PublicKeyCredentialCreationOptions` or
+  `PublicKeyCredentialRequestOptions` with a fresh
+  challenge. Challenge is a 32-byte CSPRNG value bound
+  to the `bindSessionId` (enroll) or client cookie-less
+  assert flow (conditional UI). TTL 90 s.
+  `@simplewebauthn/server@>=11` generates the options so
+  we're not hand-rolling CBOR.
+- `POST /api/auth/passkey/enroll` — verifies the attestation
+  response against the stored challenge + the origin + the
+  bind session. Writes `{ userId, credentialId, publicKey,
+  counter, transports, createdAt }` to
+  `.pang/server-credentials/<credentialId>.json`. Issues
+  the real session cookie on success.
+- `POST /api/auth/passkey/assert` — verifies an authentication
+  response, increments `counter`, rotates the server token,
+  issues the session cookie. If the stored `counter` exceeds
+  the response counter, the credential is revoked (cloning
+  detector) and the `auth.passkey.clone_detected` span fires.
+- `GET /api/auth/session` — returns `{ userId, createdAt,
+  rotatedAt, method }` for a valid cookie, 401 otherwise.
+  `auth.session.check` span on every hit with
+  `cacheStatus: "hit" | "miss" | "rotated"` attribute.
+- `POST /api/auth/logout` — clears the cookie, revokes the
+  server token, no server-side bookkeeping beyond the
+  revocation file deletion.
+- **Client.** `app/i/[token]/page.tsx` grows from the
+  placeholder shell into a binding ceremony: validates the
+  token server-side, calls `bind`, mounts a one-screen
+  `<PasskeyEnrollCeremony>` that calls
+  `navigator.credentials.create({ publicKey })`, writes the
+  result back, redirects into the Room. One screen. One
+  line of copy (*"This collection is now on your device"*
+  — `PANG_Voice.md`-compliant draft; final wording in the
+  brief's voice pass). No confirmation sheet, no
+  "welcome back" — the work center-stage on arrival is the
+  welcome.
+- **Assert flow.** On cold start of a device that already
+  has a credential (i.e., cookie missing but a resident-key
+  credential is stored in the browser), the landing page
+  mounts a conditional-UI sign-in — `<input autocomplete=
+  "username webauthn">` that the OS surfaces the passkey
+  on. Tap, biometric, in. No password field anywhere
+  (P10's actual enforcement starts here).
+- **`src/auth/session.ts`** — the single source of truth on
+  the server. Exports `createSession`, `readSession`,
+  `rotateSession`, `revokeSession`, `requireSession`. All
+  five write `auth.session.*` spans. `requireSession(req)`
+  is the helper every non-public API route adopts in this
+  iteration; calling a gated route without a valid cookie
+  returns 401 with zero body (no "who are you" crumb for
+  enumeration).
+- **Existing route adoption.** `POST /api/verification/request`
+  and `POST /api/intake/classify` gain `await requireSession
+  (req)` at the top. `GET /api/telemetry` stays public
+  (it's a beacon endpoint; the architecture doc marks it
+  unauthenticated). `POST /api/enrichment/submit` (iter #5)
+  gets gated. The test suite for each gets a "401 without
+  session" case added.
+- **E2E auth-bypass seam.** Behind `NEXT_PUBLIC_PANG_E2E=1`,
+  a `__PANG.authSeed({ userId })` hook issues a fake session
+  cookie directly, bypassing WebAuthn (Playwright cannot
+  drive real biometric prompts). The existing iter #2–#8
+  specs gain one `await authSeed()` line in their shared
+  setup. The seam is a build-time constant check, not a
+  runtime toggle — production bundles statically strip it
+  (same discipline as the `__PANG` entries seam).
+- **Observability.** `auth.invite.{accepted,rejected}`,
+  `auth.passkey.enroll.{started,succeeded,failed}`,
+  `auth.passkey.assert.{started,succeeded,failed}`,
+  `auth.passkey.clone_detected`, `auth.session.{created,
+  rotated,revoked,check}`. Each span carries
+  `authenticatorAttachment`, `credentialDeviceType`,
+  `credentialBackedUp`, `transports` where relevant. These
+  attributes are what tell us, six weeks from now,
+  whether a Magic Link OTP fallback is worth building —
+  i.e., how many `auth.passkey.enroll.failed` spans carry
+  `reason: "not-supported"` vs. `reason: "user-cancelled"`.
+- **P10 gate upgrade.** Today `check-gates.ts` checks
+  `src/auth/` exists and contains no `type="password"`
+  input. The iter #9 upgrade: P10 fails if
+  `src/auth/webauthn/{enroll,assert}.ts` is missing, if
+  `src/auth/session.ts` is missing, if `requireSession` is
+  not imported in every `app/api/**/route.ts` except
+  `app/api/telemetry/route.ts` and `app/api/auth/**`, and
+  if the Playwright `passkey.spec.ts` is missing. The gate
+  becomes *actually enforcing*, not just absent-evidence.
+
+**Stack:**
+
+- `@simplewebauthn/server@>=11` (MIT) for enroll + assert
+  ceremony verification. Hand-rolling CBOR + COSE parsing
+  is out of scope and historically bug-prone.
+- `@simplewebauthn/browser@>=11` for the conditional-UI
+  plumbing (feature-detects platform authenticator,
+  prefers `preferredAuthenticatorType: "platform"`). Pure
+  wrapper around `navigator.credentials.*`; drops cleanly
+  if we ever replace it.
+- `jose@>=5` for invite JWT sign/verify + session token
+  opaque-bearer signing. Already in the dependency tree
+  under a different name? — no, it isn't; landing it here
+  is a one-dep addition, 24 kB gzipped.
+- Filesystem-backed dev stores (iter #4 pattern):
+  `.pang/server-users/<userId>.json`,
+  `.pang/server-credentials/<credentialId>.json`,
+  `.pang/server-sessions/<sessionToken>.json`,
+  `.pang/server-invites/<jti>.consumed`. Each directory
+  `.gitignore`d. The Supabase migration path is:
+  same file shapes → same row shapes → `JSON.parse(readFile)`
+  swaps for `supabase.from(table).select(...)`. No
+  interface change at the call site.
+- Cookie shape: `pang_session` — `HttpOnly; Secure;
+  SameSite=Strict; Path=/; Max-Age=1209600` (14 days);
+  rotated on every assert. Value is an opaque bearer
+  token (32-byte CSPRNG hex), not a JWT — session state
+  lives server-side, the cookie is just a lookup key.
+  This is the doctrinal choice; JWT-as-session drifts
+  into "revoke = hard" territory.
+- `src/lib/otel/span.ts` (existing) for every span in
+  the block above. Same helper iter #4, #5, #6, #7, #8
+  used. No new observability primitive.
+- `next/headers` (`cookies()` + `headers()`) for
+  cookie read/write at the route handler layer. Node
+  runtime on the auth routes; edge is fine for
+  `GET /api/auth/session` but Node gives us the fs
+  stand-in for dev so we keep the whole family on Node
+  until Supabase lands.
+
+**Reference:**
+
+- **1Password passkey enrollment.** Single-screen
+  ceremony; the primary button says "Create passkey" and
+  the system sheet is the only chrome. No field-by-field
+  dialog, no "are you sure". The whole flow is the
+  biometric prompt plus a success line.
+- **Google sign-in conditional UI (2024–2026 rollout).**
+  The `<input autocomplete="username webauthn">` pattern;
+  the passkey surfaces in the autofill sheet the moment
+  the field focuses. Tap-in with no tap-to-sign-in-first
+  indirection.
+- **Cal.com SimpleWebAuthn integration.** Canonical
+  reference for how a TypeScript app wires
+  `@simplewebauthn/{server,browser}` end-to-end; the
+  challenge storage + origin validation discipline in
+  their repo is what we're copying (not literally
+  forking — the shape).
+- **Apple Platform Security § Passkeys (2024 rev.)** — the
+  cloning-detector / counter rollback rule. The assert
+  flow's `counter` check is doctrinal, not optional.
+- **Anti-reference:** any service whose auth surface
+  displays a passkey button *next to* a password field.
+  That composition is the 2018 compromise that
+  CLAUDE.md's cannot-do list forbids for copy + chrome
+  and that P10 now forbids for auth. The passkey is
+  the primary; there is no secondary on-screen.
+
+**Canvas:** DOM chrome only. The browser's passkey sheet
+is the primary visual surface on the enrollment ceremony;
+our one line of copy + the invite frame are the only
+paint we author. No `<canvas>`. No custom modal layered
+over the system sheet. If the system sheet is dismissed
+without completion, the ceremony returns the collector
+to the same invite-landing state — no intermediate
+screen, no "try again?" sheet. The single-tap invariant
+from `CLAUDE.md` (*"No ActionSheet between wall and
+scanner"*) generalises here: no ActionSheet between
+invite and collection.
+
+**Failure mode (5th declaration):** five regression
+classes must be observable.
+
+- *Invite token replay.* A forwarded invite link must
+  fail closed on second use. Enforcement: the
+  `.pang/server-invites/<jti>.consumed` marker is
+  written **before** the session cookie is issued (the
+  `bind` route commits the consumed-marker inside the
+  same `withOtelSpan` as the cookie write; a crash
+  between the two reads as "invite consumed, session
+  not issued" and the collector retries the invite —
+  which correctly fails closed). Playwright e2e:
+  bind once, bind again with same token, second
+  attempt returns 409 with `auth.invite.rejected
+  { reason: "replay" }` span.
+- *Tier-C device, no platform authenticator.*
+  `navigator.credentials.create` rejects with
+  `NotSupportedError`. Enforcement: the enroll client
+  catches and emits
+  `auth.passkey.enroll.failed { reason: "not-supported",
+  userAgent, tier }`. The landing page shows
+  the voice-compliant "your device can't hold a passkey
+  yet" line (final copy TBD in the voice pass) — not a
+  dead-end. The observability signal is what decides
+  whether Magic Link OTP gets its iteration.
+- *Session cookie tampering / forgery.* A crafted
+  cookie with a random 32-byte value must be
+  indistinguishable from a revoked session (both
+  return 401 from `requireSession`) — i.e., no timing
+  side-channel, no distinct error body.
+  `auth.session.check { cacheStatus: "miss", reason:
+  "unknown-token" }` on both cases. Enforcement:
+  `requireSession`'s lookup is a constant-time
+  directory-stat + file-read, not a scan. Unit test
+  on the constant-time path.
+- *Revoked credential assertion.* After
+  `auth.passkey.clone_detected` (counter rollback),
+  the credential is moved to
+  `.pang/server-credentials-revoked/<credentialId>.json`.
+  A subsequent assert with the same credentialId
+  returns 410 Gone with
+  `auth.passkey.assert.failed { reason: "revoked" }`.
+  The client drops to the enroll flow (treating the
+  session as starting over). Playwright simulates the
+  rollback via the E2E seam and verifies the 410 plus
+  the span.
+- *Rate-limit abuse.* A burst of enroll / assert
+  calls from one IP triggers a per-IP per-minute cap
+  (`auth.rate_limit.exceeded { endpoint, ip }` span).
+  The stand-in is an in-memory token bucket on the
+  Node server (process-local, resets on redeploy —
+  OK for iteration #9 because the load floor is
+  single-digit collectors). Supabase/edge-KV shape
+  when real traffic arrives; the span name is the
+  contract.
+
+**Gates this iteration must pass:** the 48.
+
+- **P10 (Passkeys) — upgraded.** The gate file changes
+  in this iteration per the landing-shape bullet. No
+  new gate number; P10 graduates from trivial-pass to
+  real enforcement. Gate count stays 48.
+- P6 (CSP) — the WebAuthn origin must be the app
+  origin; no `iframe` / `frame-src` addition. The
+  challenge endpoint is `Cache-Control: no-store`.
+- P7 (INP p75 < 200 ms) — the conditional-UI mount
+  reads the passkey in one frame; no layout shift on
+  the invite landing.
+- P11 (OKLCH only) — any new chrome uses tokens.
+- P13 (OPFS + IndexedDB discipline) — nothing about
+  auth writes to `localStorage`. The session cookie
+  is HttpOnly, so the browser-side can't read it
+  anyway; the invariant is that we don't duplicate
+  session state into any JS-accessible store.
+- P23 (keyboard a11y) — invite landing's primary
+  button is Enter-activatable; the conditional-UI
+  input is keyboard-focusable. The system passkey
+  sheet inherits its own a11y.
+- A5 (banned vocabulary) — the one line of enrollment
+  copy passes the voice check ("dive / unlock /
+  seamless / leverage / journey" are absent by
+  construction; voice pass confirms it).
+- A8 (CaMeL / Untrusted boundary) — the
+  `PublicKeyCredential` response from the browser is
+  `Untrusted<PasskeyEnrollResponse>` until
+  `@simplewebauthn/server`'s `verifyRegistrationResponse`
+  returns; then it becomes a typed credential record.
+  Same discipline as every other server boundary.
+- A16 (OPFS-backed queue discipline) — not directly
+  exercised here (the outbox pattern is the right
+  analogy, but auth state lives server-side). Named
+  so the discipline stays consistent when Magic Link
+  OTP lands.
+
+**Test criteria:**
+
+1. `npm run verify` clean. `check:gates` runs the
+   upgraded P10. Unit tests cover: JWT sign/verify
+   round-trip, invite single-use, session create /
+   rotate / revoke / check, credential counter
+   rollback detection, constant-time token lookup,
+   rate-limit token bucket, `requireSession` 401
+   behaviour.
+2. Playwright spec `passkey.spec.ts`: on
+   `chromium-mobile` with WebAuthn virtual
+   authenticator enabled
+   (`context.addInitScript` + CDP `WebAuthn.enable`),
+   walks invite → enroll → Room → refresh tab → Room
+   (assert path, no biometric re-prompt because the
+   cookie is live) → logout → refresh → invite
+   landing (assert path with fresh cookie-less
+   state, conditional UI). All four cycles clean.
+3. Playwright asserts: the session cookie is
+   HttpOnly (not visible to `document.cookie`),
+   SameSite=Strict (cross-site navigation to the
+   landing from an external origin arrives
+   cookie-less), Secure (the test runs over HTTPS
+   via the Next.js dev proxy or a test-time stub).
+4. Replay attack test: call `/api/auth/invite/bind`
+   twice with the same JWT; second response is 409,
+   first response's cookie still works; the
+   `.consumed` marker exists on disk.
+5. Clone detector test: manually lower the stored
+   counter via the fs stand-in, then assert; the
+   response is 410 Gone; the credential is moved to
+   `server-credentials-revoked/`.
+6. `requireSession` coverage: each gated API route
+   returns 401 without a session cookie and 200/422
+   (existing semantics) with one. A dedicated
+   `app/api/**/*.test.ts` matrix test walks every
+   route file and asserts it either imports
+   `requireSession` or is on the public allowlist.
+7. E2E auth-bypass seam: iter #2–#8 Playwright
+   specs gain a single shared `beforeEach` that
+   calls `authSeed()`; no other test changes; all
+   existing specs stay green.
+8. Observability: walking the enroll + assert flow
+   emits the exact span set named above, and each
+   carries the required attributes. Verified via
+   the OTel test exporter (existing seam).
+9. P10's upgraded gate is asserted from CI itself —
+   temporarily stub a missing `requireSession` in
+   one gated route, confirm the gate fails, revert.
+   The proof lives in the PR description, not as
+   a committed change.
+
+**Pre-existing work this depends on:**
+
+- Iter #0 invite landing shell at
+  `app/i/[token]/page.tsx` — kept intact; the
+  placeholder validation is the starting point, the
+  ceremony is the delta.
+- Iter #4 filesystem-backed server-outbox pattern —
+  the shape `.pang/server-users/**`,
+  `.pang/server-credentials/**`, etc. is a literal
+  copy of `.pang/server-outbox/**`.
+- Iter #4's `withOtelSpan` + span helpers — the
+  observability plumbing is reused wholesale.
+- Iter #6's CSP + nonce proxy — no change; the
+  passkey flow is same-origin and inherits.
+- `__PANG` E2E seam (iter #6) — extended with
+  `authSeed({ userId })`.
+
+**Open questions (answered before execution):**
+
+1. **Passkey library: SimpleWebAuthn vs hand-rolled
+   CBOR?** SimpleWebAuthn. The attestation format
+   matrix (packed / tpm / android-key / apple) is
+   large enough that hand-rolling is a security
+   regression against the ceiling.
+2. **Session shape: opaque bearer vs JWT?** Opaque.
+   Server-side state allows real revocation;
+   revocation of a JWT requires a deny-list which
+   is strictly worse than the opaque design it'd
+   replace. The cookie carries the lookup key; the
+   session record carries the truth.
+3. **Session TTL?** 14 days, rotated on every
+   assert. Rotation means an active collector's
+   session effectively rolls forward; an idle
+   collector re-auths after two weeks. Re-auth on
+   a Tier-A/B device is one biometric tap via
+   conditional UI.
+4. **Magic Link OTP fallback this iteration?** No —
+   named as principle-scope deferral in the Scope
+   block above.
+5. **Supabase persistence this iteration?** No —
+   same deferral. Filesystem-backed stores; the
+   interface is the contract Supabase will honour.
+6. **Discoverable (resident) credentials vs
+   non-discoverable?** Discoverable. Required for
+   conditional UI to work; the storage cost is
+   negligible and every 2026 platform authenticator
+   supports it.
+7. **User handle shape?** 16-byte CSPRNG blob,
+   base64url-encoded. Stored on the credential
+   record. Never the email address (PII; platform
+   authenticators sync handles to cloud, so
+   anything PII-ful leaks).
+8. **Gate added to the count?** No. P10 upgrades
+   in place; count stays at 48.
+9. **`requireSession` on intake?** Yes. The intake
+   agent's input is a photo that contains the
+   collector's artwork; gating it is the first
+   line of defence against an adversary running
+   up the Anthropic bill on our origin.
+10. **Telemetry beacon gating?** No. The beacon is
+    fire-and-forget; authenticating it would
+    require a round-trip before the client's
+    event is usable, which is the opposite of the
+    beacon's job. Rate-limit per IP instead.
+
+**Out of scope (explicit):**
+
+- **Magic Link OTP fallback.** Principle-deferred
+  (see Scope). The rails are in place.
+- **Supabase server persistence.** Principle-
+  deferred (see Scope). Same.
+- **Multi-device passkey sync UX.** Platform
+  authenticators sync credentials cross-device
+  (iCloud Keychain, Google Password Manager,
+  1Password, Bitwarden) — we inherit it, we don't
+  render it. No "your devices" screen in this
+  iteration.
+- **Passkey management screen (rename / delete
+  credential).** Out of scope until the first
+  Laura-hands signal asks for it.
+- **Gallery-side auth.** PANG is gallery-gated at
+  the invite layer; the gallery's own dashboard is
+  out of spine per the cannot-do list. If we ever
+  change that, we'd build it as a separate surface.
+- **SSO / email-password.** Never. Cannot-do list.
+- **Account recovery via support ticket.** The
+  recovery story is "tap the gallery's invite
+  link again" — galleries can re-issue invites
+  because they own the relationship. No recovery
+  email flow, no security-question fallback, no
+  account-recovery form.
+- **Cross-origin iframe embed.** The passkey
+  ceremony must run on the top-level origin. If a
+  gallery wants to embed PANG, that's a product
+  conversation, not an auth one.
+
+**Outcome gate:** codify or iterate once. Codify
+targets if the auth surface lands cleanly:
+
+- **Passkey is the sole primary auth path.** Add to
+  `PANG_Primitives_2026.md` as a new auth primitive
+  (there isn't one today). Clause names the
+  conditional-UI + `autocomplete="username webauthn"`
+  pattern as the sanctioned assertion affordance on
+  cookie-less cold start; forbids the "passkey button
+  next to password field" composition.
+- **Opaque bearer cookie + server-side session
+  record is the sanctioned session design.** Add to
+  `PANG_Architecture_2026.md` § 8 Auth as a
+  clarifying clause on the existing "rotating
+  server-side token" line. JWTs are for the invite
+  boundary only, not for session continuation.
+- **`requireSession` is the only API auth helper.**
+  Add to the same section. The filesystem stand-in
+  today, the Supabase-backed implementation later;
+  the call site is invariant. The gate (P10 upgrade)
+  enforces adoption.
+- **Filesystem-backed server stores are the
+  sanctioned dev stand-in.** Add to
+  `PANG_Architecture_2026.md` § 10.5 Build + testing
+  seams as a clause: any server-side durable store
+  in dev lives under `.pang/server-*/` as one file
+  per record, `.gitignore`d, with the Supabase row
+  shape matching the JSON shape 1:1. The pattern
+  is now used three times (iter #4 outbox, iter #9
+  users / credentials / sessions) and formalises
+  the migration contract.
+
+Laura's hands: **after merge.** Walks the invite link
+on a real phone (iPhone 15+ / Pixel 8+), enrolls the
+passkey, enters the Room, force-quits the browser,
+re-opens the invite link cold, completes the assert
+flow via conditional UI, enters the Room. That loop
+is the spine moment test for auth. Pass = "the
+collection is on my phone, it knew it was me." Fail
+= a named regression in the observability proofs
+above (iterate once or drop the failing sub-flow).
+
+---
+
 ## Known debts
 
 Named so they're not invisible. Not iterations in themselves —
