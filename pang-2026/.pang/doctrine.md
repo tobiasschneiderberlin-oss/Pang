@@ -151,6 +151,63 @@ Already mirrored in `./gates.yaml` (see family
 Appendix B still lists 47; the YAML lists 48. The code is at 48;
 doctrine edits catch up to code same-day.
 
+### Appendix C addition — `SettingsOverlay`
+
+- **Component path** · `src/components/chrome/SettingsOverlay.tsx`.
+- **Role** · The one chrome affordance that carries iteration
+  #15's two silence-default opt-ins — spatial audio and haptics.
+  Popover API panel anchored off a top-right trigger via CSS Anchor
+  Positioning; two `role="switch"` toggles; Escape + native popover
+  light-dismiss returns focus to the trigger.
+- **Gates referenced** · `P6` (user-gesture policy preserved —
+  AudioContext constructs only after a tap), `P17` (Popover +
+  Anchor Positioning as the overlay primitive, not a portal),
+  `P23` (keyboard + focus floor), `A25` (every string resolves
+  through the `SETTINGS_OVERLAY` namespace in
+  `src/ai/chrome/voice.ts`).
+- **Codified** · 2026-04-24 with iteration #15 (spatial audio +
+  haptics v1). Staged here pending DS revision.
+
+### Knob family additions — 06 (audio) + 07 (haptics) go load-bearing
+
+The DS HTML Appendix on nine bounded knobs (§ 09) already names
+`audio` and `haptics` as knobs 06 and 07 with range `0 | 1`.
+Iteration #15 lands the *code* behind those knob rows:
+
+- `DEFAULT_PREFERENCES.audioSpatial = "off"` and
+  `DEFAULT_PREFERENCES.haptics = "off"` — the silence-default is
+  load-bearing; a cold install makes no sound and emits no pulse.
+- Persistence routes through OPFS with a 120 ms debounce (P5, P21).
+  No `localStorage`, no cookie, no server round-trip.
+- The two toggles share one chrome affordance (`SettingsOverlay`,
+  above); flipping them never requires a second tap to discover.
+
+No gate rewording — P5/P6/P17/P21/P23/A25 already cover the
+enforcement surface. The knob rows move from *declared* to
+*enforced* because code now depends on their two-valued enum.
+
+### Primitives referenced in iteration #15 (tracking)
+
+The kickoff brief named three new 2026-native primitives that
+shipped with iter #15. They are not separate gates — each is
+enforced through the existing P/A gate surface — but they are
+named here so the next contributor inherits the vocabulary:
+
+- **71 · Acoustic body as opt-in.** No `new AudioContext` outside
+  `src/audio/context.ts`; the factory refuses until a preference
+  is on *and* a user gesture has been recorded (P6). Preference
+  flip to off closes the context and nulls the module state.
+- **72 · Haptic vocabulary, not haptic instincts.** `triggerHaptic`
+  takes a finite union `"tap" | "focus" | "capture" | "arrive"`;
+  new kinds require a doctrine edit. `prefers-reduced-motion`
+  silences everything except the explicit `data-motion-explicit`
+  override. Unsupported platforms log once per session.
+- **73 · Silence-default is the contract.** `DEFAULT_PREFERENCES`
+  is the single source of truth for cold install. Both opt-ins
+  default `"off"`. The schema rejects anything outside `"on" | "off"`.
+
+Codified 2026-04-24. Staged here pending DS revision.
+
 ---
 
 ## When in doubt
