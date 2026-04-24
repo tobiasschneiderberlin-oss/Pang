@@ -7024,6 +7024,437 @@ diagnosable event.
 
 ---
 
+## Iteration #12 — PANG Voice v1 (opened 2026-04-24)
+
+### Why this, why now
+
+Spine moment #9 — **PANG Voice v1** — is the next pin in
+`PANG_Spine.md` § *Build order*, and the reason it lands before the
+Narrative Agent (#10) is structural: the Narrative Agent would bake
+voice-regressions into monthly-reading prose with no way to retro-fit
+them cheaply. Every agent PANG ships after this moment should consume
+the voice layer, not reinvent it.
+
+The current state is a **seed without mechanical enforcement**. The
+voice doctrine exists in `PANG_Voice.md`. The seed system prompt
+exists at `src/ai/prompts/voice.ts` (52 lines). It is imported by the
+barrel at `src/ai/agents/_shared.ts` and passed as the `system`
+argument to most — but not provably all — Claude calls. The banned
+vocabulary (`dive, unlock, seamless, leverage, journey` plus a soft
+list of evaluative adjectives) is enforced through two disconnected
+surfaces: a CaMeL guard at `src/ai/camel/banned.ts` and a
+string-scanner at `scripts/check-strings.ts` with its own narrower
+hardcoded list. A5 (banned-vocab in copy) is a gate; adoption across
+agent call sites is not.
+
+The gap the iteration closes:
+
+- **Adoption is unaudited.** Nothing fails CI if a new Claude call
+  forgets to pass the seed. As of today the six `client.messages.create`
+  sites (intake × 3, enrichment × 2, correspondence × 1) all use the
+  barrel, but "all" is inspection, not enforcement — the next agent
+  will not.
+- **The banned list has two sources.** `check-strings.ts` and
+  `src/ai/camel/banned.ts` drift independently. An edit to one does
+  not propagate. A5 enforces a list that isn't the seed's list.
+- **Hand-authored strings escape the corpus.** Inline JSX text and
+  untracked attribute strings (`placeholder`, `title`, `aria-label`,
+  `alt`) slip past the string scanner because the scanner reads only
+  files it knows about. ~20 surfaces — intake affordance, ask-gallery
+  chips, dispatch screens, push banners, outcome narration — still
+  carry strings that are quietly re-authored on each edit instead of
+  referenced from a corpus.
+- **The voice prompt was promised iter #1's regeneration.** The
+  original voice seed was hand-curated with the note that a
+  regeneration script would land with the first agent. It never did.
+  The prompt drifts quietly every time we add a new surface.
+
+This iteration does **not** rewrite voice doctrine — that lives in
+`PANG_Voice.md` and is correct. It wires the seed to every Claude
+call and every hand-authored string, makes it impossible to add a new
+surface without the voice layer, and collapses the two banned lists
+into one.
+
+Spine check — PANG Voice v1's spec from `PANG_Spine.md`:
+
+> "Tone reference (already in `PANG_Voice.md`) + `PANG_VOICE_SYSTEM_PROMPT`
+> wired into every Claude call + audit of every hand-authored string.
+> The voice layer every other moment consumes."
+
+Three deliverables, three gate additions, one audit pass. Ceiling.
+
+### Scope
+
+**CEILING.** All three spine-spec deliverables, no scope reduction.
+
+- Seed lands mechanically (A24): every `client.messages.create` call's
+  `system` argument provably includes `PANG_VOICE_SYSTEM_PROMPT` via
+  AST walk. No comment-based opt-out. Allowlist is code in the gate.
+- Corpus lands mechanically (A25): every hand-authored string in
+  components and routes is either imported from a corpus module
+  (`src/**/voice*.ts`, `src/**/strings*.ts`, or re-exported through
+  `PANG_VOICE_STRINGS`) or flagged by the gate as an inline literal.
+  JSX text nodes + user-facing attributes (`title`, `aria-label`,
+  `placeholder`, `alt`) both walked.
+- Banned list single-sourced: `src/ai/camel/banned.ts` is the only
+  source. `scripts/check-strings.ts` imports it. A5's fail message
+  points back to the same module. An edit to one list edits the app.
+- Voice-prompt regeneration lands: `scripts/rebuild-voice-prompt.ts`
+  deterministically assembles the examples block from 6 canonical
+  domain samples in the `PANG_VOICE_STRINGS` bundle. A new check
+  (`check:voice-prompt`) fails CI if the committed seed drifts from
+  what the script would produce. The seed becomes a compiled artifact,
+  not a hand-maintained string.
+- String audit sweep: every inline user-facing string moves into
+  `PANG_VOICE_STRINGS` or a domain corpus it re-exports. The audit is
+  the commit message: a file-by-file list of which literal moved where.
+
+### Stack
+
+- **No new runtime deps.** `ts-morph` goes in `devDependencies` only
+  (it is already pulled transitively by the P10 border-radius gate's
+  AST walker, so the bundle impact is zero; the new gate adds ~150KB
+  in CI cache, all server-side).
+- **TypeScript everywhere.** A24, A25, the voice-prompt rebuild script,
+  and the banned-list consolidation are all TS run via `bun run`.
+- **No codegen.** `PANG_VOICE_STRINGS` is a hand-written module of
+  frozen `const` objects. `rebuild-voice-prompt.ts` reads that module
+  and writes `voice.ts`; nothing else is generated.
+- **Existing corpus location stays.** Domain corpora (e.g.,
+  `src/ai/chapter/voice.ts`) are unchanged. `PANG_VOICE_STRINGS`
+  namespaces re-export them; call sites may import either form.
+- **Tests.** Unit tests for the two new gates run against seeded
+  fixtures under `tests/fixtures/voice-v1/`. The gates are exercised
+  end-to-end by the existing `npm run check` step so a failure during
+  the audit sweep is immediate.
+- **ESLint tagged template rule.** A small custom rule
+  (`eslint-plugin-pang/no-inline-user-strings`) covers the editor
+  surface for the audit period — A25 is the authoritative check; the
+  ESLint rule is an IDE quality-of-life addition, not a gate.
+
+### Reference
+
+Not a visual iteration. The reference is doctrinal:
+
+- `PANG_Voice.md` — register, banned vocabulary, tone rules. The gates
+  enforce what this doc has said since the reset.
+- Apple Human Interface Guidelines § "Writing" for the idea that
+  strings are a design surface, not an afterthought. HIG's mechanical
+  rule — every string reviewed in context before ship — is structurally
+  the same rule this iteration encodes.
+- The CaMeL paper's dual-pattern: privileged LLM never sees raw
+  untrusted content; guardrails sit at the trust boundary. A24
+  extends CaMeL's discipline from *content* to *prompt wrapper* — the
+  voice seed is the privileged LLM's character and cannot be forgotten.
+
+### Canvas
+
+No new visual canvas. **The canvas is the audit.** This iteration
+lands no new surface; it hardens the invisible layer every surface
+consumes. The "proof" is that iter #13 cannot start a new agent
+without the voice layer attaching automatically.
+
+The one place this iteration touches user-facing code: `PANG_VOICE_STRINGS`
+imports may change the import path for a handful of call sites (e.g.,
+`import { ASK_GALLERY } from "@/ai/chapter/voice"` becomes
+`import { PANG_VOICE_STRINGS } from "@/ai/prompts/strings"` at some
+call sites — both continue to work; migration is opportunistic).
+
+### Failure mode
+
+Four classes of regression this infrastructure must make visible:
+
+1. **New Claude call misses the seed.** A24's AST walker catches it
+   at `npm run check`. The fail message names the file, line, and the
+   identifier expected in the `system` argument. Zero-touch.
+2. **Inline string escapes the corpus.** A25 walks JSX text + user-facing
+   attributes, flags the literal, points at the nearest corpus module
+   the developer should add to. Fail message includes the suggested
+   import path. Zero-touch.
+3. **Seed drifts from bundle.** `check:voice-prompt` compares the
+   committed `voice.ts` to what `rebuild-voice-prompt.ts` would write
+   from the current bundle. A diff means the seed is stale. Fail
+   message shows the diff; fix is `bun run rebuild:voice-prompt`.
+4. **Banned list drift.** `check-strings.ts` imports from
+   `src/ai/camel/banned.ts`; a drift is a type error, caught at
+   `tsc` step before any gate runs. If someone hand-forks the list,
+   the TS compiler sees two sources and fails.
+
+Telemetry stays minimal: a new `voice-prompt-hash` header on every
+Anthropic request (SHA-256 of the seed string) lets us prove in
+production logs which seed revision a given agent call used. No PII;
+no content; just the hash. This is the single live-signal for voice
+v1; everything else is CI.
+
+### Gates
+
+**48 → 50.** Two additions, both orthogonal to existing gates.
+
+#### A24 — Voice seed adoption (new)
+
+Every `client.messages.create(...)` call's `system` parameter MUST
+include an identifier that resolves to `PANG_VOICE_SYSTEM_PROMPT`
+(directly or through a barrel re-export). Walks the AST server-side
+via `ts-morph`; the allowlist is code in the gate, no comment opt-out.
+
+Fail condition: any Anthropic message-create call whose `system`
+argument is a string literal, a template literal lacking the
+identifier, a variable not traceable to the seed, or absent entirely.
+
+Fail message format:
+```
+A24: src/ai/agents/foo.ts:42 — messages.create({ system: ... })
+  does not include PANG_VOICE_SYSTEM_PROMPT.
+  Import from "@/ai/agents/_shared" or "@/ai/prompts/voice".
+```
+
+#### A25 — Corpus discipline (new)
+
+Every user-facing string in `src/components/**` and `app/**` MUST be
+imported from a corpus module. Corpus modules match
+`src/**/{voice,strings,corpus}*.ts`, or are re-exported through
+`src/ai/prompts/strings.ts`'s `PANG_VOICE_STRINGS` bundle. AST walk
+targets JSX text nodes + four user-facing JSX attributes
+(`title | aria-label | placeholder | alt`).
+
+Fail condition: JSX text or targeted attribute whose value is a
+string literal, a template literal without a corpus-sourced
+interpolation, or any non-corpus reference.
+
+Fail message format:
+```
+A25: src/components/foo.tsx:42 — inline string "some text"
+  in <attr>/<children>.
+  Add to PANG_VOICE_STRINGS (src/ai/prompts/strings.ts) or
+  a domain corpus (src/ai/chapter/voice.ts pattern) and import.
+```
+
+#### A5 — banned vocab (existing — unchanged mechanics, new source)
+
+`check-strings.ts` continues to walk the corpus. Its banned list now
+imports from `src/ai/camel/banned.ts`. If a developer edits the list
+in either place, `tsc` catches the drift. A5's fail message is
+unchanged from collector-perspective; the mechanical plumbing is
+single-sourced.
+
+#### check:voice-prompt (new CI step, not a gate)
+
+`scripts/rebuild-voice-prompt.ts` reads `PANG_VOICE_STRINGS`, picks 6
+canonical domain examples, writes the examples section of `voice.ts`.
+The `check:voice-prompt` npm script runs the rebuild in dry-run mode
+and diffs against the committed file. Non-zero exit if drift. Added
+to `package.json`'s `check` script alongside A5, A24, A25.
+
+### Build order
+
+Eleven steps, each its own commit.
+
+1. **Banned-list single-sourcing** — `src/ai/camel/banned.ts`
+   exports `BANNED_VOCABULARY` (hard list) and `EVALUATIVE_VOCABULARY`
+   (soft list). `scripts/check-strings.ts` imports from it. Remove
+   the duplicated hardcoded list. Commit: `refactor(voice): single-source
+   banned vocabulary through camel/banned`.
+
+2. **`PANG_VOICE_STRINGS` bundle module** — new
+   `src/ai/prompts/strings.ts`. Re-exports from existing domain
+   corpora (`@/ai/chapter/voice`, `@/auth/strings`, etc.) under
+   stable namespaces (`invite`, `ask_gallery`, `outcome`, `push`,
+   `dispatch`, `passkey`, `arrival`, `chapter`). Typed as
+   `Readonly<Record<string, Readonly<Record<string, string>>>>` with
+   a `satisfies` clause so new namespaces must be typed. Commit:
+   `feat(voice): PANG_VOICE_STRINGS namespaced re-export bundle`.
+
+3. **Voice-prompt regeneration script** —
+   `scripts/rebuild-voice-prompt.ts`. Reads the bundle, assembles the
+   "Sample strings" section of the seed from 6 canonical examples,
+   writes `src/ai/prompts/voice.ts`. `--dry-run` flag for CI. Commit:
+   `feat(voice): rebuild-voice-prompt script; voice.ts becomes an artifact`.
+
+4. **`check:voice-prompt` CI step** — adds the script to
+   `package.json`'s `check` pipeline. Fails if the committed seed
+   differs from the deterministic rebuild. Commit: `ci(voice):
+   check:voice-prompt gates against seed drift`.
+
+5. **A24 gate — voice seed adoption** — new
+   `scripts/gates/a24-voice-seed-adoption.ts`. `ts-morph` walk over
+   `src/**/*.ts`; for every `client.messages.create(` CallExpression,
+   assert the `system` property's expression is an Identifier or
+   PropertyAccess resolving to `PANG_VOICE_SYSTEM_PROMPT`. Added to
+   `.pang/gates.yaml` as A24. Fixture under `tests/fixtures/voice-v1/a24/`
+   with three positive + three negative cases. Commit: `feat(gates):
+   A24 — voice seed adoption across Claude calls`.
+
+6. **A25 gate — corpus discipline** — new
+   `scripts/gates/a25-corpus-discipline.ts`. `ts-morph` JSX walk over
+   `src/components/**/*.tsx` and `app/**/*.tsx`; for every JsxText
+   node and JsxAttribute whose name is in the four-attribute set,
+   assert the value's source is a corpus import. Fixture under
+   `tests/fixtures/voice-v1/a25/` with positive + negative cases.
+   Commit: `feat(gates): A25 — corpus discipline for user-facing strings`.
+
+7. **ESLint companion rule** — `eslint-plugin-pang/no-inline-user-strings`.
+   Same heuristic as A25 but runs in the editor. Fast-feedback, not
+   authoritative. Commit: `feat(lint): inline-user-string rule as editor companion`.
+
+8. **String audit sweep — chapter + ask-gallery** —
+   `src/components/chapter/**`, `src/components/ask-gallery/**`. Every
+   inline string moves into its domain corpus and is re-exported
+   through `PANG_VOICE_STRINGS`. Commit: `refactor(voice): audit sweep
+   — chapter + ask-gallery strings into corpus`.
+
+9. **String audit sweep — intake + enrichment** —
+   `src/components/intake/**`, `src/components/enrichment/**`. Same
+   pattern. Commit: `refactor(voice): audit sweep — intake + enrichment
+   strings into corpus`.
+
+10. **String audit sweep — auth + outcome + documents** — remaining
+    surfaces. The audit commit message lists every file + every
+    literal moved. Commit: `refactor(voice): audit sweep — auth +
+    outcome + documents strings into corpus`.
+
+11. **Voice-prompt regeneration** — run `bun run rebuild:voice-prompt`.
+    Expected output: no change (the seed is already consistent with
+    the bundle's 6 canonical examples, because step 8 reconciled them).
+    If the rebuild produces a diff, the seed was drifting silently —
+    commit the reconciled artifact. Commit: `chore(voice): reconcile
+    voice.ts artifact to PANG_VOICE_STRINGS bundle`.
+
+12. **Primitives doc + sprint findings** — extend
+    `PANG_Primitives_2026.md` with:
+    - Primitive 63 — Seed-every-privileged-LLM-call (A24 discipline).
+    - Primitive 64 — Corpus-every-user-facing-string (A25 discipline).
+    - Primitive 65 — Seed-as-artifact (voice.ts regenerated from bundle,
+      never hand-edited).
+    - Primitive 66 — Banned-vocabulary-single-sourced (one source; CI
+      sees drift as a TS error).
+    Findings section in `PANG_Aha_Sprint.md` mirrors the pattern set
+    by iter #10 + #11: what landed, what surprised, what codifies.
+    Commit: `docs(primitives): 63–66 voice-layer discipline; iter #12
+    findings`.
+
+### Test criteria
+
+- **Unit**: `bun run test` green; count ≥ 798 (iter #11 baseline) +
+  new gate tests (~15).
+- **Gates**: `npm run check` green — 50 gates including A24 + A25 +
+  check:voice-prompt.
+- **Playwright**: existing 10 specs green; no new specs this
+  iteration (infrastructure, not surface).
+- **Build**: `bun run build` green; bundle size change ≤ +2KB on the
+  main chunk (corpus imports deduplicate; no net new strings).
+- **Audit completeness**: every file under `src/components/**` and
+  `app/**` passes A25 with zero exemptions. The audit commit messages
+  collectively reference every hand-authored string that moved.
+- **Seed integrity**: `diff <(bun run rebuild:voice-prompt --stdout)
+  src/ai/prompts/voice.ts` empty.
+
+### Out of scope
+
+- **i18n.** Strings stay in English. The corpus structure makes
+  per-locale bundles trivial later; this iteration does not wire
+  them.
+- **Voice presets.** No "formal mode" or "terse mode" switches. The
+  seed is the seed.
+- **Per-surface register overrides.** The voice is one voice. If a
+  surface needs to deviate, that's a doctrine edit to `PANG_Voice.md`
+  first (Appendix F), not a code escape hatch.
+- **Dynamic voice.** No runtime prompt assembly from the bundle; the
+  seed is a compiled artifact and ships as a string. Deterministic
+  and cache-friendly.
+- **Voice-specific eval agent.** The A22 corpus already covers voice
+  regression in generated prose; a dedicated voice eval is
+  post-Laura's reaction.
+- **Extending A5's soft list everywhere.** Soft list (evaluative
+  adjectives) stays advisory in `check-strings.ts`; the hard list is
+  what single-sources. Evaluative polish is a human review call and
+  fails gates on the seed's guidance, not on every string.
+- **Component-level string previews (Storybook).** The audit exposes
+  every string through the corpus; a dedicated preview harness is a
+  later iteration if Laura needs it.
+
+### Open questions (answered, for clarity)
+
+1. **Does A24 walk transitive barrels?** Yes. The AST resolution
+   follows re-exports to their definitions. `@/ai/agents/_shared`
+   re-exports `PANG_VOICE_SYSTEM_PROMPT`, and that's the canonical
+   shape every agent should use.
+
+2. **Should tests exempt `system` arguments?** No. Tests that mock
+   Claude never call `messages.create`. If a test calls the live
+   client (none do), it needs the seed.
+
+3. **Does `PANG_VOICE_STRINGS` freeze transitively?** Yes. Each
+   domain namespace is `Object.freeze({...})`; the outer bundle is
+   also frozen; `as const satisfies Readonly<Record<...>>` gives
+   compile-time confidence. Mutations throw at runtime and fail at
+   compile-time.
+
+4. **How does `rebuild-voice-prompt` pick the 6 examples?** By
+   canonical address in the bundle: `invite.greeting`,
+   `ask_gallery.action`, `outcome.confirmation`, `push.offer`,
+   `dispatch.email_label`, `arrival.placement`. Changing the list is
+   a doctrine edit — rename or remove a canonical slot and the
+   script fails loudly.
+
+5. **Does A25 flag `<div>{someVar}</div>` where `someVar` is a
+   string from a corpus?** No. The gate follows the identifier to
+   its import. If the import is a corpus module, it passes. If the
+   import is another component file, it is flagged and the developer
+   moves the string to a corpus.
+
+6. **What about icon-only buttons?** `aria-label` is in A25's
+   walked set precisely because icon-only buttons use it as their
+   accessible name. Every icon button must source its label from a
+   corpus; the audit sweep flags any that don't.
+
+7. **Do we enforce voice on error messages?** User-visible error
+   strings (shown in the UI) — yes, A25 catches them. Developer
+   errors (`throw new Error(...)` not rendered) — no, they are not
+   user-facing and would add noise.
+
+8. **Does the banned list include German translations for when
+   i18n lands?** The current list is English-only and correct for
+   English. When i18n lands, each locale gets its own banned list
+   imported into its bundle. A5 becomes A5-en, A5-de, etc. Not this
+   iteration.
+
+9. **Can a developer disable A24 or A25 for a specific line?** No
+   escape hatches. An `// eslint-disable-next-line` has no effect;
+   the gates are `ts-morph` walks, not ESLint rules. An agent that
+   genuinely cannot take the seed (future hypothetical, doesn't
+   exist) requires a doctrine edit to add an explicit allowlist in
+   `src/ai/prompts/voice.ts` that A24 reads.
+
+10. **Why is this Haiku 4.5-or-Sonnet-agnostic?** Because the seed
+    is the same string regardless of model. Primitive 55 (Haiku
+    pin for correspondence) is orthogonal; A24 enforces the seed,
+    not the model choice.
+
+### Outcome gate (what codifies)
+
+Iter #12 succeeds when:
+
+1. A24 is green on the six existing `messages.create` sites with no
+   exemptions and is live in `.pang/gates.yaml`.
+2. A25 is green on every file under `src/components/**` and `app/**`
+   with zero inline user-facing literals.
+3. `src/ai/prompts/voice.ts` is a deterministic artifact of
+   `scripts/rebuild-voice-prompt.ts`. `check:voice-prompt` is green.
+4. `src/ai/camel/banned.ts` is the single source for the banned
+   vocabulary; `scripts/check-strings.ts` imports from it.
+5. `PANG_Primitives_2026.md` gains primitives 63–66.
+6. The commit messages for the three audit-sweep commits collectively
+   list every file that changed and every string that moved — the
+   commit log is the audit log.
+7. The Anthropic request includes a `voice-prompt-hash` header in
+   every agent call; a production log contains at least one such
+   entry (observed via the telemetry pipeline).
+
+If any of the above is missing, the iteration does not close —
+iterate once, then land or drop per doctrine.
+
+---
+
 ## Archived iterations
 
 The pre-reset sprint family (A1–A11, iterations #1–#13 of the old
