@@ -62,6 +62,17 @@ export {
   chapterReadyEvent,
   chapterDismissEvent,
   chapterFallbackEvent,
+  chapterOutcomePlanEvent,
+  chapterOutcomeBeatEnterEvent,
+  chapterOutcomeBeatExitEvent,
+  chapterOutcomeReadyEvent,
+  chapterOutcomeDismissEvent,
+  chapterOutcomeSkippedEvent,
+  chapterOutcomeFrameTimeEvent,
+  summariseSamples,
+  type OutcomeVariant,
+  type OutcomeSkipReason,
+  type FrameTimeSummary,
 } from "./otel";
 
 export {
