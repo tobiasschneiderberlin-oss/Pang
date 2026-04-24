@@ -1222,6 +1222,250 @@ chunks
   Codified 2026-04-24 from iter #9; used three times
   across iters #4, #9, and reserved for future iters.
 
+### 53. Museumsschild push-notification title register
+
+- **Forbidden default:** marketing-vocabulary notification
+  titles, exclamation marks, emojis, evaluative adjectives.
+  *"Great news! A gallery confirmed your work ✨"*. The
+  notification shade is a gallery wall without the gallery's
+  silence — the register has to hold louder there, not
+  quieter. Most apps default to the Slack / Instagram /
+  Duolingo tone; PANG cannot afford to.
+- **Required primitive:** the notification title names the
+  state that just became true, in sentence case, without a
+  verb of persuasion. *"a gallery has confirmed a work."*
+  *"a gallery has answered."* *"the ask went quiet."* The
+  body is one clause of placement, no call-to-action. No
+  title case, no exclamation, no emoji (`CLAUDE.md` § *The
+  cannot-do list*), no first-person pronoun. The Museumsschild
+  test applies: the title has to be something that could hang
+  on a wall next to the work without looking out of place.
+  Tapping the notification deep-links to the work; the
+  notification is a placement, not an alert.
+- **Adapter path:** canonical reference: `public/sw.js`
+  lines 172–235 (iter #10). The three outcome kinds —
+  `"confirmed"`, `"declined"`, `"expired"` — map to three
+  title+body pairs authored inline in the SW. The payload
+  on the wire is `{requestId, workId, outcome}` only; the
+  user-visible strings live in the SW so the wire stays
+  small and the strings stay out of the prompt cache (they
+  are SW-authored, never agent-composed).
+- **Enforcement:** code-review level + A5 voice check on
+  any SW string literal that surfaces to the user. Signal:
+  a PR touching `public/sw.js`'s `push` handler adds a
+  title with `!`, with title case, with an emoji, or with a
+  verb of persuasion. Reject; rewrite to placement register.
+  Codified 2026-04-24 from iter #10.
+
+### 54. Null-aware agent prose never leaks the null back
+
+- **Forbidden default:** an agent prompt that gets
+  `artist: null` in the input and emits *"Untitled by
+  unknown artist"* or *"by N/A"* or *"by null"*. The
+  null is a legitimate state of incomplete intake; the
+  agent's job is to compose prose that honours it
+  structurally, not to surface the placeholder. Templates
+  fail here because nulls become scaffold.
+- **Required primitive:** the system prompt instructs the
+  agent to elide absent fields — *if the artist is not
+  known, the sentence rephrases without it; it never names
+  the absence*. Production output is checked against a
+  banned-string list per field (`"unknown artist"`,
+  `"null"`, `"undefined"`, `"n/a"`, `"name pending"`,
+  `"not provided"`) in the A22 eval corpus. A fixture
+  exists for the null-artist case specifically so a prompt
+  drift that re-introduces the scaffold fails loud in CI.
+  The scorer does not care which null-avoiding phrasing
+  the agent picks — only that the leaked token doesn't
+  appear.
+- **Adapter path:** canonical reference:
+  `evals/correspondence/fixtures.ts`
+  (fixture `correspondence-03-missing-artist`) and
+  `src/ai/prompts/correspondence.ts` (the "elide, do not
+  surface" clause in the system prompt). The pattern
+  generalises across every prose-composing agent whose
+  input may carry optional fields — Narrative Agent will
+  use the same discipline when it lands.
+- **Enforcement:** A22 eval corpus. Signal: a fixture
+  with a null field catches the agent surfacing the
+  placeholder. The eval fails CI; the prompt (not the
+  scorer) is wrong. Codified 2026-04-24 from iter #10.
+
+### 55. Per-agent model selection is a decision, not a default
+
+- **Forbidden default:** every P-LLM pinned to the current
+  top-tier model (Claude Sonnet / Claude Opus), because
+  "that's the strongest model available." A composing
+  task that wants 400ms latency and 500 tokens of
+  predictable voice-register prose is overpriced and
+  overlatent on Opus; a reasoning task that parses an
+  ambiguous photo label needs Sonnet's accuracy floor.
+  Uniform tiering wastes cost on the easy agents and
+  under-delivers on the hard ones.
+- **Required primitive:** each agent module explicitly
+  names the model tier in `@/ai/agents/models.ts`
+  (`AGENT_MODEL_IDS.<agent>`) and the rationale is in
+  the agent's module header. The tier is part of the
+  agent's public contract, alongside input / output
+  schema, retry policy (A21), and budget (A23). A tier
+  change is a deliberate edit with an eval re-run, not
+  an implicit upgrade when the vendor ships a new
+  top-tier model. For interactive composing where the
+  collector sees the draft pre-send, Haiku is the
+  default; for ambiguous-input structured-output
+  extraction where the agent has to reason about what
+  a blurred label actually says, Sonnet is the default.
+  Opus is reserved for a task none of the current
+  agents need.
+- **Adapter path:** canonical reference:
+  `src/ai/agents/models.ts`
+  (`AGENT_MODEL_IDS = { intake: "claude-sonnet-4-5",
+  enrichment: "claude-sonnet-4-5", correspondence:
+  "claude-haiku-4-5" }`). Iter #10 is the first
+  deliberate non-Sonnet pin; the rationale lives in
+  `src/ai/agents/correspondence.ts` lines 42–46.
+- **Enforcement:** code-review level. Signal: a new
+  agent module lands without a named model pin, or a
+  tier change lands without an eval re-run showing the
+  new tier still passes. The A22 threshold (0.85)
+  holds regardless of tier; a downgrade that breaks
+  the eval reverts. Codified 2026-04-24 from iter #10.
+
+### 56. URL-handoff preserves user gesture via `<a>.click()`, never `location.href`
+
+- **Forbidden default:** after an async fetch resolves,
+  write `window.location.href = channelUrl` or
+  `window.open(channelUrl)` to navigate the user to a
+  `mailto:` / `wa.me:` / `tel:` / any OS-level scheme.
+  iOS Safari's pop-up and URL-scheme policies require
+  the navigation to happen inside the same synchronous
+  user-gesture tick that initiated the user's tap. Any
+  `await` crosses a microtask boundary; Safari then
+  silently refuses the handoff. The user is stranded
+  on the originating page with no error, no toast, no
+  diagnosable signal. This is the class of bug that
+  eats an evening.
+- **Required primitive:** pre-allocate an
+  `<a target="_blank" rel="noopener noreferrer">`
+  element *synchronously* at the user-gesture tap.
+  `await` any necessary server round-trip (fetch the
+  `channelUrl` from your dispatch route, for example).
+  Once the async work resolves, set `anchor.href =
+  channelUrl` and call `anchor.click()`. The click is
+  inside the original user-gesture chain (Safari
+  honours the anchor's user-origin); `target="_blank"`
+  ensures the handoff opens in the OS-level client
+  without replacing the PANG tab; `rel="noopener
+  noreferrer"` is the 2026 default hygiene. The anchor
+  can be invisible (not attached to the DOM is fine on
+  modern Chromium + Safari; attach+detach is the
+  safest posture if a future browser regresses).
+- **Adapter path:** canonical reference:
+  `src/components/verification/AskGallery.tsx`
+  "send now" handler (iter #10). The pattern applies
+  to every OS-level handoff PANG might add —
+  `sms:` when / if the Tier-C deferral lifts,
+  `tel:` for a future gallery-call affordance, any
+  future custom-scheme deep-link. `window.location =`
+  is strictly wrong.
+- **Enforcement:** code-review level. Signal: a PR
+  introduces `window.location.href = ` or
+  `window.open(` on a URL that starts with a
+  non-`https:` / non-`http:` scheme. Reject;
+  rewrite to the pre-allocated-anchor pattern.
+  Codified 2026-04-24 from iter #10.
+
+### 57. Service-worker → tab fan-out via BroadcastChannel
+
+- **Forbidden default:** after the service worker
+  handles a push event, call `clients.matchAll()` and
+  `postMessage` to each open client, hand-rolling the
+  fan-out. Works for one consumer; falls apart when a
+  second consumer (test harness, iframe, devtools
+  preview) wants the same event. Or: have the tab poll
+  the server on `visibilitychange` to pick up any
+  state the SW processed while the tab was hidden.
+  Wasteful, lags the push, races with the reconciler.
+  Or: just rely on the OS notification — which doesn't
+  flip the in-tab store, so a collector who switches
+  back sees a stale state until the next boot
+  reconcile.
+- **Required primitive:** the SW `postMessage`s
+  through `new BroadcastChannel("pang-<domain>")`
+  immediately after processing the push (or any other
+  server-originated event). Every tab with a
+  listener on the same channel name picks up the
+  event and flips its store. Fire-and-forget semantics
+  handle the "no tab open" case automatically — the
+  boot-time reconciler is the correctness floor
+  (primitive 58). The channel name is namespaced per
+  subsystem (`pang-verification`, future `pang-
+  enrichment`, `pang-works`) so a listener only
+  wakes for its own events. Zero tap; sub-frame
+  latency; no polling.
+- **Adapter path:** canonical reference:
+  `public/sw.js` lines 218–232 (iter #10) — the
+  confirm push handler closes with a
+  `BroadcastChannel("pang-verification")
+  .postMessage(...)`. The listener lives in the
+  tab's reconciler / confirm-bridge wiring.
+  Generalises: any SW-processed event with
+  user-visible tab-side state should fan out through
+  BroadcastChannel.
+- **Enforcement:** code-review level. Signal: a new
+  SW event handler processes state that the tab needs
+  to reflect, but doesn't fan out through a
+  BroadcastChannel. Add the relay; the cost is one
+  line in the SW and one listener in the tab.
+  Codified 2026-04-24 from iter #10.
+
+### 58. Asynchronous round-trips ship two rails: push for latency, poll for correctness
+
+- **Forbidden default:** push-only — trust the
+  notification channel to deliver every acknowledgement
+  and let the client display stale state when it
+  doesn't. Or: poll-only — ignore the push path's
+  latency advantage and make every state transition
+  wait for the next boot walk. Both fail collectors
+  whose devices silently drop subscriptions, whose
+  browsers vendor-revoke registrations, whose mobile
+  OS sleeps background SWs past the push TTL, or
+  whose connection partitioned between "sent" and
+  "acknowledged."
+- **Required primitive:** every asynchronous
+  round-trip with a user-visible side effect ships
+  both rails. The push (or BroadcastChannel — see
+  primitive 57) is the *latency* rail: when it
+  works, the tab flips state inside a frame. The
+  boot-time outbox walker is the *correctness*
+  floor: it visits every `dispatched`-state record,
+  polls the server's authoritative outcome endpoint,
+  and reconciles the client store deterministically.
+  Neither alone suffices — push without poll drops
+  silently; poll without push wakes the collector
+  late. The server's outcome record is the single
+  source of truth; push is a notification channel,
+  not the state channel. "Outbox-as-truth" is the
+  phrase.
+- **Adapter path:** canonical reference:
+  `src/verification/reconcile.ts` (iter #10
+  extension) walks `dispatched` outbox entries on
+  every boot and calls
+  `/api/verification/outcome/<requestId>` to
+  reconcile. `src/verification/push-deliver.ts`
+  sends the push best-effort without blocking the
+  outcome write. The two rails are orthogonal —
+  delivery failure doesn't fail the outcome; poll
+  success catches the gap.
+- **Enforcement:** code-review level. Signal: a new
+  async round-trip ships with only one rail
+  (push-only is the common mistake — it looks like
+  the state channel but isn't). Add the
+  outbox-walker rail; the cost is a route and a
+  boot hook, and the correctness floor you gain is
+  worth a week of "it works on my device" support
+  investigations. Codified 2026-04-24 from iter #10.
+
 ---
 
 ## Active references

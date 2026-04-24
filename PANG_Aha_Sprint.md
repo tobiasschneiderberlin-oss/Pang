@@ -5898,6 +5898,401 @@ signal demands it.
 
 ---
 
+## Iteration #10 — findings (2026-04-24)
+
+**Status:** landed at ceiling and squash-merged as
+https://github.com/tobiasschneiderberlin-oss/Pang/pull/20 (commit
+`dc3027c`). `npm run verify` clean (26/26 gates, 755/755 unit
+tests across 179 suites, 14/14 eval fixtures across intake +
+enrichment + correspondence + verification — correspondence
+landed at 5/5 on first mock run after the Zod subject-length
+catch). Playwright `verification.spec.ts` 7/7 passing in 5.1s
+against `next dev`. Spine moment #8 is closed: Laura taps a
+dormant work, the Correspondence Agent composes a Museumsschild-
+register message bound to the work snapshot and the gallery
+contact, the collector hands off to iOS Mail or WhatsApp with
+one tap, the gallery taps confirm on a signed link, a VAPID
+push arrives on the collector's device, and the work's emissive
+lifts on the next Room tick. The outbox from iter #4, the
+enrichment-contributor lane from iter #5, and the session
+identity from iter #9 finally compose into a round-trip business
+event. The two principle-scope deferrals (server-side provider
+dispatch; SMS as a third channel) remain deferred as planned —
+the channel abstraction admits `"resend" | "twilio" | "slack-
+connect"` from day one so the future provider iteration is a
+path addition, not a refactor. Laura's hands: queued for the
+first real-device session on the merged preview.
+
+### What landed
+
+- `src/ai/agents/correspondence.ts` — fourth P-LLM, pinned to
+  `claude-haiku-4-5` via `AGENT_MODEL_IDS.correspondence`. Reads
+  a Trusted artwork snapshot + gallery display name + channel,
+  emits a `CorrespondenceOutput` (subject nullable for WhatsApp;
+  body carrying `{{CONFIRM_URL}}` + `{{DECLINE_URL}}` placeholders
+  each exactly once). Structured-output tool; the `schema.parse()`
+  is the boundary. A21 retry policy: two retries on transient
+  failure, terminal failure returns `null` and the route flips
+  the UI back to `"requested"`. Budget: 2k in / 512 out / $0.05
+  per call — Haiku's speed-cost point is the right fit for a
+  sub-second interactive compose.
+- `src/ai/prompts/correspondence.ts` — the agent's system prompt.
+  Museumsschild register; sentence case; no marketing vocabulary
+  (A5); no first-person pronouns; the placeholders must appear
+  exactly once each. Gallery name arrives as `Untrusted<string>`
+  and passes through `sanitize()` before render, so a prompt-
+  injection via a gallery's display name cannot reach the
+  privileged LLM.
+- `src/verification/correspondence.schema.ts` — Zod shape with a
+  named `checkPlaceholders` helper. Subject `.max(80)` is the
+  floor; the mock corpus found this on the first run (the
+  Taeuber-Arp fixture's draft subject ran 88 chars and failed
+  parse, which is the correct failure — a too-long subject
+  regresses the mail client's inbox-list legibility).
+- `src/auth/server/signed-link.ts` — iter #9's
+  `invite.ts` graduated into an audience-discriminated family.
+  Three audiences: `collector-invite` (14 d TTL; the iter #9
+  shape preserved byte-for-byte), `gallery-confirm` (30 d;
+  `{gid, vrid, wid}` claims), `gallery-decline` (mirror).
+  `aud` claim is load-bearing — a confirm-token presented at
+  the decline route rejects with `auth.signed_link.rejected
+  { reason: "wrong-audience" }`. Per-audience consumed-marker
+  directory at `.pang/server-signed-links/<audience>/<jti>
+  .consumed`; primitive 51 (markers commit before the side
+  effect) preserved. `invite.ts` becomes a thin re-export so
+  iter #9 call sites keep working through the refactor.
+  Matrix test covers all nine presented-vs-expected audience
+  pairs; each cross-audience reject is named in its own test.
+- `app/api/verification/dispatch/route.ts` — new route. Gated
+  through `requireSession` (iter #9), takes the outbox
+  `requestId` + the chosen `"mailto" | "wa-me"` channel, calls
+  the Correspondence Agent, mints the confirm + decline signed
+  links, substitutes them into the draft body, flips the
+  outbox entry from `"requested"` to `"dispatched"`, returns
+  `{ draftSubject, draftBody, recipient, channelUrl }` — the
+  prepared URL-encoded `mailto:` or `https://wa.me/<phone>`
+  URL the client navigates to. Idempotent on `requestId`: a
+  second dispatch returns the same links (primitive 51 at the
+  dispatch layer — the cached links are the consumed marker).
+- `app/api/verification/{confirm,decline}/route.ts` — gallery-
+  side outcome writers. Each is session-gated (the gallery
+  operator's passkey-bound session from the iter #9 ceremony
+  the `/g/confirm/[token]` page triggers on first visit).
+  Verifies the signed link against its expected audience,
+  writes the outcome to `.pang/server-verification-outcomes/
+  <vrid>.json`, fires `deliverOutcomePush` best-effort, and
+  emits `verification.confirm.{started,succeeded,failed}` +
+  `verification.decline.*` spans. The token is consumed at
+  commit; replay fails closed.
+- `app/api/verification/outcome/[requestId]/route.ts` — public-
+  but-ULID-gated outcome reader. The request ID alone doesn't
+  identify anyone; it's a ULID. Powers the reconciler's poll
+  path when push drops.
+- `app/g/confirm/[token]/page.tsx` + `app/g/decline/[token]
+  /page.tsx` + `app/g/_components/GalleryOutcomeClient.tsx` —
+  new gallery surfaces. Server-side verifies the signed link;
+  the client component renders the work + collector identity
+  (first name + last initial only — never full PII) + a single
+  primary button ("confirm this work" / "I can't confirm this
+  work"). No "are you sure" modal; the button copy *is* the
+  commit. P25 covers these surfaces — no `<select>`, no
+  HTML-required inputs — enforced in `.pang/gates.yaml` and
+  `scripts/check-gates.ts`.
+- `src/verification/push-deliver.ts` — server-side VAPID push
+  via `web-push@3`. One subscription per requestId (iter #4
+  shape); terminal send (204) or permanent failure (410 Gone)
+  deletes the record. Missing VAPID keys skip delivery
+  silently and record the skip on the OTel span so staging
+  dashboards catch the config gap.
+- `public/sw.js` push handler — extended to render a
+  museumsschild-register notification per outcome kind, then
+  relay through `new BroadcastChannel("pang-verification")`
+  to any open tab. Push is the latency optimisation; the
+  BroadcastChannel relay gives zero-tap cross-surface when
+  the tab is already open; the reconciler's poll path is the
+  correctness floor when both drop.
+- `src/verification/reconcile.ts` — extended with
+  `pollOutcomeOnce` + `walkDispatchedOnce`. The walker visits
+  every `dispatched`-state outbox entry on boot, polls
+  `/api/verification/outcome/<requestId>`, and reconciles the
+  store state from the server record. Outbox-as-truth: the
+  server's outcome file is the single source; push is a
+  notification channel, not the state channel.
+- `src/verification/confirm-bridge.ts` — Zustand subscription
+  that observes `useVerification.byWorkId` transitions into
+  `"confirmed"` and flips `useWorks.setStatus(workId,
+  "verified")` on the same tick. The emissive lifts on the
+  next Room tick without coupling the two stores. The
+  ceremonial (camera push, ambient tone) side of arrival-on-
+  confirm is deferred to a later iter so this ships without
+  dragging chapter-driver changes.
+- `src/components/verification/AskGallery.tsx` — grows a
+  second primary state. After `"requested"` lands in the
+  outbox, a compact "send now" affordance appears — taps
+  `/api/verification/dispatch`, receives the `channelUrl`,
+  navigates via `<a target="_blank">.click()` so the user-
+  gesture origin is preserved for iOS Safari's mail / WA app
+  handoff. The composed subject + body is shown in-client
+  first (a peek, not a confirmation); the "send" tap happens
+  in the OS-level client the collector already trusts.
+- `src/stores/verification.ts` + `verification.persist.ts` —
+  `"dispatched"` state added; persistence schema revs to
+  version 2. The render-cache rehydrate filters unknown
+  discriminants so a forward-migrated user has no ghost
+  entries.
+- `e2e/verification.spec.ts` — 7 Playwright tests across 5
+  describe blocks: dispatch-route session gate, confirm-route
+  outcome write, decline-route outcome write, dual-tap
+  idempotency (replay rejects; cache re-uses), full
+  round-trip with BroadcastChannel relay. Uses the new
+  `/api/verification/mint-dev/route.ts` dev-only seam
+  (NEXT_PUBLIC_PANG_E2E=1 + x-pang-e2e bearer) to mint
+  audience-discriminated tokens directly.
+- `evals/correspondence/` — 5 fixtures covering voice-clean
+  (Richter Kerze email), WhatsApp null-subject (Werefkin),
+  null-artist graceful elision (no "unknown artist" / "null"
+  / "undefined" / "n/a" / "name pending" leaks; primitive 54
+  below), banned-vocabulary clean (Bourgeois Spider), body
+  length band [120, 800] chars (Taeuber-Arp). A22 threshold
+  0.85; mock mode passes 5/5 in CI on every push; live mode
+  runs on workflow_dispatch + nightly.
+- `scripts/check-gates.ts` — P25 walker extended from 2 to 4
+  surfaces (`app/scan/**`, `src/components/intake/**`, `src/
+  components/verification/**`, `app/g/**`). P10 allowlist
+  extended to include `app/api/verification/mint-dev/
+  route.ts` with the same rationale comment as the iter #9
+  invite mint-dev.
+- `.pang/gates.yaml` — P25 folder set updated; fails-when
+  clause names the iter #10 surfaces explicitly.
+
+### What execution exposed
+
+Seven discoveries, each with its verdict:
+
+1. **Haiku-tier is the right speed-cost point for interactive
+   compose — and the same prompt architecture works.** The
+   Correspondence Agent reuses the Enrichment Agent's
+   structure (shared voice prompt + tool-forced structured
+   output + A5 eval + A21 retry) but pins to Haiku instead of
+   Sonnet. Composing a six-sentence message is a task Haiku
+   nails; the quality bar is voice register, not reasoning
+   depth. Latency matters more than marginal prose quality
+   because the collector sees the message in-client before
+   they tap send. The Museumsschild test passes on 100% of
+   mock fixtures; the eval corpus catches drift. Generalises:
+   **per-agent model selection is a decision, not a default.**
+   The fourth P-LLM is the first to use a non-Sonnet tier;
+   the pattern will repeat. Codified as primitive 55 below.
+
+2. **URL-handoff preserves the user gesture only via
+   `<a>.click()` with `target="_blank"`, not
+   `window.location.href`.** The first dispatch implementation
+   wrote `window.location.href = channelUrl` after the
+   `/api/verification/dispatch` fetch resolved. iOS Safari
+   ignored it silently — the mail client never opened, the
+   user was stranded on the AskGallery panel. The cause: the
+   fetch's `await` crossed a microtask boundary, and Safari's
+   pop-up / URL-scheme policy requires the navigation to
+   happen inside the same synchronous user-gesture tick that
+   initiated it. Fix: pre-allocate an `<a>` element synchronously
+   at tap, await the fetch, then call `.click()` on the
+   (already user-gesture-adopted) anchor. The `target="_blank"`
+   is necessary so the handoff opens the mail / WhatsApp
+   client without replacing the PANG tab. Cost: half an evening.
+   General shape: **URL-handoff dispatch in a PWA must
+   preserve the originating user gesture through any async
+   boundary; the only cross-platform-reliable path is an
+   `<a target="_blank">` pre-allocated at tap + `.click()`
+   after the async work.** Codified as primitive 56 below.
+
+3. **BroadcastChannel SW→tab is the zero-tap cross-surface
+   primitive.** The push handler runs in the service worker;
+   the store runs in the tab. When a confirm push arrives on
+   a collector whose tab is already open (paused, idle, or
+   in another Chrome window), the SW's
+   `self.registration.showNotification` shows a system
+   notification — and the tab still needs to flip its store,
+   or the collector who switches back sees a stale
+   `"dispatched"` state until the next boot-time reconcile.
+   Polling from the tab is wrong (wasteful; lags the push);
+   re-fetching on every visibility change is wrong (races
+   with the reconciler). The right path: the SW
+   `postMessage`s through `new BroadcastChannel("pang-
+   verification")` after the notification shows; any tab with
+   a listener flips the store and the emissive lifts inside a
+   frame. Zero tap. Fire-and-forget semantics handle the "no
+   tab open" case automatically — the outbox poll picks up
+   the state change on next boot. Codified as primitive 57
+   below.
+
+4. **Outbox-as-truth is a two-rail system: push for latency,
+   poll for correctness.** The spine moment #8 ceremony
+   requires the work's emissive to lift *now* when the
+   gallery confirms. Push delivery gives that latency when
+   it works; when it doesn't (subscription TTL expired,
+   FCM/APNs backed up, collector offline for a week, browser
+   vendor quietly revoked the subscription), the outbox's
+   `dispatched` entries survive the gap and the boot-time
+   walker polls `/api/verification/outcome/<requestId>`
+   authoritatively. The walker is the correctness floor;
+   push is the latency optimisation. Neither alone suffices
+   — push without poll drops silently; poll without push
+   wakes the collector late. This two-rail pattern
+   generalises beyond verification: any asynchronous
+   acknowledgement with a user-visible side effect benefits
+   from the pairing. Codified as primitive 58 below.
+
+5. **Next.js 16 app router's private-folder rule (iter #9's
+   discovery) applied cleanly to the mint-dev seam.** The
+   new `app/api/verification/mint-dev/route.ts` follows the
+   `e2e-seam/` + `mint-dev/` convention (never `_mint-dev`).
+   The P10 allowlist added the path with the same rationale
+   comment as iter #9's invite mint-dev, and the check-gates
+   walker passed on first run. Confirms the iter #9 footnote
+   in `PANG_Architecture_2026.md` § 10.5 was catalogued in
+   time to save the second lookup. No new codification —
+   the existing doc line is doing its job.
+
+6. **Zod subject-length catch found the prompt drift in the
+   eval, which is what evals are for.** The first mock-mode
+   run of `npm run eval:correspondence:mock` failed 1/5
+   fixtures — the Taeuber-Arp subject ran 88 chars, 8 over
+   the schema's `.max(80)`. The schema parse failed loud;
+   the eval told me which fixture; the mock author had the
+   wrong instinct for subject length. Fix: shortened to
+   `"Verification request — Taeuber-Arp, Composition
+   (1935)"` (56 chars). The A22 eval is not a self-test
+   (*"does the mock match the scorer?"*) — it's a
+   prompt-contract test (*"does this draft survive
+   production schema parse?"*). A fixture that parses
+   successfully but violates the floor is a broken fixture;
+   the right failure is louder than the wrong fixture.
+   General shape: **eval fixtures should parse through
+   the same schema the production agent emits through, not
+   a test-local schema.** Codified in the `run.ts` header
+   already; called out here so the pattern doesn't drift
+   in future eval corpora.
+
+7. **The museumsschild-register push notification title is
+   its own authoring surface, not a side effect of the agent
+   prose.** The push payload on the wire is three fields —
+   `{requestId, workId, outcome}`. The SW renders the title
+   + body from the outcome kind; the agent never sees the
+   notification strings. This is a small but load-bearing
+   distinction: the message the collector sent (agent-
+   composed, placeholders filled, cryptographic links
+   injected) and the notification the collector receives
+   (SW-authored, three fields on the wire, no prompt cache)
+   are different texts with different security boundaries.
+   The title — *"a gallery has confirmed a work."* — sits
+   inside iOS and Android notification shades, under the
+   collector's lock screen, alongside their other apps'
+   notifications. The register has to hold there. Codified
+   as primitive 53 (push-notification title register) below.
+
+### What stayed deferred
+
+Both principle-scope lines from the kickoff brief held:
+
+- **Server-side provider dispatch (Resend / Twilio / Slack
+  Connect / SMTP)** stays out. The URL-handoff shipped and
+  the collector's mail / WhatsApp client is doing the
+  "send" — that's the spine moment. The channel abstraction
+  in `src/verification/dispatch/channel.ts` admits
+  `"resend" | "twilio" | "slack-connect"` from day one, and
+  the dispatch route flows through a `pickChannel()`
+  selector so a future provider iteration is a path
+  addition, not a refactor. The telemetry hook
+  (`verification.dispatch.handoff_returned`) is in place —
+  if a significant fraction of collectors abandon between
+  "compose" and "send", the iteration that wires server-side
+  dispatch earns its slot. Until then, the handoff is the
+  feature.
+
+- **SMS as a third channel** stays out. SMS requires server-
+  side dispatch (no reliable `sms:` URL handoff; Android
+  drops the body; iOS requires user confirmation of the
+  number) *and* PII storage of the gallery's phone number
+  alongside its email. The two channels that ship — email
+  via `mailto:`, WhatsApp via `wa.me` — cover 2026 European
+  gallery practice. When / if the observability signal shows
+  Tier-C markets where SMS is the only reliable channel, the
+  iteration that adds it will be small because the channel
+  abstraction is already in place.
+
+One new soft deferral surfaced during the build:
+
+- **Arrival-on-confirm ceremony (camera push + ambient
+  tone) is soft-deferred.** The *data* side shipped:
+  `installConfirmBridge` flips the works store to
+  `"verified"` on confirmation and the emissive lifts on
+  next tick. The *ceremonial* side — the camera push, the
+  ambient tone, the one-sentence voice beat that marks the
+  moment — is deferred to a later iter so this iteration
+  shipped without dragging chapter-driver changes. The
+  verification corpus already has `confirmation` beat
+  kinds; wiring them into a confirmation chapter is a
+  separate iteration with its own Laura's-hands check.
+  Named here so it doesn't fall off the queue.
+
+### What comes next
+
+The spine has eight closed moments (arrival, scan, focus,
+paint, ask, enrich, deep zoom, verification round-trip) and
+one principle-scope iteration (passkeys auth) between them.
+The next spine moment is **the arrival ceremony on
+confirmation** — the soft deferral above. When the
+gallery's confirm push arrives on the collector's device
+and the collector taps back into PANG, the Room shouldn't
+just have a warmer emissive — it should play the
+confirmation chapter (voice narration, camera push, place
+beat, settle, ready). The verification corpus has the beat
+variants; the chapter driver already handles
+`confirmation`; the wiring is the work. Scope: ceiling;
+no new agents, no new routes, only the composition. Failure
+mode: WebGPU adapter info + frame-time histograms (iter
+#3 shape) so a chapter-plan regression surfaces as an eval
+rather than a rendering ghost. Expected duration: one
+evening, maybe two.
+
+After that, three candidates in no particular order:
+
+- **Narrative Agent** — the fourth agent slot in
+  `PANG_AI_Era_2026.md` § *Agent order*. Composes the
+  paragraph-length context that appears on a focus beat
+  in arrival chapter (artist background, work provenance,
+  one sentence of gallery context). The enrichment lane
+  produces structured facts; the Narrative Agent composes
+  prose from them. Haiku-tier (primitive 55 applies);
+  same prompt architecture as Correspondence.
+- **Intake eval corpus expansion** — still one fixture.
+  The debt named in iter #4 findings. A 3–5 fixture
+  corpus covering photo-blur, clipped-label, handwritten
+  annotation, email-snippet would raise the A22 floor on
+  the most-frequently-run agent.
+- **Supabase wiring on a preview branch** — the
+  filesystem-backed server stand-ins (primitive 52) have
+  earned their keep through three iterations; the swap to
+  Supabase is the promised migration. One branch, one
+  adapter swap per store helper, seven directories ported,
+  the row shape identical. Could ship alongside any iter
+  above; doesn't block the spine.
+
+Laura's hands next. The merged preview URL is the
+right-first-look surface for iter #10 — she receives the
+invite link from the staging gallery, intake scans a work,
+she taps ask, PANG composes, she taps send, the mail client
+opens, she taps send again, the gallery side completes,
+and the confirm push arrives on her device within seconds.
+If it doesn't — if the OS handoff stutters, if the push
+doesn't land on Android, if the BroadcastChannel relay
+doesn't fire in Chrome's background-tab condition — the
+`verification.dispatch.*` span catalogue is instrumented
+to tell us exactly where. The spine round-trip is a single
+business event; the observability is the diagnosis.
+
+---
+
 ## Archived iterations
 
 The pre-reset sprint family (A1–A11, iterations #1–#13 of the old
