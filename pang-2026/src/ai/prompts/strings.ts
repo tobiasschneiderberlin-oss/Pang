@@ -67,6 +67,12 @@ import {
 } from "@/ai/intake/voice";
 import { ENRICHMENT_PANEL_LABEL } from "@/ai/enrichment/voice";
 import {
+  NARRATIVE_ARRIVAL_ANNOUNCE,
+  NARRATIVE_DISMISS_LABEL,
+  NARRATIVE_OVERLAY_LABEL,
+  NARRATIVE_PLACEHOLDER,
+} from "@/ai/narrative/voice";
+import {
   CAPTURE_LABEL,
   TORCH_TOGGLE,
   VIEWFINDER_LABEL,
@@ -269,6 +275,17 @@ export const ROOM = Object.freeze({
   main_label: ROOM_MAIN_LABEL,
 }) satisfies Readonly<Record<"main_label", string>>;
 
+export const NARRATIVE = Object.freeze({
+  /** `<dialog popover>` landmark label. */
+  overlay_label: NARRATIVE_OVERLAY_LABEL,
+  /** Single-tap dismiss affordance label. */
+  dismiss_label: NARRATIVE_DISMISS_LABEL,
+  /** ARIA live-region announcement when the paragraph fades in. */
+  arrival_announce: NARRATIVE_ARRIVAL_ANNOUNCE,
+  /** Dev/test placeholder when no narrative is present. */
+  placeholder: NARRATIVE_PLACEHOLDER,
+}) satisfies Readonly<Record<string, string>>;
+
 export const SMOKE = Object.freeze({
   /** /deep-zoom-smoke surface. */
   deep_zoom_header: DEEP_ZOOM_SMOKE.header,
@@ -311,6 +328,7 @@ export const PANG_VOICE_STRINGS = Object.freeze({
   invite_landing: INVITE_LANDING,
   gallery_outcome: GALLERY_OUTCOME,
   room: ROOM,
+  narrative: NARRATIVE,
   smoke: SMOKE,
   aria: ARIA,
 }) satisfies PangVoiceStringsShape;
@@ -351,6 +369,7 @@ type PangVoiceStringsShape = Readonly<{
   invite_landing: Namespace;
   gallery_outcome: Namespace;
   room: Namespace;
+  narrative: Namespace;
   smoke: Namespace;
   aria: Namespace;
 }>;

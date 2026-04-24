@@ -31,6 +31,7 @@ import { DocumentViewerConnector } from "@/components/documents/DocumentViewer";
 import { EnrichmentPanel } from "@/components/enrichment/EnrichmentPanel";
 import { DeepZoomOverlay } from "@/components/deep-zoom/DeepZoomOverlay";
 import { RoomSurfaceClaim } from "@/components/room/RoomSurfaceClaim";
+import { NarrativeOverlayConnector } from "@/components/room/NarrativeOverlayConnector";
 import { OutcomeChapterMount } from "@/components/intake/OutcomeChapterMount";
 import { ROOM_MAIN_LABEL } from "@/ai/room/voice";
 
@@ -69,6 +70,12 @@ export default function TheRoom(): ReactElement {
        *  time with a 400 ms inter-chapter gap; off-Room transitions
        *  queue until Room is active. */}
       <OutcomeChapterMount />
+      {/* Iteration #14 — Narrative overlay. Fires a single GET on
+       *  Room-active edge (after a settle delay); fades in a short
+       *  observational paragraph when a current-month reading exists
+       *  and hasn't been dismissed this session. Passive surface —
+       *  silence is the default register. */}
+      <NarrativeOverlayConnector />
     </main>
   );
 }
