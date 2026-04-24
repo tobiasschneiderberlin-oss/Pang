@@ -285,6 +285,22 @@ test.describe("outcome-chapter-surface-gate — off-Room transitions queue", () 
     const outcome = page.locator('main[aria-label="outcome"]');
     await expect(outcome).toBeHidden({ timeout: 3_000 });
 
+    // iter #16 (3rd extension): wait for the seed's OPFS persistence
+    // debounce to land before navigating away. `seedVerifiedWork`
+    // mutates `useWorks` + `useVerification` in memory; the
+    // 120 ms-debounced persistence subscriptions write to OPFS. A
+    // bare `goto("/")` here can outrun that write on chromium-mobile
+    // cold cache (Pixel 7 emulation stretches both setTimeout
+    // granularity and async `opfsWrite`), in which case the Room
+    // page rehydrates from a stale OPFS — no transition queued, the
+    // surface flip to "room" finds an empty queue, the chapter never
+    // mounts, and `toBeVisible` below times out at 15 s. The
+    // `toBeHidden` check above returns the moment Playwright sees
+    // the element absent (≈ tens of ms), so it doesn't itself buy
+    // the OPFS write any wall time. 2000 ms = 16× the debounce; same
+    // budget the settings-overlay-persistence spec uses.
+    await page.waitForTimeout(2000);
+
     // Navigate to the Room — the surface claim flips to "room" and
     // the hook flushes the queue head.
     await page.goto("/");

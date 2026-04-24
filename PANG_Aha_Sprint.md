@@ -9321,6 +9321,60 @@ which fails its own brief.
 **Verification**: 12/12 settings-overlay specs pass locally on
 both projects; outcome-chapter regression-test holds at 10/10.
 
+### Mid-iter expansion #2: outcome-chapter-surface-gate (2026-04-24)
+
+The second push (settings-overlay-persistence fix) closed two
+flakes — and surfaced a third. CI conclusion was `success` (the
+build passed via Playwright's automatic retry policy), but the
+surface-gate spec at `e2e/outcome-chapter.spec.ts:265` flaked on
+first attempt and only passed on the retry. The brief committed
+explicitly to *first-attempt* cold-cache pass; "passed on retry"
+isn't shippable under that gate.
+
+**Root cause** (same family, different surface):
+
+```
+goto("/scan") → seedVerifiedWork → toBeHidden(outcome, 3 s)
+              ↑ writes via store mutators
+              ↑ persistence subscriptions debounce-write to OPFS
+goto("/")     ↑ fresh page load — hydrates from OPFS
+              ↑ if OPFS write hasn't landed, the / page rehydrates
+                from a stale snapshot (no transition queued)
+              ↑ surface flips to "room" → empty queue → never mounts
+expect(outcome).toBeVisible({ timeout: 15_000 })  ← times out
+```
+
+The surface-gate spec is the only one in the suite with two
+navigations. Single-navigation specs (#1, #2, #3) seed *after*
+the only `goto` and never have to re-hydrate from OPFS, so the
+race never bites them. Spec #4 has to round-trip through
+disk-backed persistence to carry state across the
+`goto("/scan") → goto("/")` boundary, and the `toBeHidden(3s)`
+check returns the moment Playwright sees the element absent —
+which is tens of ms, not three seconds. No wall time gets
+reserved for the OPFS write to land.
+
+**Fix shape** (same surgical register, third application):
+
+- `await page.waitForTimeout(2000)` between `seedVerifiedWork`
+  and the second `page.goto("/")`. Same 2 s budget the
+  settings-overlay-persistence fix uses; same 16× multiplier
+  over the 120 ms persistence debounce; same headroom for slow
+  setTimeout granularity + slow async `opfsWrite` on cold-cache
+  Pixel 7 emulation.
+
+**Why this belongs to iter #16, not iter #16b**: the brief's
+outcome gate is *first-attempt cold-cache pass*. A retry-flake
+that passes only on the retry doesn't satisfy that gate. Iter
+#16b would re-open *post-merge* if a flake recurs after `main`
+has the fixes — which is a different signal than "we shipped
+a known-flaky build." Splitting here would have shipped iter
+#16 with the gate already failed.
+
+**Verification**: 22/22 specs pass across both projects in a
+single run (10 outcome-chapter × 2 projects + 12
+settings-overlay across both projects but 6 specs per project).
+
 ---
 
 ## Archived iterations
