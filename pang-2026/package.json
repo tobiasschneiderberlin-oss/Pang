@@ -20,6 +20,7 @@
     "check:manifest": "tsx scripts/check-manifest.ts",
     "check:gates": "tsx scripts/check-gates.ts",
     "check:strings": "tsx scripts/check-strings.ts",
+    "check:voice-prompt": "tsx scripts/rebuild-voice-prompt.ts --dry-run",
     "rebuild:voice-prompt": "tsx scripts/rebuild-voice-prompt.ts",
     "build:deepzoom": "tsx scripts/build-deepzoom-pyramids.ts",
     "eval:intake": "tsx evals/intake/run.ts",
@@ -30,7 +31,7 @@
     "eval:correspondence:mock": "PANG_EVAL_MOCK=1 tsx evals/correspondence/run.ts",
     "eval:verification": "tsx evals/verification/run.ts",
     "check:eval": "npm run eval:intake:mock && npm run eval:enrichment:mock && npm run eval:correspondence:mock && npm run eval:verification",
-    "verify": "npm run typecheck && npm run lint && npm run check:manifest && npm run check:strings && npm run check:gates && npm run check:eval",
+    "verify": "npm run typecheck && npm run lint && npm run check:manifest && npm run check:strings && npm run check:voice-prompt && npm run check:gates && npm run check:eval",
     "setup:hooks": "git -C .. config core.hooksPath pang-2026/scripts/git-hooks && echo 'pre-push hook wired. Skip with: git push --no-verify'"
   },
   "dependencies": {
@@ -67,6 +68,7 @@
     "qrcode-terminal": "^0.12.0",
     "sharp": "^0.34.5",
     "tailwindcss": "^4.1.0",
+    "ts-morph": "^28.0.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "workbox-build": "^7.3.0"

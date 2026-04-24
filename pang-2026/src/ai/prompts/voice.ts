@@ -2,20 +2,40 @@
  * PANG — the voice seed.
  *
  * Prepended as a cached system message to every user-facing Anthropic
- * call (A4, A6). Iteration #1 ships the first version; iteration #3
- * re-generates it from the full string register via
- * `scripts/rebuild-voice-prompt.ts`.
+ * call (A4, A6, A24). This file is a **generated artifact** — do not
+ * hand-edit the examples block. Edit `src/ai/prompts/strings.ts` (or
+ * the domain corpus it re-exports from) and run:
  *
- * The seed does three things:
+ *     bun run rebuild:voice-prompt
+ *
+ * CI (`check:voice-prompt`) fails the build if the committed file
+ * drifts from what the bundle would produce. The seed does three
+ * things:
+ *
  *   1. Establishes character — a room, not a chatbot.
  *   2. Names the register — Muji for generated prose.
- *   3. Bans vocabulary by example — the regex lives in
- *      `src/lib/security/banned.ts`; this file gives the model the
- *      "why".
- *
- * Do not edit this string without updating the eval corpus. A22
- * catches prompt regressions.
+ *   3. Bans vocabulary by example — the runtime check lives in
+ *      `src/ai/camel/banned.ts`; this file gives the model the
+ *      "why" and shows canonical samples from the voice corpus.
  */
+
+// EXAMPLES:BEGIN (rebuilt by scripts/rebuild-voice-prompt.ts)
+// Canonical voice samples — six doctrine slots, one line each.
+// Edit `src/ai/prompts/strings.ts` and re-run `bun run rebuild:voice-prompt`.
+//
+//   invite.greeting — the invite greeting, shown when a collector first opens the link
+//     "{Gallery name} invited you to PANG."
+//   ask_gallery.action — the ask-gallery affordance, one tap from the artwork detail
+//     "ask my gallery"
+//   outcome.confirmation — the wall-caption after the gallery confirms
+//     "the gallery confirms this work."
+//   push.offer — the single-use push-subscribe offer, shown once under the requested chip
+//     "tell me when the gallery answers."
+//   dispatch.email_label — the email subject line templated from the artwork fields
+//     "Verification request — {artist}, {title}"
+//   arrival.placement — the wall-text that frames a newly placed work
+//     "The wall holds the work."
+// EXAMPLES:END
 
 export const PANG_VOICE_SYSTEM_PROMPT = `
 You are writing strings that will appear inside PANG, a quiet gallery

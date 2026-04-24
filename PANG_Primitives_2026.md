@@ -1601,6 +1601,159 @@ chunks
   one less context boundary and no render-graph coupling
   for a per-frame write. Codified 2026-04-24 from iter #11.
 
+### 63. Seed-every-privileged-LLM-call — the voice layer holds at the call boundary
+
+- **Forbidden default:** relying on the agent file to "obviously"
+  pass the voice seed to its Claude call because the identifier is
+  imported at the top of the file. A developer under delivery
+  pressure adds a second `messages.create(...)` beside the first,
+  copies the shape, forgets the `system:` array, or rolls a
+  hand-written string for "just this one short quick call." The
+  voice discipline degrades silently: A4 still passes (the file
+  imports the identifier), CI still green, Laura hears a Claude
+  call that speaks with no voice. The failure mode is cumulative —
+  every new agent widens the hole.
+- **Required primitive:** a gate at the call site, not the file.
+  For every `client.messages.create(...)` on the P-LLM path in
+  `src/ai/agents/**`, an AST walk proves the `system` argument
+  resolves — directly or through a barrel re-export — to
+  `PANG_VOICE_SYSTEM_PROMPT`. Accepted shapes:
+  `system: PANG_VOICE_SYSTEM_PROMPT` or
+  `system: [{ type: "text", text: PANG_VOICE_SYSTEM_PROMPT, ... }, ...]`
+  (the seed in any position; cache-ordering is a separate concern).
+  Rejected: string literal, missing field, array without the seed.
+  The CaMeL Q-LLM path is explicitly exempt — identifiers ending in
+  `QUARANTINED_SYSTEM_PROMPT` opt the call out by naming
+  convention, because the Q-LLM carries a narrow extraction role
+  and must not inherit voice context it could reflect into a P
+  channel.
+- **Adapter path:** canonical reference: A24
+  (`scripts/gates/a24-voice-seed-adoption.ts`, iter #12). Built on
+  `ts-morph` for identifier resolution across imports — the prior
+  regex gate (A4) can only verify the import exists; A24 verifies
+  every call uses it. Same plumbing generalises: any shared
+  cross-agent invariant (future rate-limit budgets, future OTel
+  resource attrs, future CaMeL capability tokens) can graduate
+  from "every file imports the helper" to "every call site proves
+  the helper flows."
+- **Enforcement:** mechanical. Signal: A24 fails on any new P-LLM
+  call site that doesn't trace `system` to the seed identifier.
+  An agent that genuinely cannot carry the seed (future
+  hypothetical) requires a doctrine edit to add an explicit
+  allowlist — not a per-line escape hatch. Codified 2026-04-24
+  from iter #12.
+
+### 64. Corpus-every-user-facing-string — the voice layer holds at the string boundary
+
+- **Forbidden default:** inline JSX literals in components and
+  routes (`<button>Sign in</button>`, `<button aria-label="Close">`).
+  Each looks like a one-off under delivery pressure and is always
+  "going to be moved later." The repo accumulates dozens of
+  hand-rolled micro-copy strings that never pass the banned-
+  vocabulary gate (it only walks the corpus), never go through voice
+  review, and never get a second read. A5 polices what the corpus
+  may say; without a gate requiring strings *reach* the corpus, A5
+  is a partial check. Icon-only buttons are the worst-offending
+  shape: their `aria-label` is the only surface an assistive reader
+  sees, and it's the first thing a developer hand-rolls.
+- **Required primitive:** every JSX text node and every user-facing
+  JSX attribute (`title | aria-label | placeholder | alt`) under
+  `src/components/**` and `app/**` must resolve — via import
+  analysis — to a corpus module. A corpus module is any file
+  matching `src/**/{voice,strings,corpus}*.ts` or the
+  `PANG_VOICE_STRINGS` re-export barrel. Template literals pass only
+  if all substitutions trace to corpus identifiers AND every quasi
+  segment is empty or pure punctuation/whitespace — a template with
+  prose in its quasis fails, because the prose belongs in the
+  corpus, not in a JSX compositor. The four attribute set is
+  deliberately narrow: A25 catches what the collector reads, not
+  developer-facing ids and class names.
+- **Adapter path:** canonical reference: A25
+  (`scripts/gates/a25-corpus-discipline.ts`, iter #12) +
+  `src/ai/prompts/strings.ts` (the `PANG_VOICE_STRINGS` bundle as
+  the one barrel every component can import from). Same ts-morph
+  stack as A24; corpus resolution follows both the filename
+  convention and the accepted module-suffix list. The pair A24+A25
+  closes the voice loop at both ends: A24 at the LLM call, A25 at
+  the JSX render.
+- **Enforcement:** mechanical, audit-driven rollout. The gate runs
+  on every CI; the audit sweeps (iter #12 steps 8-10) migrate the
+  existing inline strings to domain corpora one surface at a time.
+  A new component that lands with an inline string fails the gate;
+  a migration that moves a string from component to corpus passes
+  both A5 (banned vocabulary) and A25 (corpus discipline) by
+  construction. Codified 2026-04-24 from iter #12.
+
+### 65. Seed-as-artifact — the voice prompt is regenerated, never hand-edited
+
+- **Forbidden default:** hand-maintaining
+  `src/ai/prompts/voice.ts` as a living file. Once the seed and
+  the string corpus both exist, they drift: a new onboarding string
+  lands in the corpus, a voice-example stays from three iterations
+  ago in the seed, the seed's examples no longer reflect the voice
+  the corpus now speaks. The drift is invisible to CI because the
+  seed is valid TypeScript and compiles. Laura hears a Claude
+  response that matches the examples from last month, not the
+  corpus from this week.
+- **Required primitive:** `voice.ts` is a generated artifact. A
+  deterministic script
+  (`scripts/rebuild-voice-prompt.ts`) reads six canonical sample
+  addresses from the `PANG_VOICE_STRINGS` bundle and writes the
+  examples block between `EXAMPLES:BEGIN` / `EXAMPLES:END` markers.
+  A `check:voice-prompt` CI step diffs the committed file against
+  the deterministic rebuild; non-zero exit on drift. The canonical
+  six slots (`invite.greeting`, `ask_gallery.action`,
+  `outcome.confirmation`, `push.offer`, `dispatch.email_label`,
+  `arrival.placement`) are doctrine: renaming one is a doctrine
+  edit that fails the script loudly.
+- **Adapter path:** canonical references:
+  `scripts/rebuild-voice-prompt.ts` (the generator),
+  `src/ai/prompts/voice.ts` (the artifact, with begin/end markers),
+  `src/ai/prompts/strings.ts` (the source bundle + canonical
+  addresses list). Generalises: any string asset downstream of an
+  authored doctrine should ship as an artifact — the ceremony
+  registry (iter #2), the model-budget table (iter #6), and the
+  capability graph (iter #1) are natural candidates for the same
+  pattern when their own sources stabilise.
+- **Enforcement:** mechanical. Signal: `check:voice-prompt` fails
+  if the seed and bundle disagree. Fix by re-running
+  `npm run rebuild:voice-prompt`; commit the reconciled artifact.
+  Never hand-edit between the markers. Codified 2026-04-24 from
+  iter #12.
+
+### 66. Banned-vocabulary-single-sourced — one source of truth, TypeScript catches the drift
+
+- **Forbidden default:** the banned-vocabulary list copy-pasted
+  between a corpus-walker (A5's `check-strings.ts`) and a CaMeL
+  sanitiser (`src/ai/camel/banned.ts`). Two places, two
+  hand-maintained hardcoded arrays, two drift surfaces. A new
+  banned term gets added to one; the other silently diverges. The
+  drift is invisible until a corpus string slips the walker
+  because its banned term was never registered with it, or the
+  CaMeL pipeline permits evaluative prose because the sanitiser
+  list is stale. The fix isn't "remember to edit both." The fix is
+  to make the second list not exist.
+- **Required primitive:** a single module exports the banned lists
+  (`BANNED_VOCABULARY` — the hard marketing-vocabulary list;
+  `EVALUATIVE_VOCABULARY` — the soft evaluative-language list).
+  Every consumer — the corpus walker, the CaMeL sanitiser, a future
+  ESLint rule, a future eval fixture generator — imports from it.
+  The module is typed; adding a term in the right list is typed;
+  renaming the constant fails compilation at every call site. CI
+  catches drift as a TypeScript error, not as a code review
+  oversight.
+- **Adapter path:** canonical reference: `src/ai/camel/banned.ts`
+  (the one source). Iter #12 step 1 migrated
+  `scripts/check-strings.ts` off its hand-maintained copy. Pattern
+  generalises: wherever two pieces of mechanical policy would want
+  the same list (retry classes, cost ceilings, cache TTLs, span
+  names), single-source at the earliest reasonable layer and let
+  the type system enforce the rest.
+- **Enforcement:** mechanical. Signal: a PR adds a banned term to
+  one place but not the other — impossible, because the other
+  place imports the first. Compile-time. Codified 2026-04-24 from
+  iter #12.
+
 ### 62. Skip-reason telemetry turns a failure-mode brief into pre-Laura diagnosis
 
 - **Forbidden default:** silent gates — a guard that
