@@ -21,6 +21,10 @@
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { scanForTransformScale } from "./check-transforms";
+import {
+  scanForVoiceSeedAdoption,
+  formatViolations as formatA24Violations,
+} from "./gates/a24-voice-seed-adoption";
 
 const ROOT = process.cwd();
 const STRICT = process.env["PANG_STRICT"] === "1";
@@ -1211,6 +1215,33 @@ async function a21(): Promise<GateResult> {
   return pass(id, title);
 }
 
+/**
+ * A24 — Voice seed adoption.
+ *
+ * Full AST enforcement: every `client.messages.create` call on the
+ * P-LLM path must carry `PANG_VOICE_SYSTEM_PROMPT` as its `system`
+ * arg (direct identifier, or array entry whose `text` resolves).
+ * CaMeL Q-LLM sites (identifiers ending in `QUARANTINED_SYSTEM_PROMPT`)
+ * are exempt by doctrine — the voice seed must NOT reach the
+ * untrusted-extraction role.
+ *
+ * A4 is the file-level cousin: it catches a missing import. A24
+ * catches a call site that imports the seed but forgets to use it,
+ * or passes a different `system` literal. Both run; both must pass.
+ */
+async function a24(): Promise<GateResult> {
+  const id = "A24";
+  const title = "voice seed adoption at every P-LLM call site";
+  const result = scanForVoiceSeedAdoption({ repoRoot: ROOT });
+  if (!result.ok) {
+    return fail(id, title, formatA24Violations(result.violations));
+  }
+  if (result.checked === 0) {
+    return skip(id, title, "no P-LLM call sites yet");
+  }
+  return pass(id, title);
+}
+
 // ---------- runner -------------------------------------------------
 
 // Runner list. Order is **reading order**: P-gates in numeric order
@@ -1243,6 +1274,7 @@ const GATES = [
   a10,
   a16,
   a21,
+  a24,
 ];
 
 async function main(): Promise<void> {
@@ -1269,9 +1301,10 @@ async function main(): Promise<void> {
   };
 
   console.log(
-    "\nPANG gates — iteration #9 scope\n" +
-      "  P1–P11, P15, P19, P20, P23–P25  +  A1–A4, A7, A8, A10, A16, A21\n" +
-      "  (P10 uplifted: passkeys wired + every API route gated with requireSession)",
+    "\nPANG gates — iteration #12 scope\n" +
+      "  P1–P11, P15, P19, P20, P23–P25  +  A1–A4, A7, A8, A10, A16, A21, A24\n" +
+      "  (iter #12: A24 — voice seed adoption at every P-LLM call site;\n" +
+      "   CaMeL Q-LLM sites exempt by QUARANTINED_SYSTEM_PROMPT suffix)",
   );
   console.log("─".repeat(70));
   for (const r of results) {

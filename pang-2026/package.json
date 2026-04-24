@@ -68,6 +68,7 @@
     "qrcode-terminal": "^0.12.0",
     "sharp": "^0.34.5",
     "tailwindcss": "^4.1.0",
+    "ts-morph": "^28.0.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "workbox-build": "^7.3.0"

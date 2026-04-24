@@ -1,10 +1,14 @@
-# PANG — the 48 gates
+# PANG — the 50 gates
 #
 # Authority for CI. Source: docs/PANG_DS.html, Appendix B (P1–P24, A1–A23)
 #   + keeper-doc codification 2026-04-22 (P25 — zero-tap review, from
 #   iteration #1 findings; see PANG_Gates.md + PANG_Spine.md operating
 #   rule #8). DS HTML is read-only authority; the P25 row lands here
 #   ahead of the next DS revision and is flagged for the DS author.
+#   + iteration #12 (PANG Voice v1) codification 2026-04-24: A24 (voice
+#   seed adoption) + A25 (corpus discipline), a new `voice_authoring`
+#   family. The voice layer now has mechanical floors at the LLM call
+#   boundary AND at the JSX string boundary.
 # Fail → block merge. "auto" gates are fixed by CI; "manual" gates require a code change.
 # A gate is never removed without naming what replaced it (doctrine edit — Appendix F).
 #
@@ -17,8 +21,8 @@
 #   fails_when — the exact condition that trips the gate
 
 version: 1
-source: docs/PANG_DS.html#apx-b + PANG_Gates.md#p25
-total: 48
+source: docs/PANG_DS.html#apx-b + PANG_Gates.md#p25 + PANG_Aha_Sprint.md#iter-12
+total: 50
 
 families:
   pwa_primitives:
@@ -45,6 +49,10 @@ families:
     label: AI — economics
     desc: Cost is a design constraint. Budgets, caps, batches, eval corpus.
     range: [A18, A23]
+  voice_authoring:
+    label: Voice authoring
+    desc: The voice layer at call-site and string-site. Seed adoption at every P-LLM call; corpus discipline at every JSX string. Codified in iteration #12 (PANG Voice v1) — banned vocabulary single-sourced, voice.ts regenerated from PANG_VOICE_STRINGS, no free-floating strings escape the corpus.
+    range: [A24, A25]
 
 gates:
   # ---- PWA & primitives (P1–P12) ----
@@ -407,3 +415,11 @@ gates:
     folder: src/ai/cost/
     auto: true
     fails_when: "Daily per-user cost > ceiling without explicit tier upgrade. Soft-degrade to cheaper model."
+
+  # ---- Voice authoring (A24–A25) ----
+  - id: A24
+    name: Voice seed adoption
+    family: voice_authoring
+    folder: src/ai/agents/
+    auto: true
+    fails_when: "Any client.messages.create on the P-LLM path whose `system` arg does not resolve to PANG_VOICE_SYSTEM_PROMPT (direct identifier, or the first entry's text in a system array). CaMeL Q-LLM sites — identifiers whose name ends in QUARANTINED_SYSTEM_PROMPT — are exempt. A4 checks the file; A24 checks the call site."
