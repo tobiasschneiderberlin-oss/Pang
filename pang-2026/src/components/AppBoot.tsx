@@ -30,8 +30,10 @@ import {
   installVerificationPersistence,
 } from "@/stores/verification.persist";
 import {
+  installDispatchedVisibilityWalker,
   installOnlineDrain,
   reconcileVerification,
+  walkDispatchedOnce,
 } from "@/verification/reconcile";
 import { registerServiceWorker } from "@/sw/register";
 import { detectCapabilityTier } from "@/auth/tier";
@@ -98,6 +100,7 @@ export function AppBoot(): null {
     let unsubscribeWorks: (() => void) | null = null;
     let unsubscribeVerification: (() => void) | null = null;
     let unsubscribeOnline: (() => void) | null = null;
+    let unsubscribeDispatchedWalker: (() => void) | null = null;
     let cancelled = false;
     void (async () => {
       try {
@@ -138,6 +141,15 @@ export function AppBoot(): null {
         // Replay on `online` transitions so an offline burst of
         // requests flushes the moment connectivity returns.
         unsubscribeOnline = installOnlineDrain();
+        // Dispatched-state walker: on every `visibilitychange` to
+        // "visible", poll /api/verification/outcome for each record
+        // in the `"dispatched"` state. Push is the primary rail; this
+        // is the guaranteed-available reconciliation path for when
+        // push was denied / silenced / expired. Also run once on boot
+        // so a cold start after a long absence picks up any outcome
+        // that landed while the tab was closed.
+        unsubscribeDispatchedWalker = installDispatchedVisibilityWalker();
+        void walkDispatchedOnce().catch(() => {});
       } catch (err) {
         reportFailure({
           errorKey: "persist/bootstrap",
@@ -157,6 +169,7 @@ export function AppBoot(): null {
       unsubscribeWorks?.();
       unsubscribeVerification?.();
       unsubscribeOnline?.();
+      unsubscribeDispatchedWalker?.();
       unbindPrefs();
     };
   }, []);

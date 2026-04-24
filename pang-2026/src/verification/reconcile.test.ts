@@ -252,3 +252,164 @@ describe("planReconcile — mixed pass", () => {
     });
   });
 });
+
+// ---------- pollOutcomeOnce (iter #10) ---------------------------
+
+import { pollOutcomeOnce } from "./reconcile";
+
+type FetchFn = typeof globalThis.fetch;
+
+describe("pollOutcomeOnce — dispatched walker wire classification", () => {
+  const requestId = "ku7mt1xp-abc123def456";
+  const originalFetch: FetchFn | undefined = globalThis.fetch;
+
+  function install(response: Response | Error): void {
+    const fn: FetchFn = async () => {
+      if (response instanceof Error) throw response;
+      return response;
+    };
+    (globalThis as { fetch: FetchFn }).fetch = fn;
+  }
+
+  function restore(): void {
+    if (originalFetch !== undefined) {
+      (globalThis as { fetch: FetchFn }).fetch = originalFetch;
+    }
+  }
+
+  it("returns 'pending' on 204 No Content", async () => {
+    install(new Response(null, { status: 204 }));
+    try {
+      const result = await pollOutcomeOnce(requestId);
+      assert.equal(result.kind, "pending");
+    } finally {
+      restore();
+    }
+  });
+
+  it("returns 'outcome' + 'confirmed' on a 200 with a valid confirmed payload", async () => {
+    const payload = {
+      version: "v1" as const,
+      requestId,
+      workId: "w-1",
+      outcome: "confirmed" as const,
+      decidedAt: "2026-04-23T12:00:00.000Z",
+    };
+    install(
+      new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    try {
+      const result = await pollOutcomeOnce(requestId);
+      assert.equal(result.kind, "outcome");
+      if (result.kind === "outcome") {
+        assert.equal(result.outcome, "confirmed");
+        assert.equal(result.decidedAt, "2026-04-23T12:00:00.000Z");
+      }
+    } finally {
+      restore();
+    }
+  });
+
+  it("returns 'outcome' + 'declined' on a 200 with a valid declined payload", async () => {
+    const payload = {
+      version: "v1" as const,
+      requestId,
+      workId: "w-1",
+      outcome: "declined" as const,
+      decidedAt: "2026-04-23T12:00:00.000Z",
+    };
+    install(
+      new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    try {
+      const result = await pollOutcomeOnce(requestId);
+      assert.equal(result.kind, "outcome");
+      if (result.kind === "outcome") {
+        assert.equal(result.outcome, "declined");
+      }
+    } finally {
+      restore();
+    }
+  });
+
+  it("returns 'unauth' on 401", async () => {
+    install(new Response(null, { status: 401 }));
+    try {
+      const result = await pollOutcomeOnce(requestId);
+      assert.equal(result.kind, "unauth");
+    } finally {
+      restore();
+    }
+  });
+
+  it("returns 'error' with http/500 on a 500", async () => {
+    install(new Response("oops", { status: 500 }));
+    try {
+      const result = await pollOutcomeOnce(requestId);
+      assert.equal(result.kind, "error");
+      if (result.kind === "error") {
+        assert.equal(result.reason, "http/500");
+      }
+    } finally {
+      restore();
+    }
+  });
+
+  it("returns 'error' on a network throw", async () => {
+    install(new TypeError("net::ERR_INTERNET_DISCONNECTED"));
+    try {
+      const result = await pollOutcomeOnce(requestId);
+      assert.equal(result.kind, "error");
+    } finally {
+      restore();
+    }
+  });
+
+  it("returns 'error' on a schema mismatch (outcome field bogus)", async () => {
+    install(
+      new Response(
+        JSON.stringify({
+          version: "v1",
+          requestId,
+          workId: "w-1",
+          outcome: "BOGUS",
+          decidedAt: "2026-04-23T12:00:00.000Z",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    try {
+      const result = await pollOutcomeOnce(requestId);
+      assert.equal(result.kind, "error");
+      if (result.kind === "error") {
+        assert.equal(result.reason, "schema");
+      }
+    } finally {
+      restore();
+    }
+  });
+
+  it("returns 'error' on non-JSON body", async () => {
+    install(
+      new Response("<html>not json</html>", {
+        status: 200,
+        headers: { "content-type": "text/html" },
+      }),
+    );
+    try {
+      const result = await pollOutcomeOnce(requestId);
+      assert.equal(result.kind, "error");
+      if (result.kind === "error") {
+        assert.equal(result.reason, "bad_json");
+      }
+    } finally {
+      restore();
+    }
+  });
+});
