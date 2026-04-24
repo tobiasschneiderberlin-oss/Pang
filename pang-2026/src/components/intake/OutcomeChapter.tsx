@@ -74,6 +74,7 @@ import {
   isReady,
   DISMISS_AFFORDANCE,
   type ActiveBeat,
+  type Beat,
   type OutcomeChapterPlan,
 } from "@/ai/chapter";
 import type { TheRoomClientHandle } from "@/room/dom/TheRoomClient";
@@ -336,7 +337,7 @@ export function OutcomeChapter(props: OutcomeChapterProps): ReactElement {
  *   - Otherwise → the rate-6 `arrivalFactor` curve.
  */
 export function computeOutcomeArrival(
-  placeBeat: { readonly startMs: number; readonly durationMs: number } | null,
+  placeBeat: Beat | null,
   tMs: number,
   reducedMotion: boolean,
 ): number {

@@ -31,6 +31,7 @@ import { DocumentViewerConnector } from "@/components/documents/DocumentViewer";
 import { EnrichmentPanel } from "@/components/enrichment/EnrichmentPanel";
 import { DeepZoomOverlay } from "@/components/deep-zoom/DeepZoomOverlay";
 import { RoomSurfaceClaim } from "@/components/room/RoomSurfaceClaim";
+import { OutcomeChapterMount } from "@/components/intake/OutcomeChapterMount";
 
 export default function TheRoom(): ReactElement {
   return (
@@ -61,6 +62,12 @@ export default function TheRoom(): ReactElement {
        *  with no tile source never lands here because the second-
        *  tap binding is a no-op for those entries. */}
       <DeepZoomOverlay />
+      {/* Iteration #11 — Outcome chapter mount. Watches the
+       *  verification store for new confirmed / declined entries and
+       *  surfaces the ceremony on the Room surface. One chapter at a
+       *  time with a 400 ms inter-chapter gap; off-Room transitions
+       *  queue until Room is active. */}
+      <OutcomeChapterMount />
     </main>
   );
 }

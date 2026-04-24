@@ -22,6 +22,7 @@ import type { ReactElement, Ref } from "react";
 import { TheRoomCanvas } from "@/room/dom/TheRoomCanvas";
 import type { TheRoomCanvasHandle } from "@/room/dom/TheRoomCanvas";
 import { RoomDOMTwin } from "@/room/dom/RoomDOMTwin";
+import { roomHandleRef } from "@/room/dom/roomHandleRef";
 import { layoutEntries, useWorks } from "@/stores/works";
 
 /**
@@ -62,6 +63,27 @@ export function TheRoomClient(props: TheRoomClientProps = {}): ReactElement {
     }),
     [],
   );
+
+  // Populate the module-singleton ref so sibling components (like
+  // `OutcomeChapterMount`, mounted as a sibling of `TheRoomClient`
+  // by the route) can reach the imperative handle without threading
+  // a prop through the route tree. See `roomHandleRef.tsx`.
+  //
+  // We ref-compare on cleanup so a stale StrictMode-double-mount
+  // cleanup doesn't null out the *next* mount's handle.
+  useEffect(() => {
+    const handle: TheRoomClientHandle = {
+      setArrivalFactor(id, t) {
+        canvasRef.current?.setArrivalFactor(id, t);
+      },
+    };
+    roomHandleRef.current = handle;
+    return () => {
+      if (roomHandleRef.current === handle) {
+        roomHandleRef.current = null;
+      }
+    };
+  }, []);
 
   // Push the store's focus into the canvas whenever it changes.
   // The canvas's internal gesture state is the source of truth for
