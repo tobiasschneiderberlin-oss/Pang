@@ -120,8 +120,11 @@ export async function POST(request: Request): Promise<Response> {
 
     // Consumed-marker commits BEFORE the outcome write (primitive 51).
     // tryMarkSignedLinkConsumed is the O_EXCL race winner; a second
-    // click races against the first and the loser gets `false`.
-    const won = await tryMarkSignedLinkConsumed("gallery-confirm", claims.jti);
+    // click races against the first and the loser gets `{ won: false }`.
+    const { won } = await tryMarkSignedLinkConsumed(
+      "gallery-confirm",
+      claims.jti,
+    );
     if (!won) {
       span.setAttribute("pang.signed_link.replay", true);
       // Replay is idempotent — the outcome was already written by the

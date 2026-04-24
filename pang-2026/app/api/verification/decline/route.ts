@@ -108,7 +108,10 @@ export async function POST(request: Request): Promise<Response> {
     span.setAttribute("pang.verification.request_id", claims.vrid);
     span.setAttribute("pang.verification.work_id", claims.wid);
 
-    const won = await tryMarkSignedLinkConsumed("gallery-decline", claims.jti);
+    const { won } = await tryMarkSignedLinkConsumed(
+      "gallery-decline",
+      claims.jti,
+    );
     if (!won) {
       span.setAttribute("pang.signed_link.replay", true);
       return NextResponse.json({ ok: true, dedup: true }, { status: 200 });
