@@ -7989,6 +7989,425 @@ iteration if it recurs.
 
 ---
 
+## Iteration #14 — Narrative Agent v1 (opened 2026-04-24)
+
+### Why this, why now
+
+Spine moment #10: the fourth agent in the four-agent architecture —
+**Narrative Agent — monthly reading v1**. The spine's spec is terse:
+
+> "One paragraph, observational, never evaluative. Delivered in the
+> Room as a quiet overlay."
+
+And the narrative paragraph of the spine, on what this surface does
+for Laura:
+
+> "Occasionally, PANG offers Laura a short reading of the collection —
+> one paragraph, monthly at most. Observation, not evaluation.
+> Something she might show her partner."
+
+Three agents ship today — Intake (iter #1–#3), Enrichment (iter #5),
+Correspondence (iter #10). Their scope is per-work (intake), per-
+record (enrichment), or per-outcome (correspondence). The Narrative
+Agent is the first that reads **the collection as a whole** and
+produces prose the collector sees passively, without having asked
+for it.
+
+Why now, not later:
+
+- **Voice v1 is pinned.** Iter #12 + #13 landed the seed, the corpus,
+  the single-sourced banned list, and A25 default-pipeline
+  enforcement. The register every future agent inherits is
+  mechanical. Narrative is the first agent to *ship against* that
+  mechanical register. Landing it before Voice v1 would have baked a
+  register-regression into long-form prose; landing it now forces the
+  voice layer through its hardest surface (observational prose about
+  a collection) and either confirms the layer holds or surfaces a
+  gap.
+- **Scaffolding is pre-planted.** Capability graph has
+  `agent.narrative.pLlm: ["P", "gallery"]` (iter #2); budget bucket
+  `AGENT_BUDGETS.narrative: {4k, 512, $0.10}` (iter #6); model pin
+  `AGENT_MODEL_IDS.narrative: "claude-sonnet-4-6"` (iter #5). The
+  walls are standing; iter #14 installs the plumbing.
+- **Spine next.** Moment #11 (spatial audio + haptics) and #12
+  (verify-for-club, conditional) are both post-Laura signals. The
+  four-agent architecture completes here.
+
+### Scope
+
+**CEILING.** Full Narrative Agent v1, server + surface + eval +
+cadence discipline. No ship-less-than-the-spec.
+
+1. **Agent implementation** at `src/ai/agents/narrative.ts`, mirroring
+   the shape of `correspondence.ts` (the closest sibling — both are
+   P-LLM-only, both produce short prose, both brand `Trusted<…, "P">`).
+2. **Prompt module** at `src/ai/prompts/narrative.ts` — system prompt
+   + tool definition. Re-uses `PANG_VOICE_SYSTEM_PROMPT` via the
+   shared barrel (A24).
+3. **Output schema** at `src/narrative/schema.ts` — Zod-validated
+   `NarrativeOutput`: one paragraph (120–600 chars), no evaluative
+   vocabulary, no marketing vocabulary, no imperative mood. The
+   schema itself rejects length + register violations before the
+   agent commits.
+4. **Input assembler** at `src/narrative/input.ts` — deterministic,
+   non-LLM — walks the collector's verified works, pulls provenance
+   timelines, pulls bio-muji paragraphs from enrichment, composes the
+   `NarrativeInput` object the agent sees. No Q-branded data reaches
+   the P-LLM; the assembler is the CaMeL boundary.
+5. **Monthly cadence discipline** via the
+   `idempotency-marker-before-side-effect` primitive (#51). Marker at
+   `.pang/server-monthly-narrative/<collectorId>/<YYYY-MM>.json`.
+   Route refuses to re-run for the same month; returns the stored
+   paragraph if present.
+6. **Room overlay surface** — a new DOM-only overlay in
+   `src/components/room/NarrativeOverlay.tsx`, anchored via the
+   Popover API + Anchor Positioning. Rendered on top of the Room's
+   existing canvas. Dismissible with one tap; re-openable only if a
+   new month's reading has landed.
+7. **Arrival trigger** — on Room entry, the client checks for a
+   current-month narrative. If one exists and was not dismissed in
+   this session, the overlay fades in once the arrival ceremony
+   settles. No push, no notification — passive surface.
+8. **Route** at `app/api/narrative/current/route.ts` — GET returns
+   the current month's narrative (if any); POST (server-initiated or
+   cron-triggered) generates one if the marker is absent and the
+   collection has changed since the prior reading. The client calls
+   GET; the cron / scheduled-task infrastructure calls POST.
+9. **A22 eval fixtures** — five new narrative fixtures at
+   `evals/narrative/`. Cover: typical 8-work collection, minimal
+   3-work collection, single-work collection (agent returns null;
+   not enough substance), collection with gaps (missing artist
+   context, null years), banned-vocabulary adversarial (collection
+   loaded with evaluative prompts via bioMuji fields — agent must
+   hold the register).
+10. **Playwright spec** for the Room overlay — enter the Room, assert
+    the narrative appears after settle, assert one-tap dismiss,
+    assert re-entry in the same session shows no re-appearance, assert
+    re-entry in a new session (simulated new month via marker
+    replacement) shows the overlay.
+11. **Telemetry** — OTel spans `pang.narrative.generate`,
+    `pang.narrative.skipped` (reason: empty-collection | thin-
+    provenance | same-month-marker | unchanged-collection),
+    `pang.narrative.dismissed`. The `skipped` reason taxonomy is
+    enforced as a Zod enum.
+12. **Primitives + findings** — primitives 67–70 (candidates:
+    Collection-as-input primitive, Monthly-idempotent-agent,
+    Passive-surface-never-nudges, Deterministic-input-assembly). Iter
+    #14 findings.
+
+### Stack
+
+- **Model**: `claude-sonnet-4-6` pinned via `AGENT_MODEL_IDS.narrative`.
+  No change; the pin lives in iter #5's file.
+- **Budget**: `AGENT_BUDGETS.narrative` existing bucket (4k input / 512
+  output / $0.10). One call per collector per month; daily/monthly
+  caps (A23) apply.
+- **CaMeL**: P-LLM only — capability `agent.narrative.pLlm: ["P",
+  "gallery"]` already exists. **No Q-LLM** — the input is
+  deterministically assembled from already-sanitised material
+  (provenance timelines, bioMuji from enrichment). Any raw untrusted
+  content (e.g., a collector's hand-typed note) is out of scope for
+  v1. If v2 wants to include notes, a Q-LLM pass lands first.
+- **Voice**: `PANG_VOICE_SYSTEM_PROMPT` via `_shared.ts` barrel (A24
+  mechanical). No per-agent register override — narrative uses the
+  same voice as every other agent, because the spine only has one
+  voice.
+- **Structured output**: `tool_choice: { type: "tool", name:
+  "narrative" }` + Zod validate on tool_use (A2, A3). No JSON.parse
+  (A1).
+- **Retry policy (A21)**: two retries after initial; terminal failure
+  returns `null` (route writes a `generated-at` + `kind: "failed"`
+  marker, does not retry this month). The UI shows nothing — silence
+  is the right register for "we don't have something to say this
+  month".
+- **Persistence**: filesystem-backed server stand-in at
+  `.pang/server-monthly-narrative/` (pattern 52). Supabase mirror
+  lands in the Supabase iteration (later).
+- **Frontend**: Popover API + CSS Anchor Positioning for the overlay.
+  View Transitions for enter/exit. No new React state lib — reuses
+  Zustand for session-local dismissal state.
+- **Scheduling**: the POST endpoint is callable by a Vercel cron or
+  (locally) the `scheduled-tasks` MCP. For dev-mode, a
+  `scripts/narrative-tick.ts` runs the POST against local collectors.
+  Production cron wiring is documented but not enabled in v1 — the
+  cron turns on when the Supabase mirror lands (otherwise we'd be
+  scheduling against file-system state).
+- **Tests**: Vitest unit tests for the schema + input assembler +
+  cadence marker; Vitest integration tests for the agent with a
+  mocked Anthropic client; Playwright for the overlay surface; A22
+  eval fixtures for the agent output under real Claude (mockable with
+  `PANG_EVAL_MOCK=1`).
+
+### Reference
+
+- **Apple "On This Day" Memories** — observational summary that
+  surfaces when you enter, silent until you look. The register, the
+  passivity, the "not-every-time" cadence. Reference for the surface,
+  not the visuals.
+- **Arc Browser's sidebar cards** — quiet, short, revealable. The
+  card appears, makes its point, is gone on the next dismiss.
+- **`PANG_Voice.md` § *Failure prose*** — the authoritative register
+  for voice-authored long-form. Never evaluative ("stunning",
+  "compelling", "impressive"), never commercial, never generic.
+  Observation is specific: *"Your fourth Hojgaard, the largest"* not
+  *"Hojgaard holds a special place in your collection."*
+
+### Canvas
+
+**The Room is the canvas.** Iter #11's Room surface (the
+canvas+DOM-twin pattern) is the host. Narrative lands as a **DOM
+overlay** above the canvas — not a second canvas, not a new WebGPU
+pipeline. The overlay is a Popover element anchored to a corner of
+the Room surface; CSS Anchor Positioning keeps it placed when the
+viewport resizes.
+
+Why not render into the canvas: narrative is **text**. Typography
+discipline (P12 type rules) is easier in the DOM, screen readers
+consume it natively, and the arrival-settle fade-in is a single View
+Transition rather than a WebGPU compositor handoff. The Room's
+canvas continues to do the primary art-surface work; the overlay is
+a passenger on top.
+
+### Failure mode
+
+Five classes of regression this iteration must make visible:
+
+1. **Evaluative prose leaks in.** The voice seed says "never
+   evaluative", but Sonnet-4.6 will still attempt "striking" or
+   "impressive" under some collection shapes. A22 fixtures include an
+   adversarial case (collection loaded with evaluative setup). The
+   `runBannedVocabularyCheck` + the soft-list (`EVALUATIVE_VOCABULARY`
+   from `src/ai/camel/banned.ts`) runs on every output and a match
+   fails the agent — not a warning, a hard failure that returns
+   `null`. Telemetry: `pang.narrative.generate` span has a
+   `failure_reason: "evaluative-vocabulary"` attribute on the skip.
+2. **Cadence regression.** An implementation error that regenerates
+   twice in one calendar month (clock skew, marker-write race,
+   server-restart). Unit test: fake the clock, call twice in the same
+   month, assert second call returns the cached output and writes no
+   new file. Integration test: check the marker file count is 1 per
+   (collector, month) pair.
+3. **Empty / thin collection.** A collector with 1 work and no
+   provenance context would get a trivial paragraph. Input assembler
+   refuses below a threshold (3 verified works OR 5 total provenance
+   entries — configurable, documented). The agent receives `null` and
+   doesn't call Claude. Telemetry: `pang.narrative.skipped` with
+   `reason: "thin-provenance"`.
+4. **Voice seed missing.** A24 catches at PR time — a new
+   `messages.create` without the seed fails CI. Zero-touch.
+5. **Overlay layout regression.** Playwright spec covers enter →
+   settle → appear → dismiss. If anchor positioning or Popover API
+   regresses on the target platforms (Chrome 121+, Safari 17.4+), the
+   test catches it. Fallback: a `position: fixed` manual overlay if
+   the browser lacks Anchor Positioning. Feature-detect, don't
+   silently break.
+
+### Gates
+
+**50 → 50.** No new PANG gate. A22 gains five fixtures in a new
+`evals/narrative/` corpus — that is a corpus extension, not a gate
+change. The cadence discipline is enforced in unit + integration
+tests, not a static gate (static gates can't express "at most one
+side-effect per collector per month").
+
+Why not add a gate: the existing gates cover the orthogonal
+concerns. A1 (no JSON.parse), A2 (tool_choice), A3 (Zod parse), A4
+(voice seed), A5 (banned vocab), A7 (capability), A8 (untrusted
+wrap), A10 (OTel), A16 (OPFS queue), A21 (retry), A22 (eval corpus),
+A23 (cost cap), A24 (voice seed adoption), A25 (corpus discipline)
+all apply to narrative. The marginal utility of an A26 that says
+"narrative generates ≤ 1× per collector per month" would be a runtime
+check encoded statically — less trustworthy than the unit + integration
+tests that exercise the actual call path with a faked clock.
+
+If a cadence regression slips past unit tests in production, iter #15
+gets an A26. Not today.
+
+### Build order
+
+Twelve commits.
+
+1. **Schema + input types** — `src/narrative/schema.ts` (Zod
+   `NarrativeOutputSchema`, `NarrativeInputSchema`, `NarrativeSkipReason`
+   enum). Commit: `feat(narrative): schemas for output + input + skip
+   taxonomy`.
+2. **Input assembler** — `src/narrative/input.ts` — walks verified
+   works + pulls enrichment + provenance; returns
+   `NarrativeInput | null` (null means thin-provenance). Unit tests
+   with fixture collections. Commit: `feat(narrative): deterministic
+   input assembler with thin-provenance skip`.
+3. **Prompt module** — `src/ai/prompts/narrative.ts`:
+   `NARRATIVE_SYSTEM_PROMPT` (observational register; forbids
+   evaluative vocab; forbids first-person; reminds of the
+   Museumsschild test), `narrativeTool` (Zod-aligned tool
+   definition). Commit: `feat(narrative): system prompt + tool
+   definition`.
+4. **Agent** — `src/ai/agents/narrative.ts`, modelled on
+   `correspondence.ts`. Uses `PANG_VOICE_SYSTEM_PROMPT` +
+   `NARRATIVE_SYSTEM_PROMPT`; `assertCapability("agent.narrative.pLlm",
+   input)`; `withOtelSpan`, `withRetry`, `AGENT_BUDGETS.narrative`.
+   Runs `runBannedVocabularyCheck` on output and fails to null on
+   hit. Unit tests with mocked Anthropic. Commit: `feat(narrative):
+   P-LLM agent with CaMeL boundary + voice guard`.
+5. **Cadence marker + store** — `src/narrative/store.ts`:
+   filesystem-backed monthly-narrative store; `getCurrentMonth(collectorId)`,
+   `putCurrentMonth(collectorId, output)`, `hasCurrentMonth(collectorId,
+   now)`. Marker path: `.pang/server-monthly-narrative/<collectorId>/<YYYY-MM>.json`.
+   Unit tests with faked clock; integration test with file system.
+   Commit: `feat(narrative): monthly idempotency marker (primitive 51)`.
+6. **Route** — `app/api/narrative/current/route.ts`. GET returns
+   current month; POST generates if absent + thin-provenance gate +
+   marker write. Zod schema validation on responses; route gated by
+   `requireSession` (existing P10 pattern). Commit: `feat(narrative):
+   /api/narrative/current GET + POST route`.
+7. **Overlay component** — `src/components/room/NarrativeOverlay.tsx`
+   — Popover API + Anchor Positioning; fade-in via View Transition;
+   dismissal via Zustand session slice; corpus-sourced strings (A25).
+   Surface-claim pattern (primitive 59 from iter #11). Commit:
+   `feat(narrative): Room overlay component with Popover + anchor`.
+8. **Arrival hook** — `src/components/room/useNarrativeOverlay.ts` —
+   on Room surface-become-active + arrival-settle, fetch current
+   month, render overlay if present + not dismissed in session.
+   Unit tests for the hook's effect graph. Commit: `feat(narrative):
+   useNarrativeOverlay hook with settle-after-arrival trigger`.
+9. **Playwright spec** — `e2e/narrative-overlay.spec.ts`: enter Room,
+   assert overlay appears, dismiss, re-enter same session → no
+   reappear, advance marker to next month → reappear. Commit:
+   `test(narrative): Playwright spec for overlay enter + dismiss +
+   monthly reappear`.
+10. **A22 eval fixtures** — `evals/narrative/` with five cases
+    (typical, minimal, single-work-null, gap-laden, adversarial-
+    evaluative). `evals/narrative/run.ts` mirrors the correspondence
+    runner; adds to `npm run check:eval`. Commit: `feat(eval):
+    narrative A22 corpus with five fixtures`.
+11. **Dev cron + scripts** — `scripts/narrative-tick.ts` runs POST
+    against local collectors; documents the Vercel cron shape in
+    `docs/narrative-cron.md` but does not enable it. Commit:
+    `feat(narrative): dev-mode tick script + cron shape documented`.
+12. **Primitives + findings** —
+    `PANG_Primitives_2026.md` gains primitives 67–70 (candidates
+    listed above). `PANG_Aha_Sprint.md` iter #14 findings in the
+    iter #10/#11/#12/#13 shape. Commit: `docs: iter #14 findings +
+    primitives 67–70`.
+
+### Test criteria
+
+- **Unit**: count ≥ 822 (iter #13 baseline) + ~25 new tests
+  (schema, assembler, store, agent mocked, hook). ≥ 847.
+- **Gates**: 50 gates green. A22 now has a narrative runner in
+  `check:eval`.
+- **Evals**: 5/5 narrative fixtures pass ≥ 85% threshold (same
+  threshold as other agents).
+- **Playwright**: 10 existing + 1 new (`narrative-overlay.spec.ts`)
+  = 11 specs green.
+- **Build**: bundle delta ≤ +8KB on the main chunk (the overlay
+  component + voice strings + zustand slice are the only new
+  frontend additions; the agent is server-only).
+- **Seed integrity**: `diff <(bun run rebuild:voice-prompt --stdout)
+  src/ai/prompts/voice.ts` empty.
+
+### Out of scope
+
+- **Supabase mirror of the monthly-narrative store.** Lands in the
+  Supabase iteration; filesystem store is authoritative for v1.
+- **Production cron.** The POST endpoint is callable; the Vercel cron
+  config is documented but not enabled until Supabase lands. Avoids
+  scheduling against filesystem state.
+- **Push notifications for a new reading.** The spine's cannot-do
+  list bars marketing push; Declarative Web Push is reserved for
+  gallery-originated verification outcomes only.
+- **Per-collector reading preferences.** No frequency dial, no
+  "shorter / longer" toggle, no style picker. One voice, one
+  cadence. Preferences are a post-Laura question.
+- **Historical readings archive.** v1 stores only the current month.
+  A read-history surface is a later iteration, if Laura asks for it.
+- **Arabic / German / other locales.** English-only; the corpus is
+  locale-ready.
+- **Reading across multiple collections.** Each collector has one
+  collection in v1; multi-collection is out of spec.
+- **Showing the reading outside the Room.** The spine says *in the
+  Room*. An "Arrival chapter reading" or "Detail-surface reading"
+  would be a doctrine edit.
+- **Social / share affordance.** Laura can show her partner by
+  showing her phone; no Twitter button, no share sheet.
+
+### Open questions (answered, for clarity)
+
+1. **Why P-LLM only, not CaMeL dual-LLM?** Inputs are already
+   sanitised (enrichment's bioMuji is `P`-branded; provenance is
+   `gallery`-branded). No raw untrusted content enters narrative.
+   A7 capability is `["P", "gallery"]` only.
+
+2. **Why filesystem store, not OPFS?** Monthly-narrative marker is
+   server-scoped (one marker per collector, system-wide). OPFS is
+   per-device. A server-side counterpart lives in
+   `.pang/server-monthly-narrative/`, mirrored by Supabase later.
+   (The client-side *cached reading* does go in OPFS for offline.)
+
+3. **When exactly does the overlay appear?** On Room surface-become-
+   active + arrival-settle. Specifically: when `useActiveSurface()`
+   (primitive 59) reports `"room"` AND `arrivalSettled` is true AND
+   the session hasn't dismissed this month's reading AND a current-
+   month narrative is present. Three-condition gate.
+
+4. **Can the collector trigger a reading manually?** No. "Occasionally,
+   PANG offers…" — the agent is passive; the collector is receptive.
+   A manual-trigger button would be a nudge, which is out-of-spine.
+
+5. **What happens if the collection shrinks between readings?** The
+   next month's reading reflects the new state. No retention logic —
+   if a work was in last month's reading and has been removed, the
+   reading doesn't reference it again.
+
+6. **What's the 120–600 char length range?** Laura might show her
+   partner. A paragraph that reads in ~15 seconds. Tighter than
+   correspondence (which has 800 max), looser than a chip.
+
+7. **Does the agent see the collector's name?** No. The narrative is
+   observational — "your fourth Hojgaard", not "Laura's fourth
+   Hojgaard". The shared barrel strips identity before the P-LLM call.
+
+8. **What constitutes "the collection has changed"?** The input
+   assembler hashes `(verifiedWorkIds, provenanceEntryCount,
+   bioMujiHashes)`. If last month's hash matches, POST returns the
+   prior reading (no new Claude call, no new marker write).
+
+9. **Why not a doctrine edit to PANG_Voice.md?** Because narrative
+   doesn't need a new register. Observational prose is the spine's
+   register. The seed already prohibits evaluation. The failure
+   mode is an eval regression, not a voice gap.
+
+10. **What if the agent regresses to a previous paragraph verbatim?**
+    Unlikely but possible. The `changed-since` hash covers collection
+    state; a literal-text identity check between consecutive readings
+    is a post-Laura concern. If Laura sees two identical readings in
+    two months, that's a finding, not a launch blocker.
+
+### Outcome gate (what codifies)
+
+Iter #14 succeeds when:
+
+1. The Narrative Agent is wired end-to-end: input → agent → marker →
+   overlay → dismiss. All A1–A25 gates green on the paths.
+2. A22 narrative corpus has 5 fixtures, pass rate ≥ 85%, adversarial
+   evaluative case passes (the agent holds the register under
+   attack).
+3. Playwright's `narrative-overlay.spec.ts` is green. Enter, appear,
+   dismiss, same-session-no-reappear, new-month-reappear.
+4. The cadence-marker store has a unit test that fakes the clock and
+   proves ≤ 1 call per collector per calendar month.
+5. `PANG_Primitives_2026.md` gains four primitives (67–70).
+6. Telemetry spans `pang.narrative.generate`, `pang.narrative.skipped`,
+   `pang.narrative.dismissed` are populated in at least one local dev
+   run (observed in the OTel log store).
+7. Laura's next install, post-merge, shows the narrative overlay when
+   she enters the Room in a month-eligible state (observed via the
+   device-dev harness).
+
+If any of the above is missing, iterate once, then land or drop.
+
+---
+
 ## Archived iterations
 
 The pre-reset sprint family (A1–A11, iterations #1–#13 of the old
