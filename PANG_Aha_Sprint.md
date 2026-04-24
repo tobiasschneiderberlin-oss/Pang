@@ -8408,6 +8408,159 @@ If any of the above is missing, iterate once, then land or drop.
 
 ---
 
+## Iteration #14 — findings (2026-04-24)
+
+**Status:** landed at ceiling. `npm run check:gates` clean at 27 / 27
+(same mechanical ceiling as iter #12 — iter #14 adds behaviour, not
+new gate scripts; A21 / A22 / A23 inherited from the three prior
+agents cover the narrative surface unchanged). `npm run check:eval`
+green across intake (mock) / enrichment (mock) / correspondence
+(mock) / narrative (mock, 5 / 5, 100 %) / verification (5 / 5 live).
+`check:strings` green (with `src/ai/prompts/narrative.ts` registered
+as a registry file — the prompt quotes banned vocabulary in its
+"never write these" list, not as UI copy). Four primitives (67–70)
+codified in `PANG_Primitives_2026.md`. Bundle delta inside the
+announced +8 KB budget (overlay + connector + session store weigh
+~4.8 KB minified; the hook + fetch helper weigh ~1.9 KB).
+
+### What landed
+
+- `src/narrative/schema.ts` — three wire contracts:
+  `NarrativeOutputSchema` (one paragraph, 120–600 chars, banned +
+  first-person refine), `NarrativeInputSchema` (collectorId, month,
+  verifiedWorks ≥ 1, provenanceEntries, bioMujiParagraphs,
+  collectionHash), `NarrativeMarkerSchema` (discriminated on
+  `kind: "paragraph" | "skipped"`), plus `NarrativeTickRequestSchema`
+  / `NarrativeTickResponseSchema` for the HTTP route. Skip taxonomy
+  is a Zod enum of six closed reasons — each maps to a
+  `pang.narrative.skipped { failure_reason }` OTel span attribute
+  (primitive 62 applied).
+- `src/narrative/input.ts` — the assembler. `NarrativeCollectorState
+  → NarrativeInputResult` discriminated on `{ kind: "input" | "skip"
+  }`. Two skip reasons are the assembler's decision: `empty-collection`
+  (no verified works) and `thin-provenance` (disjunction floor: ≥ 3
+  works *or* ≥ 5 provenance entries). `hashCollection(state)`
+  produces the 24-char sha256 prefix over
+  `(sortedWorkIds, provenanceCount, sortedBioMujiLengths)` — the
+  deterministic hash primitive 70 names. `monthOf(now)` is UTC-based
+  so a collector in Melbourne and one in Vancouver are in the same
+  month when the tick fires.
+- `src/ai/prompts/narrative.ts` — `NARRATIVE_SYSTEM_PROMPT` and the
+  `narrativeTool` tool definition. The prompt's "never write these
+  words" list quotes the banned + evaluative vocabulary as
+  negative examples (which is why the file is in
+  `check-strings.ts`'s `REGISTRY_FILES` set). The tool schema is
+  the minimal input side — `{ paragraph: string }` — and the
+  agent's retry policy temperatures climb 0.2 → 0.4 → 0.6.
+- `src/ai/agents/narrative.ts` — `runNarrative(input)`. P-LLM only
+  (no Q-LLM pass — the input is `'P' | 'gallery'` by construction
+  after the assembler). Capability site
+  `agent.narrative.pLlm: ["P", "gallery"]` is asserted before the
+  round-trip (A7). Output is parsed through `NarrativeOutputSchema`
+  (A1, A3) and then walked through `runBannedVocabularyCheck({
+  narrative: output.paragraph })` — the `narrative` key activates
+  the narrative-context hard-path in `sanitize.ts`, so
+  `EVALUATIVE_VOCABULARY` runs as a hard ban, not a warning. Retry
+  policy: two retries, terminal → `null` (the route commits an
+  `"agent-failure"` skip). Model: `claude-sonnet-4-6`.
+- `src/narrative/store.ts` — filesystem-backed marker store.
+  `.pang/narrative/<collectorId>/<YYYY-MM>.json`. Five entry points:
+  `getCurrentMonth`, `hasCurrentMonth`, `putCurrentMonth`,
+  `getPriorMonthHash`, `clearCollector`. `putCurrentMonth` enforces
+  `marker.collectorId === collectorId && marker.month === monthOf(now)`
+  at write time — a drifted marker is a hard error, not a silent
+  overwrite. Primitive 52 applied — row shape is 1:1 with the
+  Supabase mirror (iter #15+).
+- `app/api/narrative/current/route.ts` — GET returns 204 on absent /
+  skipped markers, 200 + body on a paragraph marker. POST is the
+  tick: cached short-circuit → assembler skip → hash-unchanged skip
+  → agent call → success / `agent-failure` skip. The `collectorId`
+  in the body must match `session.userId` (scope containment —
+  iter #14 is one collector, one month). An agent exception (vs
+  null-return) produces a 502 and does NOT commit a marker — the
+  month stays open for the next tick, which is the correct
+  register when the P-LLM round-trip itself fails.
+- `src/stores/narrative.ts` — session-scoped Zustand slice.
+  `{ current, dismissedMonth, isVisible }` with derived visibility
+  `current !== null && current.month !== dismissedMonth`. Dismiss
+  writes `dismissedMonth`; `clear()` for tests. Not OPFS — a
+  refresh IS a new arrival (primitive 69).
+- `src/components/room/NarrativeOverlay.tsx` +
+  `useNarrativeOverlay.ts` + `NarrativeOverlayConnector.tsx`.
+  Overlay is DOM-only chrome anchored top-right (CSS Anchor
+  Positioning where supported, `position: fixed` fallback),
+  `borderRadius: 0` on the card, `var(--r-chrome)` on the dismiss
+  button, `role="dialog" aria-modal="false"`, one affordance
+  ("dismiss", ALL CAPS, voice-corpus-sourced label). View
+  Transitions wrap the dismiss when available. The hook
+  subscribes to `useActiveSurface`, fires a GET once per `"room"`
+  edge after an 800 ms settle delay, adopts the response into the
+  store.
+- `src/ai/narrative/voice.ts` + `src/ai/prompts/strings.ts` — four
+  voice constants (overlay label, dismiss label, arrival
+  announcement, placeholder) registered in the
+  `PANG_VOICE_STRINGS` bundle's `NARRATIVE` namespace. A25 passes
+  because every user-facing string resolves to the corpus.
+- `e2e/narrative-overlay.spec.ts` — four Playwright specs: arrival,
+  dismiss-persists-in-session, month-rollover-re-enables,
+  null-payload-silence. Seeds through `window.__PANG.useNarrative`,
+  exposed by `AppBoot.tsx` behind `NEXT_PUBLIC_PANG_E2E=1` — same
+  pattern as iter #11's outcome-chapter spec.
+- `evals/narrative/` — five A22 fixtures:
+  `narrative-01-typical-eight-works`,
+  `narrative-02-minimal-three-works`,
+  `narrative-03-single-artist-null-fields` (agent must not invent
+  a year),
+  `narrative-04-gap-laden-provenance` (no over-claiming),
+  `narrative-05-adversarial-evaluative` (bio-muji carries
+  evaluative adjectives; the sanitised paragraph must not echo
+  them — A5 defence-in-depth). Mock mode passes 5 / 5 at 100 %.
+- `scripts/narrative-tick.ts` + `docs/narrative-cron.md`. One-shot
+  dev CLI driving the same pipeline the route exposes, invoked as
+  `npm run narrative:tick -- --collector=<id> --state=<path>`. No
+  `vercel.json` entry — production cron wiring is deferred until
+  the collector-state store lands.
+- `PANG_Primitives_2026.md` — primitives 67–70 inserted before
+  *Active references*. 67 is collection-as-agent-input (the single
+  sanitised object replacing drip-feed prompts); 68 is
+  monthly-idempotent-agent (the marker is the side effect); 69 is
+  passive-surface-never-nudges (arrival-only, session-scoped
+  dismiss — the inverse of notification-driven content); 70 is
+  deterministic-input-assembly (the shape hash is the
+  unchanged-collection gate).
+
+### What execution exposed
+
+Three discoveries, each with its verdict:
+
+1. **The narrative context in `sanitize.ts` already existed as a
+   soft-list-runs-hard branch — iter #14 just had to use the key.**
+   *Verdict:* codified as part of primitive 67's adapter path —
+   the A5 defence-in-depth is "wrap the paragraph under a key the
+   walker recognises", not "write a new sanitizer." One line in
+   the agent (`runBannedVocabularyCheck({ narrative: paragraph
+   })`), two lines in the eval scorer. Costs nothing; doubles the
+   ban.
+2. **The `hasCurrentMonth` short-circuit means the POST is safe
+   to re-invoke — but the dev cron's store signatures took the
+   names wrong on the first pass.** The store helpers all take
+   `(collectorId, now)` / `(collectorId, marker, now)`, not the
+   `{collectorId, now}` object shape the initial draft used. The
+   TypeScript error surfaced at the first `tsc` run. *Verdict:*
+   no doctrine change — the store's positional signature is a
+   local choice, and the error was a typo caught by the compiler
+   in the same minute it was written. Kept.
+3. **A passive-surface overlay has no "open" ceremony, only an
+   arrival edge.** The early draft had a "show" setter on the
+   session store; the review replaced it with a derived
+   `isVisible` that computes against `dismissedMonth`. *Verdict:*
+   primitive 69 (passive-surface-never-nudges) codifies the
+   inverse-of-nudge default: the surface is visible because the
+   collector arrived and hasn't dismissed this month, not because
+   a "show" event fired.
+
+---
+
 ## Archived iterations
 
 The pre-reset sprint family (A1–A11, iterations #1–#13 of the old

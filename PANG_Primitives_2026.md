@@ -1812,6 +1812,176 @@ chunks
   / did not fire, which points at layer M." Codified
   2026-04-24 from iter #11.
 
+### 67. Collection-as-agent-input: the collector's state is a single sanitised object
+
+- **Forbidden default:** drip-feeding agent prompts with
+  N micro-fetches ("give me the artist's bio, now the
+  provenance, now the last three works") so the agent
+  composes its own picture of the collection. The default
+  fails because (a) every fetch is a CaMeL boundary the
+  prompt author has to remember and brand correctly —
+  forgetting one leaks `'Q'` into a privileged call; (b)
+  the prompt's factual surface is not reproducible between
+  runs, so the A22 eval corpus scores vapour; (c) the
+  agent has no single place to check "is this collection
+  substantial enough to observe?" — the thin-provenance
+  gate lives where the input is assembled, not where
+  individual facts are fetched.
+- **Required primitive:** an *input assembler* runs
+  upstream of the agent call and produces a single
+  `NarrativeInput` object with every fact the P-LLM will
+  see. The assembler is the sole CaMeL boundary; nothing
+  below it touches network; the assembler's output is
+  `'P'`-branded and the agent's `assertCapability`
+  enforces. Skip decisions (empty collection, thin
+  provenance) are *made by the assembler* and returned as
+  a discriminated union — the agent is never called for
+  a skipped case, so there is no "cancelled mid-run"
+  state to reason about.
+- **Adapter path:** canonical reference:
+  `src/narrative/input.ts` (iter #14) — the
+  `NarrativeCollectorState → NarrativeInputResult`
+  function, discriminated on `{ kind: "input" | "skip" }`.
+  Generalises to any agent whose prompt carries more than
+  one fact: the assembler is where facts, branding, and
+  go/no-go decisions live.
+- **Enforcement:** code-review level. Signal: a new agent
+  lands with its P-LLM call inline in a route handler,
+  reading two or more sources on the same tick. Factor
+  the assembler out; let the route call the assembler
+  call the agent. Codified 2026-04-24 from iter #14.
+
+### 68. Monthly-idempotent agent: the marker is the side effect
+
+- **Forbidden default:** treating a monthly-cadenced agent
+  like a cron job that "runs once per month and writes a
+  row." The default fails because the cadence boundary
+  lives only in the cron trigger; a manual run, a retry,
+  or a duplicate trigger re-invokes the P-LLM and the
+  monthly idempotency is *implicit in the scheduler*,
+  not in the data. A dev re-running the tick to debug
+  output produces a second paragraph, a second cost line,
+  a second telemetry span — and the collector-facing
+  overlay carries whichever write landed last.
+- **Required primitive:** the *marker* carrying
+  `(collectorId, month)` is the idempotency boundary.
+  Every entry point — HTTP route, dev cron, production
+  cron — opens with `hasCurrentMonth(collectorId, now)`
+  and short-circuits to `"cached"` if the marker exists.
+  The marker has two kinds: `"paragraph"` (a generated
+  reading) and `"skipped"` (a reason — empty collection,
+  thin provenance, unchanged hash, agent failure,
+  evaluative vocabulary). Either kind closes the month.
+  The marker commits *before* any side effect the
+  collector can observe — this is primitive 51, specialised
+  for the monthly cadence: the marker *is* the side
+  effect. A second call for the same (collector, month)
+  is a no-op.
+- **Adapter path:** canonical reference:
+  `src/narrative/store.ts` + `app/api/narrative/current/
+  route.ts` (iter #14). The route opens with
+  `hasCurrentMonth`, branches to "cached", and in every
+  other path commits a marker — `"paragraph"` on success,
+  `"skipped"` on every other outcome. Generalises to any
+  agent whose cadence is civil-calendar rather than
+  on-demand: monthly reading, quarterly summary, yearly
+  review. The cadence is a property of the marker, not of
+  the scheduler.
+- **Enforcement:** code-review level + A21 retry-policy
+  alignment. Signal: a new calendar-cadenced agent lands
+  without a marker store, or with a marker store whose
+  cadence key omits the time dimension. Add the time
+  component to the key; make the route/cron short-circuit
+  on it. Codified 2026-04-24 from iter #14.
+
+### 69. Passive-surface-never-nudges: arrival-only, session-scoped dismiss
+
+- **Forbidden default:** "the reading is ready, notify
+  the collector." The default fails because every growth
+  app treats a freshly-generated piece of AI content as
+  a push event — streak chatter, "your month is ready",
+  a red badge on a tab icon, a modal that interrupts. PANG
+  is silent between sessions and passive during them;
+  the narrative overlay is ambient, not promotional. A
+  nudge turns the spine moment ("the gallery speaks
+  quietly in your room") into a notification (which is
+  exactly what PANG is not).
+- **Required primitive:** a *passive surface* is one the
+  collector encounters only by arriving at the host
+  surface it sits on. For the narrative overlay: entering
+  The Room is the trigger, and entering is the *only*
+  trigger. No push, no toast, no badge; the overlay fades
+  in after a settle delay, carries one fact, offers one
+  affordance ("dismiss"), and closes for the rest of the
+  session. Month rollover is the only thing that revives
+  it; dismissing is session-scoped (a refresh IS a new
+  arrival). This primitive is the inverse of the
+  nudge-every-event default — it is *arrival* that decides
+  whether a surface is visible, not *event production*.
+- **Adapter path:** canonical reference:
+  `src/components/room/useNarrativeOverlay.ts` (iter
+  #14) — subscribes to `useActiveSurface`, fires the GET
+  once per `"room"` edge after a settle delay, adopts
+  into a session-scoped Zustand store. The overlay's
+  dismiss writes `dismissedMonth` into the same session
+  store (not OPFS, not localStorage) so a refresh re-
+  arrives. Generalises to any AI-produced surface that
+  the spine wants *available but not insistent*: monthly
+  readings, contributor acknowledgements, gallery asides.
+- **Enforcement:** doctrine-level (`CLAUDE.md` cannot-do
+  list: no push notifications beyond declarative verify
+  outcomes). Signal: a new AI surface lands with a
+  web-push subscription, a BroadcastChannel "new content"
+  broadcast, or a toast in a provider tree. Remove the
+  nudge; hook the surface's visibility to
+  `useActiveSurface`. Codified 2026-04-24 from iter #14.
+
+### 70. Deterministic-input-assembly — hashed collection shape gates the round-trip
+
+- **Forbidden default:** calling the P-LLM on the
+  calendar boundary regardless of whether the input has
+  changed. The default fails because most months the
+  collector's collection has not moved: no new works, no
+  new provenance entries, no new bio-muji paragraphs.
+  Calling the agent anyway burns cost (A23), produces a
+  paragraph that is substantially the same as last
+  month's, and degrades the register (the collector
+  notices the overlay "says the same thing" and learns to
+  ignore it).
+- **Required primitive:** the assembler hashes the
+  collection's *shape* (verified-work id set +
+  provenance-entry count + bio-muji paragraph lengths,
+  canonically ordered) into a 24-character prefix of a
+  SHA-256. The hash is a field on every
+  `NarrativeInput`. The route's pre-round-trip gate
+  compares the new hash against the prior month's marker
+  hash (`getPriorMonthHash`) — if equal, commit a
+  `"skipped"` marker with reason `"unchanged-collection"`
+  and the month closes without an agent call. The
+  collector sees the same paragraph as last month by
+  default, which is the correct register: silence over
+  repetition. Determinism in the hash is load-bearing —
+  the same (state, assembler version) always produces
+  the same hash, so the gate never randomly flips.
+- **Adapter path:** canonical reference:
+  `src/narrative/input.ts#hashCollection` (iter #14) —
+  canonical JSON over sorted ids and lengths; sha256
+  truncated to 24 hex chars. The gate fires in
+  `app/api/narrative/current/route.ts`. Generalises to
+  any agent whose input is a snapshot the collector
+  accumulates slowly: monthly reading, quarterly summary,
+  end-of-year report. The primitive is the *hash-as-gate*,
+  not sha256 specifically; collision resistance to the
+  same order of magnitude as the cadence boundary is
+  sufficient.
+- **Enforcement:** code-review level + A22 eval coverage.
+  Signal: a new assembler lands without a hash field, or
+  with a hash that is a timestamp (so every call is
+  "unchanged" or every call is "changed" — both
+  degenerate). Add the shape hash; add a fixture to the
+  eval corpus that drives the unchanged-collection branch.
+  Codified 2026-04-24 from iter #14.
+
 ---
 
 ## Active references
