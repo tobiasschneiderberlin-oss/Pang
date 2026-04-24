@@ -83,6 +83,7 @@ import { INVITE_LANDING_LABEL } from "@/ai/invite/voice";
 import { GALLERY_OUTCOME_PROSE } from "@/ai/gallery/voice";
 import { ROOM_MAIN_LABEL } from "@/ai/room/voice";
 import { DEEP_ZOOM_SMOKE, ROOM_SMOKE } from "@/ai/smoke/voice";
+import { SETTINGS_OVERLAY } from "@/ai/chrome/voice";
 
 // ---------- Namespaces ---------------------------------------------
 //
@@ -299,6 +300,8 @@ export const SMOKE = Object.freeze({
   room_focus_label: ROOM_SMOKE.focus_label,
 }) satisfies Readonly<Record<string, string>>;
 
+export const SETTINGS_OVERLAY_NS = SETTINGS_OVERLAY;
+
 export const ARIA = ARIA_ANNOUNCE;
 
 // ---------- The bundle ---------------------------------------------
@@ -330,6 +333,7 @@ export const PANG_VOICE_STRINGS = Object.freeze({
   room: ROOM,
   narrative: NARRATIVE,
   smoke: SMOKE,
+  settings_overlay: SETTINGS_OVERLAY_NS,
   aria: ARIA,
 }) satisfies PangVoiceStringsShape;
 
@@ -371,6 +375,7 @@ type PangVoiceStringsShape = Readonly<{
   room: Namespace;
   narrative: Namespace;
   smoke: Namespace;
+  settings_overlay: Namespace;
   aria: Namespace;
 }>;
 
