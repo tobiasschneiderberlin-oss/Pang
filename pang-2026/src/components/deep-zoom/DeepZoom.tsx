@@ -60,6 +60,7 @@ import {
   deepZoomTileLoadEvent,
   deepZoomDepthLevel,
 } from "@/deep-zoom/otel";
+import type { TileSource } from "@/deep-zoom/source";
 
 /**
  * Tile source contract. The two shapes OSD consumes natively:
@@ -69,10 +70,13 @@ import {
  *     strokes visible" promise waits on real DZI source.
  *   - `{ kind: "dzi", url }` — URL to a `.dzi` manifest. OSD reads
  *     the manifest, requests tile levels on demand. Real deep zoom.
+ *
+ * Definition lives in `src/deep-zoom/source.ts` (Zod-validated, used
+ * by both the durable store and the runtime viewer). Re-exported
+ * here under the legacy name `DeepZoomSource` so existing call
+ * sites keep compiling.
  */
-export type DeepZoomSource =
-  | { readonly kind: "simple-image"; readonly url: string }
-  | { readonly kind: "dzi"; readonly url: string };
+export type DeepZoomSource = TileSource;
 
 export interface DeepZoomProps {
   readonly workId: string;

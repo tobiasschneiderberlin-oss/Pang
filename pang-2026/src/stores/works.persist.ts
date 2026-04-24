@@ -46,6 +46,7 @@ import {
   type VerificationHint,
 } from "@/stores/works";
 import { ArtworkSnapshotSchema } from "@/verification/schema";
+import { parseTileSource, type TileSource } from "@/deep-zoom/source";
 
 const INDEX_PATH = "works/index.json";
 
@@ -67,6 +68,7 @@ interface PersistedEntry {
   readonly size: readonly [number, number];
   readonly verificationHint?: VerificationHint;
   readonly documents?: readonly DocumentRecord[];
+  readonly tileSource?: TileSource;
 }
 
 /** Project an in-memory entry to its durable shape. Pure; testable. */
@@ -82,9 +84,13 @@ export function projectDurable(entry: CollectionEntry): PersistedEntry {
   const withHint = entry.verificationHint
     ? { ...base, verificationHint: entry.verificationHint }
     : base;
-  return entry.documents && entry.documents.length > 0
-    ? { ...withHint, documents: entry.documents }
-    : withHint;
+  const withDocs =
+    entry.documents && entry.documents.length > 0
+      ? { ...withHint, documents: entry.documents }
+      : withHint;
+  return entry.tileSource
+    ? { ...withDocs, tileSource: entry.tileSource }
+    : withDocs;
 }
 
 /** Inverse projection — pure; validates shape and drops unknown fields. */
@@ -120,10 +126,20 @@ export function parseDurable(raw: unknown): PersistedEntry | null {
   // iteration #6 simply have none. A malformed `documents` field
   // drops silently so the rest of the entry still hydrates.
   const docsRaw = r["documents"];
-  if (docsRaw === undefined) return withHint;
-  const docs = parseDocuments(docsRaw);
-  if (docs.length === 0) return withHint;
-  return { ...withHint, documents: docs };
+  const docs = docsRaw !== undefined ? parseDocuments(docsRaw) : [];
+  const withDocs =
+    docs.length > 0 ? { ...withHint, documents: docs } : withHint;
+
+  // Tile source is optional and additive — entries persisted before
+  // iter #8 have none, and the deep-zoom resolver falls back to a
+  // simple-image source derived from `imageUrl`. A malformed
+  // `tileSource` drops silently so the rest of the entry still
+  // hydrates honestly.
+  const tileRaw = r["tileSource"];
+  if (tileRaw === undefined) return withDocs;
+  const tile = parseTileSource(tileRaw);
+  if (!tile) return withDocs;
+  return { ...withDocs, tileSource: tile };
 }
 
 function parseDocuments(raw: unknown): DocumentRecord[] {
@@ -326,10 +342,12 @@ export async function hydrateWorks(): Promise<CollectionEntry[]> {
     const withHint = p.verificationHint
       ? { ...base, verificationHint: p.verificationHint }
       : base;
-    out.push(
+    const withDocs =
       p.documents && p.documents.length > 0
         ? { ...withHint, documents: p.documents }
-        : withHint,
+        : withHint;
+    out.push(
+      p.tileSource ? { ...withDocs, tileSource: p.tileSource } : withDocs,
     );
   }
   return out;
