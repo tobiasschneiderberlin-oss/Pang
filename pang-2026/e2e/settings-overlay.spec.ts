@@ -30,6 +30,16 @@ import { authSeed } from "./support/auth";
 
 test.use({ viewport: { width: 1280, height: 800 } });
 
+// iter #16: per-file test timeout bumped from the config-level 30 s to
+// 60 s. On `chromium-mobile` (Pixel 7 device emulation) the OPFS
+// debounced write + post-reload hydration round-trip can land near
+// the upper end of the 30 s budget on a cold-cache CI runner. The
+// 60 s ceiling gives the rehydrate-poll a real margin instead of
+// racing the test budget; a real regression still trips the inner
+// `waitForFunction` timeout (15 s, set explicitly below) before the
+// outer test budget expires.
+test.setTimeout(60_000);
+
 // ---------- Shared helpers ------------------------------------------
 
 async function waitForPangWindow(page: Page): Promise<void> {
@@ -281,12 +291,17 @@ test.describe("settings-overlay-persistence — audioSpatial rehydrates", () => 
     await audioToggle.click();
     await expect(audioToggle).toHaveAttribute("data-state", "on");
 
-    // Wait for the 120 ms persist debounce to land in OPFS. CI load
-    // can push the write past a 250 ms margin on cold kernel cache,
-    // so we give a generous window here; the `waitForFunction` after
-    // the reload still has to see `"on"` for the spec to pass, so a
-    // real regression trips regardless.
-    await page.waitForTimeout(750);
+    // Wait for the 120 ms persist debounce to land in OPFS. iter #16:
+    // bumped from 750 ms → 2000 ms after a chromium-mobile-only flake
+    // surfaced post the outcome-chapter fix. Pixel-7 emulation under
+    // cold-cache CI can stretch both setTimeout granularity and the
+    // async OPFS write (directory handle → file create → flush) past
+    // a 750 ms margin; the failure mode then is *no* persisted file,
+    // post-reload hydrate returning `DEFAULT_PREFERENCES` (silence
+    // wins), and the rehydrate-poll polling forever for a transition
+    // that will never happen. A real regression still trips the
+    // explicit 15 s `waitForFunction` timeout below.
+    await page.waitForTimeout(2000);
 
     // Reload.
     await page.reload();
@@ -296,18 +311,25 @@ test.describe("settings-overlay-persistence — audioSpatial rehydrates", () => 
     // Preference rehydrates. OPFS hydration lands after AppBoot binds
     // `__PANG` to the window, so `waitForPangWindow` returns before
     // the store has absorbed the persisted snapshot. Poll the store
-    // until `audioSpatial` transitions to `"on"` (or the waitFor
-    // timeout trips on a real regression).
-    await page.waitForFunction(() => {
-      const w = window as unknown as {
-        __PANG?: {
-          usePreferences: {
-            getState: () => { audioSpatial: string };
+    // until `audioSpatial` transitions to `"on"`. iter #16: explicit
+    // 15 s timeout so a real regression (debounce never fired, OPFS
+    // shape drift, hydrate parser rejecting) surfaces as a precise
+    // `waitForFunction` failure instead of consuming the full test
+    // budget on a generic `Test timeout exceeded`.
+    await page.waitForFunction(
+      () => {
+        const w = window as unknown as {
+          __PANG?: {
+            usePreferences: {
+              getState: () => { audioSpatial: string };
+            };
           };
         };
-      };
-      return w.__PANG?.usePreferences.getState().audioSpatial === "on";
-    });
+        return w.__PANG?.usePreferences.getState().audioSpatial === "on";
+      },
+      undefined,
+      { timeout: 15_000 },
+    );
     const rehydrated = await page.evaluate(() => {
       const w = window as unknown as {
         __PANG: {

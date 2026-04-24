@@ -9273,6 +9273,54 @@ gate is CI signal over time: three consecutive green e2e runs on
 pushes to `main`, measured from merge. A single flake recurrence
 inside that window re-opens the iter as #16b.
 
+### Mid-iter expansion: settings-overlay-persistence (2026-04-24)
+
+The first push of the outcome-chapter fix surfaced a second
+chromium-mobile flake that the first one had been masking:
+`e2e/settings-overlay.spec.ts:300`,
+`settings-overlay-persistence — audioSpatial rehydrates`.
+
+**Root cause** (timing, not product):
+
+```
+click toggle → store update → 120 ms persist debounce → opfsWrite
+↑ 750 ms `waitForTimeout` ↑ page.reload() ↑ hydratePreferences()
+```
+
+Under chromium-mobile cold-cache CI, two timer compressions
+compound: setTimeout granularity widens and the async
+`opfsWrite` chain (directory handle → file create → flush)
+stretches. When the 750 ms wait elapses *before* the OPFS write
+lands, the post-reload `hydratePreferences()` returns
+`DEFAULT_PREFERENCES` (silence wins on the missing-file branch).
+The post-reload `waitForFunction` then polls for an
+`audioSpatial === "on"` transition that will never happen, until
+the 30 s test budget exhausts as a generic
+`Test timeout exceeded`.
+
+**Fix shape** (same surgical register as the outcome-chapter
+patch):
+
+- File-level `test.setTimeout(60_000)` for budget headroom
+  parity with `e2e/outcome-chapter.spec.ts`.
+- `waitForTimeout(750)` → `waitForTimeout(2000)`. 16× the 120 ms
+  debounce, generous on slow timers + slow OPFS, fast on hot
+  cache.
+- Explicit `{ timeout: 15_000 }` on the post-reload
+  `waitForFunction`. A real persistence regression now fails as
+  a precise `waitForFunction` timeout, not a generic test-budget
+  exhaustion.
+
+**Why this belongs to iter #16**: the outcome gate is *three
+consecutive green pushes on chromium-mobile*. A separate
+chromium-mobile flake under the same trust-restoration umbrella
+is the same iter, not a new one. Splitting would have shipped
+iter #16 as "infra trust restored except the parts that aren't,"
+which fails its own brief.
+
+**Verification**: 12/12 settings-overlay specs pass locally on
+both projects; outcome-chapter regression-test holds at 10/10.
+
 ---
 
 ## Archived iterations
