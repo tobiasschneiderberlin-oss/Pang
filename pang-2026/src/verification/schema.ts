@@ -185,15 +185,85 @@ export type VerificationAck = z.infer<typeof VerificationAckSchema>;
  * voice doctrine forbids apologising for the gallery's answer. The
  * gallery's private note to the collector, if any, is out of scope
  * for iteration #4 (iteration #7 may add a sidecar channel).
+ *
+ * iter #10 adds `"expired"` — the signed link's 30-day TTL elapsed
+ * without the gallery acting. Distinct from `"declined"` in telemetry
+ * and in the collector-side surface (the panel's reflective state
+ * differs: a decline is the gallery's answer; an expiry is no answer).
  */
 export const VerificationOutcomeSchema = z
   .object({
     version: z.literal("v1"),
     requestId: RequestIdSchema,
     workId: z.string().min(1).max(64),
-    outcome: z.enum(["confirmed", "declined"]),
+    outcome: z.enum(["confirmed", "declined", "expired"]),
     decidedAt: z.string().datetime(),
   })
   .strict();
 
 export type VerificationOutcome = z.infer<typeof VerificationOutcomeSchema>;
+
+// ---------- Dispatch request + result (iter #10) -----------------
+
+/**
+ * The client's request to mint an outbound verification message. The
+ * server calls the Correspondence Agent, mints confirm + decline
+ * signed links, and returns a prepared URL-handoff target (mailto: or
+ * wa.me://) for the collector's browser to navigate to.
+ *
+ * Idempotent on `requestId` — a second call with the same id returns
+ * the cached payload (not a new one). The gallery sees the same pair
+ * of links.
+ *
+ * `channel` is the collector's chosen hand-off route — email or
+ * WhatsApp. SMS is deferred to a later iteration (principle-scope
+ * deferral: the mechanism would work, but mobile browsers' `sms:`
+ * URL support is uneven and we'd rather ship two rails that work
+ * everywhere than three that don't).
+ */
+export const DispatchChannelSchema = z.enum(["email", "whatsapp"]);
+export type DispatchChannel = z.infer<typeof DispatchChannelSchema>;
+
+export const VerificationDispatchRequestSchema = z
+  .object({
+    version: z.literal("v1"),
+    requestId: RequestIdSchema,
+    channel: DispatchChannelSchema,
+    /** The gallery's contact for this channel — email address, or E.164-ish. */
+    galleryContact: z.string().min(1).max(120),
+  })
+  .strict();
+
+export type VerificationDispatchRequest = z.infer<
+  typeof VerificationDispatchRequestSchema
+>;
+
+/**
+ * Server's response to /api/verification/dispatch. `channelUrl` is a
+ * pre-built `mailto:` or `https://wa.me/<phone>?text=<body>` URL that
+ * the client's `<a>.click()` hand-off triggers. The collector's email
+ * client or WhatsApp app opens with the composed body pre-filled; the
+ * collector taps send. PANG does not dispatch on the gallery's behalf
+ * — the collector's channel is the collector's.
+ *
+ * `previewBody` mirrors the body that got URL-encoded into
+ * `channelUrl`, so the panel can render a preview without parsing the
+ * URL. Both fields are Zod-validated at the wire boundary.
+ */
+export const VerificationDispatchResultSchema = z
+  .object({
+    version: z.literal("v1"),
+    requestId: RequestIdSchema,
+    channel: DispatchChannelSchema,
+    channelUrl: z.string().min(1).max(8192),
+    previewSubject: z.string().max(200).nullable(),
+    previewBody: z.string().min(1).max(6000),
+    confirmUrl: z.string().url().max(2048),
+    declineUrl: z.string().url().max(2048),
+    dispatchedAt: z.string().datetime(),
+  })
+  .strict();
+
+export type VerificationDispatchResult = z.infer<
+  typeof VerificationDispatchResultSchema
+>;

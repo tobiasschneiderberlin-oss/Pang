@@ -109,6 +109,7 @@ export function planReconcile(
       }
       case "confirmed":
       case "declined":
+      case "expired":
       case "failed": {
         recordsToRemove.push(requestId);
         orphanOutboxEntries += 1;
@@ -116,6 +117,10 @@ export function planReconcile(
       }
       case "requesting":
       case "requested":
+      case "dispatched":
+        // In-flight or awaiting gallery action. Leave the outbox
+        // entry in place; the dispatched-state walker polls
+        // /api/verification/outcome in `reconcileVerification()`.
         break;
       default: {
         const _never: never = current;

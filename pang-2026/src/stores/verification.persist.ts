@@ -120,8 +120,23 @@ function parseState(raw: unknown): VerificationState | null {
         requestId: r["requestId"] as string,
         submittedAt: r["submittedAt"] as string,
       };
+    case "dispatched": {
+      if (!isString(r["requestId"])) return null;
+      if (!isString(r["submittedAt"])) return null;
+      if (!isString(r["dispatchedAt"])) return null;
+      const channel = r["channel"];
+      if (channel !== "email" && channel !== "whatsapp") return null;
+      return {
+        kind: "dispatched",
+        requestId: r["requestId"] as string,
+        submittedAt: r["submittedAt"] as string,
+        dispatchedAt: r["dispatchedAt"] as string,
+        channel,
+      };
+    }
     case "confirmed":
     case "declined":
+    case "expired":
       if (!isString(r["requestId"])) return null;
       if (!isString(r["submittedAt"])) return null;
       if (!isString(r["decidedAt"])) return null;

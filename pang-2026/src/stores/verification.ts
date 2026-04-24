@@ -7,10 +7,14 @@
  *
  *   "none"       — no request for this work (default on fresh entry)
  *   "requesting" — optimistic flip while the first POST is in flight
- *   "requested"  — server acked; waiting for the gallery's decision
+ *   "requested"  — server acked; gallery not yet contacted
+ *   "dispatched" — collector has sent the URL-handoff message
+ *                  (mailto:/wa.me) to the gallery; awaiting the
+ *                  gallery's tap on confirm or decline (iter #10)
  *   "confirmed"  — gallery confirmed; `CollectionEntry.status` flipped
  *                  to `"verified"` in the works store on the same tick
  *   "declined"   — gallery declined; reflective state, not a retry prompt
+ *   "expired"    — 30-day signed-link TTL elapsed without gallery action
  *   "failed"     — all retries exhausted; the ask-affordance re-appears
  *
  * The store holds the runtime state; `verification.persist.ts` mirrors
@@ -32,6 +36,13 @@ export type VerificationState =
   | { kind: "requesting"; requestId: string; submittedAt: string }
   | { kind: "requested"; requestId: string; submittedAt: string }
   | {
+      kind: "dispatched";
+      requestId: string;
+      submittedAt: string;
+      dispatchedAt: string;
+      channel: "email" | "whatsapp";
+    }
+  | {
       kind: "confirmed";
       requestId: string;
       submittedAt: string;
@@ -39,6 +50,12 @@ export type VerificationState =
     }
   | {
       kind: "declined";
+      requestId: string;
+      submittedAt: string;
+      decidedAt: string;
+    }
+  | {
+      kind: "expired";
       requestId: string;
       submittedAt: string;
       decidedAt: string;
@@ -99,10 +116,10 @@ export interface VerificationStore {
 
   /**
    * Transition into `"requesting"`. Idempotent: if the work is
-   * already in a non-terminal-retryable state (`"requesting"`,
-   * `"requested"`, `"confirmed"`, `"declined"`), returns the
-   * existing state. Only `"none"` and `"failed"` permit a new
-   * submission.
+   * already in a non-retryable state (`"requesting"`,
+   * `"requested"`, `"dispatched"`, `"confirmed"`, `"declined"`),
+   * returns the existing state. Only `"none"`, `"failed"`, and
+   * `"expired"` permit a new submission.
    *
    * Returns the state after the attempted transition — the caller
    * can compare `state.requestId` to the one it generated to detect
@@ -120,11 +137,26 @@ export interface VerificationStore {
   /** Mark terminal failure; `reason` is a short machine-readable key. */
   markFailed(workId: string, reason: string): void;
 
+  /**
+   * Collector handed off the message to their email client or
+   * WhatsApp (iter #10). Transitions `"requested"` → `"dispatched"`.
+   * Idempotent: a second call with the same channel leaves the
+   * existing `dispatchedAt`; a channel change overrides.
+   */
+  markDispatched(input: {
+    workId: string;
+    dispatchedAt: string;
+    channel: "email" | "whatsapp";
+  }): void;
+
   /** Gallery confirmed. `decidedAt` is the outcome's server timestamp. */
   markConfirmed(workId: string, decidedAt: string): void;
 
   /** Gallery declined. */
   markDeclined(workId: string, decidedAt: string): void;
+
+  /** Signed link's TTL elapsed without action. */
+  markExpired(workId: string, decidedAt: string): void;
 
   /**
    * Force a state — used by persistence rehydration and the
@@ -160,7 +192,10 @@ export const useVerification = create<VerificationStore>()(
 
     beginRequest({ workId, requestId, submittedAt }) {
       const current = get().byWorkId[workId] ?? NONE;
-      const retryable = current.kind === "none" || current.kind === "failed";
+      const retryable =
+        current.kind === "none" ||
+        current.kind === "failed" ||
+        current.kind === "expired";
       if (!retryable) return current;
       const next: VerificationState = {
         kind: "requesting",
@@ -191,7 +226,11 @@ export const useVerification = create<VerificationStore>()(
       const current = get().byWorkId[workId];
       if (!current) return;
       // Only transition to failed from an in-flight state.
-      if (current.kind !== "requesting" && current.kind !== "requested") {
+      if (
+        current.kind !== "requesting" &&
+        current.kind !== "requested" &&
+        current.kind !== "dispatched"
+      ) {
         return;
       }
       const next: VerificationState = {
@@ -205,10 +244,36 @@ export const useVerification = create<VerificationStore>()(
       }));
     },
 
+    markDispatched({ workId, dispatchedAt, channel }) {
+      const current = get().byWorkId[workId];
+      if (!current) return;
+      // Only `"requested"` and `"dispatched"` permit this transition.
+      // A second dispatch (different channel) overrides the record.
+      if (current.kind !== "requested" && current.kind !== "dispatched") {
+        return;
+      }
+      const next: VerificationState = {
+        kind: "dispatched",
+        requestId: current.requestId,
+        submittedAt: current.submittedAt,
+        dispatchedAt,
+        channel,
+      };
+      set((state) => ({
+        byWorkId: { ...state.byWorkId, [workId]: next },
+      }));
+    },
+
     markConfirmed(workId, decidedAt) {
       const current = get().byWorkId[workId];
       if (!current) return;
-      if (current.kind === "confirmed" || current.kind === "declined") return;
+      if (
+        current.kind === "confirmed" ||
+        current.kind === "declined" ||
+        current.kind === "expired"
+      ) {
+        return;
+      }
       if (current.kind === "none") return;
       const next: VerificationState = {
         kind: "confirmed",
@@ -224,10 +289,38 @@ export const useVerification = create<VerificationStore>()(
     markDeclined(workId, decidedAt) {
       const current = get().byWorkId[workId];
       if (!current) return;
-      if (current.kind === "confirmed" || current.kind === "declined") return;
+      if (
+        current.kind === "confirmed" ||
+        current.kind === "declined" ||
+        current.kind === "expired"
+      ) {
+        return;
+      }
       if (current.kind === "none") return;
       const next: VerificationState = {
         kind: "declined",
+        requestId: current.requestId,
+        submittedAt: current.submittedAt,
+        decidedAt,
+      };
+      set((state) => ({
+        byWorkId: { ...state.byWorkId, [workId]: next },
+      }));
+    },
+
+    markExpired(workId, decidedAt) {
+      const current = get().byWorkId[workId];
+      if (!current) return;
+      if (
+        current.kind === "confirmed" ||
+        current.kind === "declined" ||
+        current.kind === "expired"
+      ) {
+        return;
+      }
+      if (current.kind === "none") return;
+      const next: VerificationState = {
+        kind: "expired",
         requestId: current.requestId,
         submittedAt: current.submittedAt,
         decidedAt,
