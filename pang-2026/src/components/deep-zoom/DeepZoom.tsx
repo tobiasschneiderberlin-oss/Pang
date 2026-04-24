@@ -62,6 +62,7 @@ import {
 } from "@/deep-zoom/otel";
 import type { TileSource } from "@/deep-zoom/source";
 import { installOpfsTileCacheOverride } from "@/deep-zoom/opfs-override";
+import { useSurfaceClaim } from "@/stores/use-surface-claim";
 
 /**
  * Tile source contract. The two shapes OSD consumes natively:
@@ -132,6 +133,11 @@ export function DeepZoomConnector(
 }
 
 export function DeepZoom(props: DeepZoomProps): ReactElement {
+  // Iteration #11 — claim deep-zoom as the active surface. The outcome
+  // chapter mount gates on Room-active; a confirmation landing while
+  // Laura is deep in a zoom queues until she returns to the Room.
+  useSurfaceClaim("deep-zoom");
+
   const setActiveDeepZoom = useWorks((s) => s.setActiveDeepZoom);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);

@@ -30,6 +30,7 @@ import { DocumentsChapterConnector } from "@/components/documents/DocumentsChapt
 import { DocumentViewerConnector } from "@/components/documents/DocumentViewer";
 import { EnrichmentPanel } from "@/components/enrichment/EnrichmentPanel";
 import { DeepZoomOverlay } from "@/components/deep-zoom/DeepZoomOverlay";
+import { RoomSurfaceClaim } from "@/components/room/RoomSurfaceClaim";
 
 export default function TheRoom(): ReactElement {
   return (
@@ -37,6 +38,9 @@ export default function TheRoom(): ReactElement {
       className="relative h-dvh w-full bg-paper"
       aria-label="Your collection"
     >
+      {/* Iteration #11 — Claim the active surface for chapter-mount
+       *  gating. Renders nothing; subscribes to mount/unmount edges. */}
+      <RoomSurfaceClaim />
       <TheRoomClientDynamic />
       {/* Focused-work plaque + ask-gallery affordance. Self-guards
        *  on focusedId; renders nothing when no work is focused. Lives

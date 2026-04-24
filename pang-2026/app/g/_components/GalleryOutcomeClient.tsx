@@ -23,6 +23,7 @@
  */
 
 import { useCallback, useState, type ReactElement } from "react";
+import { useSurfaceClaim } from "@/stores/use-surface-claim";
 
 type Phase =
   | "ready"
@@ -44,6 +45,11 @@ export function GalleryOutcomeClient({
   action,
   malformed = false,
 }: Props): ReactElement {
+  // Iteration #11 — surface claim for the gallery-side confirm /
+  // decline landing. Gallery + collector share one codebase; the
+  // surface name separates the two tenures.
+  useSurfaceClaim("gallery-confirm");
+
   const [phase, setPhase] = useState<Phase>(malformed ? "malformed" : "ready");
 
   const onSubmit = useCallback(async () => {
