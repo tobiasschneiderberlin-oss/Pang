@@ -320,3 +320,84 @@ export async function walkDispatchedOnce(): Promise<number> {
   }
   return applied;
 }
+
+// ---------- Push BroadcastChannel relay (iter #10) ---------------
+
+/**
+ * Install a listener on the `pang-verification` BroadcastChannel. The
+ * service worker posts `{ kind: "verification.outcome", ... }` events
+ * on this channel when a push arrives; we flip the store on the same
+ * tick so an open tab sees the outcome without waiting for visibility
+ * to change.
+ *
+ * The SW is the primary receiver (the notification renders regardless
+ * of whether any tab is open); the BroadcastChannel is the zero-tap
+ * path for the tab that *is* open. Without it, a collector looking at
+ * their collection when the gallery confirms would see the
+ * notification appear and the Room stay dormant — the visibility
+ * walker fires only on `visibilitychange`, not on the already-visible
+ * tick.
+ *
+ * Defence in depth: we re-fetch the outcome through `pollOutcomeOnce`
+ * before flipping the store. The BroadcastChannel payload is NOT
+ * authenticated (any script on the same origin could post to it);
+ * the server's outcome GET is the source of truth. The channel is an
+ * optimisation: it tells us *when* to poll, not *what* the outcome is.
+ */
+export function installOutcomeBroadcastListener(): () => void {
+  if (typeof window === "undefined") return () => {};
+  if (typeof BroadcastChannel === "undefined") return () => {};
+
+  const bc = new BroadcastChannel("pang-verification");
+  const handler = (ev: MessageEvent<unknown>): void => {
+    const data = ev.data;
+    if (
+      data === null ||
+      typeof data !== "object" ||
+      (data as { kind?: unknown }).kind !== "verification.outcome"
+    ) {
+      return;
+    }
+    const requestId = (data as { requestId?: unknown }).requestId;
+    const workId = (data as { workId?: unknown }).workId;
+    if (typeof requestId !== "string" || typeof workId !== "string") return;
+
+    void (async () => {
+      // Re-fetch the outcome authoritatively — the BC payload is a
+      // trigger, not a statement. `pollOutcomeOnce` applies the
+      // schema and the server auth gate, so a spoofed BC message
+      // cannot poison the store.
+      const result = await pollOutcomeOnce(requestId);
+      if (result.kind !== "outcome") return;
+      const store = useVerification.getState();
+      const current = store.byWorkId[workId];
+      if (current === undefined) return;
+      // Only flip if the store is still in a pre-terminal state —
+      // a duplicate push after the walker already folded the
+      // outcome should be a no-op.
+      if (
+        current.kind === "confirmed" ||
+        current.kind === "declined" ||
+        current.kind === "expired"
+      ) {
+        return;
+      }
+      if (result.outcome === "confirmed") {
+        store.markConfirmed(workId, result.decidedAt);
+      } else if (result.outcome === "declined") {
+        store.markDeclined(workId, result.decidedAt);
+      } else {
+        store.markExpired(workId, result.decidedAt);
+      }
+    })().catch(() => {
+      // Network errors are swallowed — the walker will pick up the
+      // outcome on the next visibility transition.
+    });
+  };
+
+  bc.addEventListener("message", handler);
+  return () => {
+    bc.removeEventListener("message", handler);
+    bc.close();
+  };
+}

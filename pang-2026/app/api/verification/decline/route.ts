@@ -26,6 +26,7 @@ import {
   SignedLinkVerifyError,
 } from "@/auth/server/signed-link";
 import type { VerificationOutcome } from "@/verification/schema";
+import { deliverOutcomePush } from "@/verification/push-deliver";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -130,6 +131,22 @@ export async function POST(request: Request): Promise<Response> {
       span.setAttribute("pang.error.kind", "outcome_write");
       span.recordException(err);
       return NextResponse.json({ error: "internal" }, { status: 500 });
+    }
+
+    // Best-effort push fan-out — same rationale as confirm. A failure
+    // never fails the outcome write; the walker is the correctness
+    // floor.
+    try {
+      const delivery = await deliverOutcomePush({
+        requestId: claims.vrid,
+        workId: claims.wid,
+        outcome: "declined",
+        decidedAt: outcome.decidedAt,
+      });
+      span.setAttribute("pang.push.delivery", delivery.kind);
+    } catch (err) {
+      span.setAttribute("pang.push.delivery", "exception");
+      span.recordException(err);
     }
 
     return NextResponse.json({ ok: true, dedup: false }, { status: 200 });

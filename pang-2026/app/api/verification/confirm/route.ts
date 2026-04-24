@@ -35,6 +35,7 @@ import {
   SignedLinkVerifyError,
 } from "@/auth/server/signed-link";
 import type { VerificationOutcome } from "@/verification/schema";
+import { deliverOutcomePush } from "@/verification/push-deliver";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -148,6 +149,24 @@ export async function POST(request: Request): Promise<Response> {
       span.setAttribute("pang.error.kind", "outcome_write");
       span.recordException(err);
       return NextResponse.json({ error: "internal" }, { status: 500 });
+    }
+
+    // Best-effort push fan-out. The outbox's /api/verification/outcome
+    // GET is the guaranteed-available rail; push is the latency
+    // optimisation. A delivery failure is logged on the span and does
+    // NOT fail the route — the collector's visibility walker will
+    // pick up the outcome next time the tab opens.
+    try {
+      const delivery = await deliverOutcomePush({
+        requestId: claims.vrid,
+        workId: claims.wid,
+        outcome: "confirmed",
+        decidedAt: outcome.decidedAt,
+      });
+      span.setAttribute("pang.push.delivery", delivery.kind);
+    } catch (err) {
+      span.setAttribute("pang.push.delivery", "exception");
+      span.recordException(err);
     }
 
     return NextResponse.json({ ok: true, dedup: false }, { status: 200 });

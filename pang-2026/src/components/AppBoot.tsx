@@ -32,6 +32,7 @@ import {
 import {
   installDispatchedVisibilityWalker,
   installOnlineDrain,
+  installOutcomeBroadcastListener,
   reconcileVerification,
   walkDispatchedOnce,
 } from "@/verification/reconcile";
@@ -102,6 +103,7 @@ export function AppBoot(): null {
     let unsubscribeVerification: (() => void) | null = null;
     let unsubscribeOnline: (() => void) | null = null;
     let unsubscribeDispatchedWalker: (() => void) | null = null;
+    let unsubscribeOutcomeBroadcast: (() => void) | null = null;
     let unsubscribeConfirmBridge: (() => void) | null = null;
     let cancelled = false;
     void (async () => {
@@ -152,6 +154,13 @@ export function AppBoot(): null {
         // that landed while the tab was closed.
         unsubscribeDispatchedWalker = installDispatchedVisibilityWalker();
         void walkDispatchedOnce().catch(() => {});
+        // Push → BroadcastChannel → store. An outcome push arriving
+        // while the tab is open flips the store on the same tick,
+        // so the Room lifts from dormant before the collector even
+        // taps the notification. The BC payload is a trigger only;
+        // `pollOutcomeOnce` re-fetches the authoritative outcome
+        // through the server's auth gate.
+        unsubscribeOutcomeBroadcast = installOutcomeBroadcastListener();
         // Verification → works bridge. On every transition of a
         // verification state into "confirmed" the bridge flips the
         // owning collection entry's status to "verified", so The
@@ -181,6 +190,7 @@ export function AppBoot(): null {
       unsubscribeVerification?.();
       unsubscribeOnline?.();
       unsubscribeDispatchedWalker?.();
+      unsubscribeOutcomeBroadcast?.();
       unsubscribeConfirmBridge?.();
       unbindPrefs();
     };
