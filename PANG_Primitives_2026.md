@@ -1466,6 +1466,190 @@ chunks
   worth a week of "it works on my device" support
   investigations. Codified 2026-04-24 from iter #10.
 
+### 59. Active-surface slice is a named primitive; claim is idempotent, release is ownership-guarded
+
+- **Forbidden default:** surface-awareness via scattered
+  evidence — the router path, the presence of an overlay DOM
+  node, prop-threaded "is this surface active?" booleans, the
+  `pang.surface` OTel dimension read by every consumer that
+  needs to gate. The default feels harmless because every
+  single consumer works in isolation, but the cumulative cost
+  is that adding a new surface-aware decision (a chapter
+  mount, a focus sticking rule, a reduced-motion clamp at
+  transition) requires touching every other consumer to stay
+  consistent. The surface concept was already everywhere;
+  what was missing was a name for it.
+- **Required primitive:** a Zustand slice
+  (`src/stores/surface.ts`) with a discriminated union of
+  surface kinds (`"room" | "scan" | "gallery-confirm" |
+  "deep-zoom" | "document" | null`). Every surface island
+  claims its slot on mount via a `useSurfaceClaim(kind)`
+  hook; the hook sets the active surface on mount and
+  releases it on unmount. The setter is idempotent (writing
+  the same surface is a no-op); the clear is ownership-
+  guarded via a `releaseIfOwner(kind)` action — a later
+  unmount of a previous owner doesn't evict a newer surface
+  that has already taken the stage. Not persisted: surface
+  is a runtime concept, and a refresh restarts at whatever
+  route the URL selects. The slice is the canonical reactive
+  read; OTel emissions (the `pang.surface` dimension)
+  continue to derive from it, so the aggregator shape stays
+  stable.
+- **Adapter path:** canonical reference:
+  `src/stores/surface.ts` + `src/stores/use-surface-claim.ts`
+  (iter #11) + five call sites: `RoomSurfaceClaim.tsx`,
+  `app/scan/page.tsx`, `app/g/_components/
+  GalleryOutcomeClient.tsx`, `DeepZoom.tsx`,
+  `DocumentViewer.tsx`. New surfaces claim at mount via
+  two lines (`useSurfaceClaim("kind")`); new consumers
+  read via `useSurface((s) => s.activeSurface)`.
+- **Enforcement:** code-review level. Signal: a new
+  surface-aware decision reaches for the router path, an
+  overlay's presence, or a prop-threaded "is this active?"
+  boolean. Replace with the slice read. The cost is zero
+  (the slice already exists); the benefit is that every
+  future surface-aware decision shares one source of truth.
+  Codified 2026-04-24 from iter #11.
+
+### 60. Per-entity UX-state latch, not a central dismissals table
+
+- **Forbidden default:** a `ux_dismissals` / `shown_hints` /
+  `onboarding_state` table (or its OPFS equivalent: a
+  `ux-state.json` keyed by composite strings like
+  `shown:<entityId>:<ceremony>`) that accumulates every
+  once-and-only-once flag the app ever grows. The default
+  looks reasonable on day one when there's a single flag; by
+  year one it is a landfill of orphan keys, dead entity IDs
+  nobody cleaned up, and composite-key schemes that nobody
+  can migrate because the lifecycle of each flag is coupled
+  to a business event the table doesn't know about.
+- **Required primitive:** a UX-state latch that the ceremony
+  gates on (chapter-shown, tip-seen, banner-displayed, once-
+  only-X) lives *as a field on the entity whose business
+  event triggered it*, not in a central table. For iter
+  #11's outcome chapter: `outcomeChapterShownAt: string |
+  null` sits on the `"confirmed"` / `"declined"` variant of
+  `VerificationState`, next to `decidedAt` and `requestId`.
+  The lifecycle is automatic: when the verification entry
+  is evicted (outbox cleanup, user-initiated removal), the
+  latch goes with it. The migration story is clean: the
+  field is optional in the persistence parser so legacy
+  records before the field existed parse as `null` and
+  replay the ceremony on next surface entry, which is the
+  correct failure mode for a short ceremony.
+- **Adapter path:** canonical reference:
+  `src/stores/verification.ts` — the `"confirmed"` and
+  `"declined"` variants both carry
+  `outcomeChapterShownAt: string | null`. The
+  `markOutcomeChapterShown(workId, shownAt)` action is
+  idempotent (a second call on an already-latched entry is
+  a no-op; StrictMode double-mount safe). `verification.
+  persist.ts` reads the field with legacy-migration posture
+  (missing → null). Generalises to any future
+  once-and-only-once UX flag on intake records, enrichment
+  records, deep-zoom entries, etc.
+- **Enforcement:** code-review level. Signal: a new
+  once-and-only-once flag reaches for a shared dismissals
+  store or a composite-keyed OPFS file. Move the flag to
+  the entity whose business event triggers the ceremony. If
+  no such entity exists, the flag probably shouldn't be a
+  latch at all — it's either a preference (lives in the
+  preferences store) or a session runtime concern (lives
+  nowhere durable). Codified 2026-04-24 from iter #11.
+
+### 61. Module-singleton ref bridges sibling imperative handles; cleanup ref-compares
+
+- **Forbidden default:** threading a `ref` or an
+  `imperativeHandle` up to the common ancestor and back
+  down to both siblings, or introducing a React context
+  provider for the single purpose of bridging one
+  per-frame imperative call between two sibling components.
+  Both defaults conflate *render graph* with *imperative
+  handle lifetime*. A per-frame write like
+  `setArrivalFactor(id, t)` has no business round-tripping
+  through React reconciliation; it's a call into an
+  imperative surface (a canvas, a media element, a worker)
+  and its home is module state.
+- **Required primitive:** a module-singleton ref
+  (`{ current: Handle | null }`) exported from a small
+  module dedicated to it. The surface that *owns* the handle
+  populates the ref on mount and clears it on unmount, with
+  a ref-compare in the cleanup: `if (handleRef.current ===
+  handle) handleRef.current = null`. The ref-compare matters
+  because StrictMode double-mounts cleanup before the second
+  mount runs — a naive clear nulls out the *next* mount's
+  handle, and every subsequent read returns null. Sibling
+  components read the ref on every frame or on demand.
+  Works because the ref is typed, the module boundary is
+  narrow, and the handle's shape is stable (methods on a
+  handle, not raw DOM nodes).
+- **Adapter path:** canonical reference:
+  `src/room/dom/roomHandleRef.tsx` + `TheRoomClient.tsx`
+  (iter #11) — `TheRoomClient` populates the ref in a
+  `useEffect` with a mount-captured handle object, the
+  cleanup ref-compares against the same handle object
+  before nulling. `OutcomeChapterMount`, a sibling on the
+  Room route, reads the ref and calls `setArrivalFactor`
+  from its RAF loop. Generalises: any two sibling
+  components that need to share an imperative handle
+  across a per-frame or high-frequency boundary.
+- **Enforcement:** code-review level. Signal: a new
+  sibling-to-sibling imperative call is about to thread a
+  `ref` through a common ancestor, or introduce a context
+  provider for one call. Use the module-singleton ref
+  pattern. The cost is one small module; the benefit is
+  one less context boundary and no render-graph coupling
+  for a per-frame write. Codified 2026-04-24 from iter #11.
+
+### 62. Skip-reason telemetry turns a failure-mode brief into pre-Laura diagnosis
+
+- **Forbidden default:** silent gates — a guard that
+  short-circuits a flow without emitting the fact that it
+  did, on the assumption that "if the gate works nothing
+  happens, and nothing is the right answer." The default
+  fails because when the gate later regresses (latch not
+  persisting, surface check firing on the wrong edge, a
+  condition no longer evaluating correctly), there is no
+  observable evidence to find from the outside — the
+  failure looks identical to "the gate is working, nothing
+  to do here." The iter #11 failure-mode brief named five
+  regression classes; each one needed a signal that was
+  distinct from absence.
+- **Required primitive:** every pre-effect gate emits a
+  telemetry span naming its skip reason. For a surface-
+  aware chapter mount: `chapter.outcome.skipped
+  { reason: "already-shown" | "surface-not-room" }` fires
+  every time the gate short-circuits the mount, with the
+  entity ID and the gate's inputs as attributes. The skip
+  span is not an error — it's the *evidence the gate fired
+  correctly*. Diagnosis works from the presence of the
+  expected skip spans (the gate is healthy) and from their
+  absence (the gate has regressed, or the ceremony is
+  failing to trigger upstream of the gate entirely). The
+  failure-mode brief's regression classes become
+  observable as distinct skip reasons; each class is
+  triaged by its own span.
+- **Adapter path:** canonical reference:
+  `src/ai/chapter/otel.ts` + `outcome-mount.ts` (iter #11)
+  — the mount hook calls `spanChapterOutcomeSkipped({
+  reason, workId, variant })` on every gate short-circuit.
+  The `reason` is a closed discriminated union
+  (`"already-shown" | "surface-not-room" | ...`), so
+  aggregators can cardinality-safe count by reason.
+  Generalises to any pre-effect gate: push-delivery gates,
+  reconcile gates, idempotency-marker gates, retry-decision
+  gates — each gate's short-circuit is a signal.
+- **Enforcement:** code-review level. Signal: a new gate
+  lands with a silent short-circuit, or a gate's existing
+  implementation returns early on a boolean without
+  emitting the reason. Add the skip span; the failure-mode
+  brief's regression classes become the closed set of skip
+  reasons. The cost is a single telemetry call; the
+  benefit is a failure mode that stops being "it didn't
+  work" and starts being "the skip span for class N fired
+  / did not fire, which points at layer M." Codified
+  2026-04-24 from iter #11.
+
 ---
 
 ## Active references

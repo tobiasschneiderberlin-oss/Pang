@@ -6710,6 +6710,320 @@ context. Iterate once or drop the failing branch.
 
 ---
 
+## Iteration #11 — findings (2026-04-24)
+
+**Status:** landed at ceiling and squash-merged as
+https://github.com/tobiasschneiderberlin-oss/Pang/pull/21 (commit
+`eea401f`). `npm run verify` clean (26/26 gates, 798/798 unit
+tests across 185 suites, 16/16 eval fixtures across intake +
+enrichment + correspondence + verification — the verification
+eval grew from 3 to 5 fixtures this iteration and still passes
+100 %). Playwright `outcome-chapter.spec.ts` 10/10 passing in
+44.2 s across the Tier-1 and reduced-motion project matrix.
+Spine moment #8 now has its ceremony: when a collector returns
+to The Room holding a freshly-confirmed work, the wall plays
+the outcome chapter (narration beat in the voice corpus register,
+place beat with emissive rise 0→1 on confirmation / dormant hold
+on decline, settle, ready, dismiss) rather than quietly
+brightening. The same renderer ships the decline variant on a
+single variant branch. Laura's hands: queued for the first
+real-device session on the merged preview.
+
+### What landed
+
+- `src/stores/surface.ts` + `src/stores/use-surface-claim.ts` —
+  named the implicit primitive that had been diffuse across the
+  app: *which surface is on stage right now.* A four-member
+  discriminated slice (`room | scan | gallery-confirm | deep-
+  zoom | document | null`), idempotent `setActiveSurface`, and
+  ownership-guarded `releaseIfOwner(kind)` so a stale-unmount
+  cleanup after a new surface has already taken the stage
+  doesn't evict the newer owner. Not persisted: surface is a
+  runtime concept, a reload restarts at whatever route the URL
+  selects. Unit-tested with 9 cases including the
+  ownership-guard branch that the previous diffuse pattern had
+  no way to express.
+- `src/components/room/RoomSurfaceClaim.tsx`, `app/scan/page.tsx`,
+  `app/g/_components/GalleryOutcomeClient.tsx`,
+  `src/components/deep-zoom/DeepZoom.tsx`,
+  `src/components/documents/DocumentViewer.tsx` — five surface
+  islands each claim their slot on mount and release it on
+  unmount via `useSurfaceClaim(kind)`. The claim is mount-time
+  (not render-time) so StrictMode double-renders don't double-
+  fire; the ownership guard handles the double-mount cleanup
+  deterministically.
+- `src/stores/verification.ts` — the `"confirmed"` and
+  `"declined"` variants gain one field:
+  `outcomeChapterShownAt: string | null`. A new action,
+  `markOutcomeChapterShown(workId, shownAt)`, is idempotent: a
+  second call with the same or different `shownAt` on an
+  already-latched entry is a no-op. Guards against StrictMode
+  double-mount of the outcome chapter attempting to latch
+  twice.
+- `src/stores/verification.persist.ts` — the confirmed/declined
+  parser case reads the optional `outcomeChapterShownAt` with
+  the correct migration posture: a v1 legacy index written
+  before iter #11 has no such field, parses as `null`, replays
+  the chapter on next Room entry. Present values are validated
+  as non-empty strings; any non-null non-string is rejected
+  rather than silently coerced. Round-trip tests cover null,
+  set, and legacy-migration shapes.
+- `src/ai/chapter/otel.ts` extended — four new outcome-variant
+  spans (`chapter.outcome.plan`, `beat_enter`, `beat_exit`,
+  `ready`, `dismiss`, `skipped`) + the RAF loop's
+  `chapter.outcome.frame_time_ms` histogram with nearest-rank
+  p50 / p95 / p99 attributes derived from delta samples across
+  the full 14 s run. Each outcome span carries
+  `pang.chapter.variant` ∈ {confirmation, decline} so the two
+  flows stay separable in the aggregator from arrival flows. The
+  existing arrival spans stay as-is; outcome spans are their
+  siblings, not their overloads.
+- `src/components/intake/OutcomeChapter.tsx` — 372 lines. Same
+  composition template as `ArrivalChapter` (RAF loop + typed
+  beat kinds + pointer-events none on Room canvas during the
+  chapter + dismiss on ready + `ariaLineForActive` for the
+  narration beat). Variant branch: confirmation drives
+  `setArrivalFactor` 0→1 over the place beat (delegating to the
+  GL material's existing rate-6 smoothing); decline omits the
+  place beat and the ramp, material reads its dormant value
+  throughout. Reduced-motion (P19) clamps the factor to 1.0 the
+  first frame inside the place beat; narration + settle + ready
+  still play under reduced-motion — the ceremony's ARIA-live
+  narration is the core, the camera / ramp is the amplifier.
+  Idempotent `ready`-beat latch: the first edge into ready
+  fires `markOutcomeChapterShown`, subsequent edges are no-ops.
+- `src/ai/chapter/outcome-mount.ts` — 340 lines. A module-
+  singleton FIFO queue + surface gate. Subscribes to
+  `useVerification` transitions into `"confirmed" | "declined"`
+  *and* `useSurface` transitions into `"room"`. Transitions
+  enqueue if another chapter is mid-play or if the surface is
+  off-Room; the head dequeues on surface entry or on dismiss,
+  with a 400 ms inter-chapter gap via `setTimeout` so the
+  spine's "and now the next one" beat is recognisable rather
+  than abrupt. Twelve unit tests lock the FIFO discipline,
+  the surface gate, the already-shown skip (seed-path
+  rehydration of a latched state), the decline variant, and
+  the gap timer. Test seams (`_wireStoresForTest`,
+  `_advanceForTest`, `_resetOutcomeMountForTest`,
+  `_peekOutcomeMountForTest`) are not exported from the
+  barrel.
+- `src/components/intake/OutcomeChapterMount.tsx` — the mount
+  point. Sibling of `TheRoomClient` on the Room route
+  (`app/page.tsx`), not a child, because its lifecycle is
+  driven by the queue not the Room's props. Reads
+  `useOutcomeChapterMount()`, renders `OutcomeChapter` with
+  the head-of-queue plan, or `null`.
+- `src/room/dom/roomHandleRef.tsx` + `TheRoomClient.tsx` — the
+  module-singleton ref bridge. `OutcomeChapterMount`, a sibling
+  of `TheRoomClient` mounted by the route (not a child),
+  reaches `setArrivalFactor` through a module-scoped ref that
+  the Room populates on mount and clears on unmount. Ref-compare
+  on cleanup so a stale StrictMode-double-mount cleanup doesn't
+  null out the *next* mount's handle. Avoids threading a
+  `ref` or an imperative-handle prop through the route's tree
+  for a single per-frame write that would thrash React if it
+  were a prop.
+- `evals/verification/run.ts` extended 3 → 5 fixtures. The two
+  new fixtures (verif-04, verif-05) fire rapid-fire with
+  `decidedAt` timestamps sharing the same second but differing
+  by 80 ms, and verify the planner keys off `workId` not
+  `decidedAt` — a bug that coalesced plans by time would show
+  up as a `workId` mismatch on one of the two. The
+  outcome-mount queue's FIFO discipline is unit-tested
+  separately; this eval locks the plan-level invariant that
+  each queued work produces an independent plan. Threshold
+  stays at 100 % (no model in the loop).
+- `e2e/outcome-chapter.spec.ts` — five DOM-level walks, each
+  run on both the Tier-1 and reduced-motion Playwright
+  projects: (1) confirmation mounts + narration + dismiss;
+  (2) decline mounts with the no-confirm narration; (3)
+  replay-guard on latched rehydration; (4) surface-gate queues
+  off-Room + Room entry flushes; (5) reduced-motion still
+  reaches ready + dismiss. Seeds via a new
+  `window.__PANG.useVerification` exposure on AppBoot (scoped
+  to `NEXT_PUBLIC_PANG_E2E=1`), calling `replaceState`
+  directly — Playwright already covers the full
+  dispatch-to-confirm round-trip in iter #10's spec; iter #11
+  focuses on the *chapter* contract.
+- `src/components/AppBoot.tsx` — `window.__PANG` now exposes
+  `useVerification` alongside `useWorks`. Kept to the minimum
+  API (the store instance itself, no setter seam) because
+  Zustand stores already carry their own `.getState()` /
+  `.setState()`.
+
+### What execution exposed
+
+Five discoveries, each with its verdict:
+
+1. **The surface concept was already everywhere; the primitive
+   was that it wasn't named.** The chapter-mount gating, the
+   focus sticking, the reduced-motion clamp at transitions, the
+   `pang.surface` OTel dimension — every one of them derived a
+   "which surface am I on?" answer from scattered evidence
+   (route, presence of overlay, prop threading). Iteration #11
+   named the implicit primitive with a Zustand slice + claim
+   hook + ownership-guarded release, and three pre-existing
+   surfaces (DeepZoom overlay, DocumentViewer, the gallery
+   confirm page) grew a two-line `useSurfaceClaim` call that
+   didn't change their behaviour but made the surface reactive
+   to code that needed to gate on it. The active-surface slice
+   is now the canonical reactive read; OTel emissions continue
+   to derive from it. Generalises: **an active-surface slice is
+   a named primitive, not an ad-hoc thing; the setter is
+   idempotent and the release is ownership-guarded.** Codified
+   as primitive 59 below.
+
+2. **Per-entity UX-state latches beat central dismissals
+   tables.** The `outcomeChapterShownAt` flag could have been a
+   field in a separate `ux-state` store or an OPFS file keyed
+   by a `shown:<workId>:<chapter>` composite. Both alternatives
+   were wrong. The flag belongs on the verification entry that
+   describes the confirmation that triggered the chapter in the
+   first place — one source of truth per business event,
+   persisted alongside the event. A central dismissals table
+   becomes a landfill over time (chapter-shown, tip-seen,
+   banner-displayed, once-only-X, once-only-Y); each entry's
+   lifecycle is coupled to the business event it shadows.
+   Generalises: **a per-entity UX-state latch is the right
+   shape for once-and-only-once ceremonies; a central dismissals
+   table is the 2018 default to resist.** Codified as primitive
+   60 below.
+
+3. **Module-singleton ref bridges are the right shape for
+   sibling-component imperative handles.** The outcome chapter
+   mount is a sibling of TheRoomClient (one is the Room, one is
+   the chapter overlay), not a child, because its lifecycle is
+   driven by the verification-store-backed queue, not the
+   Room's props. The chapter needs to drive the material's
+   emissive ramp via `setArrivalFactor`, which is an imperative
+   per-frame call on the canvas handle. Options considered:
+   (a) lift the canvas handle to the route, thread it as a prop
+   to both siblings — adds render-coupling to a per-frame
+   write; (b) broker through a third React context provider —
+   introduces a pointless boundary; (c) module-singleton ref,
+   populated by the Room on mount, ref-compared on cleanup so
+   StrictMode double-mount cleanup doesn't null out the next
+   mount's handle. Option (c) is the right one: imperative
+   handles between siblings are module state, not React state.
+   The handle is populated once per mount, read by the chapter
+   on every RAF tick, and cleared on unmount with a ref-compare
+   to handle double-mount races. Generalises: **module-
+   singleton refs bridge sibling components that share
+   imperative handles; ref-compare on cleanup is the
+   StrictMode-safe release.** Codified as primitive 61 below.
+
+4. **FIFO with an inter-chapter gap is the spine's "and now
+   the next one" rhythm.** Iteration #11's open question #1
+   ("one chapter per confirm or an omnibus?") was answered in
+   the brief, but the brief's answer of "one per, FIFO with 400
+   ms gap" only became load-bearing once the mount module was
+   actually built. Two confirmations landing during a single
+   off-Room window is possible (Laura does a bulk scan, walks
+   away, both get confirmed in short order). Without a gap, the
+   second chapter would dissolve into the first's dismiss,
+   losing the acknowledgement that each work is its own
+   moment. Without FIFO, the order would follow whichever store
+   subscription fired later, which is a race condition. The
+   singleton queue + named head pointer + 400 ms gap timer
+   (`setTimeout` with a test-seam `_advanceForTest` for
+   determinism) is the whole shape. 400 ms is a felt pause, not
+   a wait: short enough that the next chapter reads as "and
+   now the next one," long enough that the previous ceremony
+   has time to settle. Same rhythm that separates paragraphs in
+   a gallery-wall text — the air between signs. Generalises:
+   **FIFO queue with an inter-chapter gap is the one-at-a-time-
+   globally invariant for any surface that plays ceremonial
+   moments; a test seam fast-forwards the gap timer for
+   determinism.** Codified implicitly under primitive 59's
+   surface-ownership grammar; does not need its own entry
+   because it's a direct consequence of "one chapter at a
+   time" combined with "the spine has rhythm."
+
+5. **Skip-reason telemetry turns a failure-mode brief into
+   pre-Laura diagnosis.** The iter #11 brief named five
+   regression classes in its failure-mode declaration
+   (chapter replays / plays on wrong surface / plan regresses /
+   reduced-motion fails / frame-time regresses). Each one is
+   covered by a named `chapter.outcome.skipped.reason`:
+   `"already-shown"` fires on every Room entry with a latched
+   state; `"surface-not-room"` fires on any confirmed/declined
+   transition observed from an off-Room surface. The skip
+   spans are not apologies — they're the *evidence that the
+   gate fired correctly*. If the telemetry shows zero
+   skipped-already-shown events across a week of usage, the
+   latch is failing closed (chapter never plays) or the OPFS
+   persistence is broken (flag lost on reload). The failure
+   mode is diagnosed from the absence of skip events as much
+   as from their presence. Generalises: **skip-reason
+   telemetry on every pre-effect gate is the failure-mode
+   brief's observable-diagnosis contract; the skip span is
+   the fired-gate signal, not an error.** Codified as
+   primitive 62 below.
+
+### What stayed deferred
+
+Two principle-scope deferrals from the kickoff brief held
+cleanly:
+
+- **No replay-the-chapter affordance.** Holds. The latch is
+  the whole policy; replay would turn the ceremony into a
+  trophy-room surface. If a collector in a real session
+  expresses wanting to re-watch a confirmation moment, the
+  right answer is that the work's verified state is the
+  permanent acknowledgement — the chapter was the
+  transition, the verified work is the outcome.
+- **No ambient audio during the chapter.** Holds. Spatial
+  audio + haptics are opt-in per the cannot-do list; iter
+  #11 ships pure visual + narration-text + ARIA-live.
+
+One new soft deferral surfaced during the build:
+
+- **Gap-timer fast-forward exposure for integration tests
+  stays test-only.** The `_advanceForTest` seam on
+  outcome-mount is scoped to unit tests; Playwright's own
+  `waitForTimeout(500)` covers the gap in e2e. No production
+  API for "advance the queue" — the one-at-a-time invariant
+  depends on the gap being a real time wait. Named here so
+  the seam doesn't accidentally widen into a public
+  interface in a future refactor.
+
+### What comes next
+
+The spine has eight closed moments (arrival, scan, focus,
+paint, ask, enrich, deep zoom, verification round-trip) with
+the confirmation-chapter ceremony now landing on moment #8 as
+its ceremonial completion. Spine moment #9 is open and the
+next iteration picks it up. The three candidates named in
+iter #10 findings (Narrative Agent, Intake eval corpus
+expansion, Supabase wiring) all remain valid; the
+confirmation chapter does not alter their priority.
+
+- **Narrative Agent** — the fourth agent slot. The
+  paragraph-length prose that appears on a focus beat in
+  arrival chapter. Haiku-tier (primitive 55 applies); same
+  prompt architecture as Correspondence. The chapter
+  primitives (now fully cross-variant with iter #11's outcome
+  renderer) handle the mount mechanics; Narrative ships
+  purely as a new agent + its eval.
+- **Intake eval corpus expansion** — still one fixture.
+  Named by iter #4 findings, still open.
+- **Supabase wiring on a preview branch** — the filesystem-
+  backed server stand-ins have earned their keep through four
+  iterations; swap to Supabase is the promised migration.
+
+Laura's hands next. The merged preview URL is the
+right-first-look surface for iter #11. She receives a push on
+an existing dispatched work, returns to PANG, and the Room
+plays the chapter on first entry. Pass = "it felt like a
+moment, not a state change." Fail conditions are all
+instrumented (the five skip reasons + the frame-time
+histogram). If a regression surfaces on her device, the
+telemetry tells us which of the five classes fired — and the
+failure mode stops being "it didn't work" and starts being a
+diagnosable event.
+
+---
+
 ## Archived iterations
 
 The pre-reset sprint family (A1–A11, iterations #1–#13 of the old
