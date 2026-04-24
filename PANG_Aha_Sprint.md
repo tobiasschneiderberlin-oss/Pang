@@ -9275,6 +9275,60 @@ inside that window re-opens the iter as #16b.
 
 ---
 
+## Iteration #16 — findings (2026-04-24)
+
+**Status:** fix shipped as commits `1bed7ca` (brief) + `46d2cb0`
+(spec edit) on branch `claude/zen-greider-9753a7`. Two edits; no
+product changes. Pending PR and the three-consecutive-green CI gate.
+
+### What landed
+
+- **`test.setTimeout(60_000)` at the spec-file level.** The config-
+  level 30 s timeout was not enough for chromium-mobile's slower
+  hydration + first-RAF latency. 60 s is enough to carry the full
+  14 s chapter duration + mount delay + teardown, while still
+  failing fast on a genuine regression (the first failing assertion
+  exits immediately).
+
+- **Atomic `toContainText` in specs 1 and 2.** The two narration
+  assertions in `outcome-chapter-confirmation` and
+  `outcome-chapter-decline` were the exact sites the race trace
+  identified (CI trace zip `24887186158`: `toBeAttached` 4.2 s on
+  Pixel 7 emulation, `innerText` hung 3.36 s until timeout). Each
+  two-step chain replaced with a single
+  `expect(narration).toContainText(regex, { timeout: 15_000 })` call.
+  `toContainText` retries the whole (resolve + read + match)
+  combination atomically — a concurrent React unmount between the
+  two old steps can no longer strand the locator. The 15 s assertion
+  timeout covers the chromium-mobile 4.2 s attach delay plus the
+  full 5.5 s narration window (chapter-t 1500–7000 ms) with margin.
+
+- **`// iter #16:` comments above each migrated assertion.** Quote
+  the timing numbers and name the race. A future contributor who
+  sees the pattern won't revert to the two-step form on a naive
+  cleanup pass.
+
+### Codify / iterate-once / drop
+
+- **Codify (inline).** The comments in the spec are the
+  codification. No new primitive — the rule is already in the
+  Playwright best-practices canon ("avoid the two-step race"). The
+  inline comments make it observable at the exact site where the
+  race was live.
+- **Drop.** Retry-based hiding. CI `retries: 1` remains as a
+  transient-network fallback; it is not the fix for this race. The
+  principal discipline is: the first attempt must pass.
+
+### Open debts (unchanged from iter #15)
+
+- **`voice-prompt-hash` production capture** — deferred from iter #12.
+- **Tweaks title-case strings** — flagged in iter #13; dev-only.
+- **DS HTML revision** — `.pang/doctrine.md` staging has accumulated
+  P25, SettingsOverlay, primitives 71/72/73; canonical DS HTML
+  hasn't absorbed them.
+
+---
+
 ## Archived iterations
 
 The pre-reset sprint family (A1–A11, iterations #1–#13 of the old
