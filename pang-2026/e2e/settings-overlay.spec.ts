@@ -254,7 +254,21 @@ test.describe("settings-overlay-persistence — audioSpatial rehydrates", () => 
     await page.reload();
     await waitForPangWindow(page);
 
-    // Preference rehydrates.
+    // Preference rehydrates. OPFS hydration lands after AppBoot binds
+    // `__PANG` to the window, so `waitForPangWindow` returns before
+    // the store has absorbed the persisted snapshot. Poll the store
+    // until `audioSpatial` transitions to `"on"` (or the waitFor
+    // timeout trips on a real regression).
+    await page.waitForFunction(() => {
+      const w = window as unknown as {
+        __PANG?: {
+          usePreferences: {
+            getState: () => { audioSpatial: string };
+          };
+        };
+      };
+      return w.__PANG?.usePreferences.getState().audioSpatial === "on";
+    });
     const rehydrated = await page.evaluate(() => {
       const w = window as unknown as {
         __PANG: {

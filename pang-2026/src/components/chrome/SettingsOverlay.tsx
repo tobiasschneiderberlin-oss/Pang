@@ -56,6 +56,7 @@ import {
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactElement,
 } from "react";
 import { usePreferences } from "@design/preferences";
@@ -161,12 +162,23 @@ export function SettingsOverlay(): ReactElement {
       }
     };
 
-  // `hapticsSupported()` probes `navigator.vibrate`. The probe is
-  // cheap + idempotent; calling inside render is fine. iOS Safari
-  // returns false and we render a short explainer line in place of
-  // the state label; the toggle is disabled.
-  const hapticsSupport =
-    typeof navigator !== "undefined" ? hapticsSupported() : true;
+  // `hapticsSupported()` probes `navigator.vibrate`, which differs
+  // between Node (server render → false) and the browser (client
+  // render → true on Chromium, false on iOS Safari). Probing inline
+  // at render time causes a React SSR hydration mismatch that
+  // flashes the toggle from disabled to enabled on every mount +
+  // briefly yields an empty `data-state` attribute during React's
+  // reconciliation. `useSyncExternalStore` with a stable server
+  // snapshot resolves the mismatch: the SSR pass renders the
+  // optimistic "supported" state; the client mount re-subscribes
+  // and re-renders with the real probe. No mid-render state flip.
+  const hapticsSupport = useSyncExternalStore(
+    // No external changes to track — probe is idempotent after
+    // mount. Return a no-op unsubscribe.
+    () => () => {},
+    () => hapticsSupported(),
+    () => true,
+  );
 
   return (
     <>
