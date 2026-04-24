@@ -7457,11 +7457,17 @@ iterate once, then land or drop per doctrine.
 
 ## Iteration #12 — findings (2026-04-24)
 
-**Status:** landed at ceiling on branch `iter-12-voice-v1`, seven
-commits, `npm run check:gates` clean at 27 / 27 (gate count in the
+**Status:** landed at ceiling and squash-merged as
+https://github.com/tobiasschneiderberlin-oss/Pang/pull/22 (commit
+`3ecea0f`). `npm run check:gates` clean at 27 / 27 (gate count in the
 runner climbs 26 → 27 with A24; A25 is codified in the yaml and
 fixture-tested but not yet wired into the runner — the audit sweep
 that turns it green on the production surface is deferred, see below).
+`node --test` 821 / 822 passing (one A25 production-surface smoke
+skipped under `A25_FULL_SMOKE=1` gating). `npm run check:eval` 100 %
+across intake (mock) / enrichment (mock) / correspondence (mock) /
+verification (5 / 5 live). All CI checks green on the PR: PANG gates,
+Playwright e2e Tier 2, Vercel Agent Review, Vercel deploy.
 The voice layer is now mechanical: a new Claude call cannot be added
 without the seed (A24 fails at `check:gates`), the seed cannot drift
 from the `PANG_VOICE_STRINGS` bundle (`check:voice-prompt` diffs the
