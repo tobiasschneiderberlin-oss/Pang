@@ -6293,6 +6293,423 @@ business event; the observability is the diagnosis.
 
 ---
 
+## Iteration #11 — Confirmation chapter (opened 2026-04-24)
+
+**Status:** kickoff brief. Scope is **ceiling on the confirmation-
+chapter renderer** — the ceremonial completion of spine moment #8
+that iter #10 set up structurally. Iter #10 landed the round-trip
+(ask → compose → dispatch → gallery confirm → push → reconcile →
+status flips to verified → emissive lifts). What it *didn't* land is
+the chapter: when the collector returns to The Room holding a freshly-
+confirmed work, the wall should play the 14-second outcome ceremony
+(narration beat, place beat with emissive rise 0→1, settle, ready),
+not just quietly brighten. The planner is pure
+(`planConfirmationChapter(workId, decidedAt)` in `src/ai/chapter/plan.ts`),
+the voice corpus is written (`OUTCOME_NARRATION.confirmation`), the
+beat semantics are covered by the iter #10 verification eval (3/3).
+What's missing is the DOM renderer + the surface-aware mount trigger.
+The iteration also lands the *decline* chapter on the same renderer
+(silent in GL — no emissive — but the narration beat, settle, ready
+still ship so the collector has a felt moment, not a silent state
+flip).
+
+**Why now:** the iter #10 findings named this as the single soft
+deferral — "one evening, maybe two." The bridge from iter #10
+(`src/verification/confirm-bridge.ts`) flips the works-store status
+to `"verified"` on confirmation, which is what lifts the material's
+emissive on next GL tick. The bridge shipped deliberately without
+chapter wiring so iter #10 stayed structural. Landing the chapter
+now, before Narrative Agent or Supabase or Intake eval expansion,
+honours the spine's claim that *"confirmation is the moment"* —
+the moment has a shape, and the shape has a renderer, and the
+renderer is this iteration. Any iteration that ships before this
+one accrues emotional-debt against spine moment #8.
+
+**Scope:** ceiling on the outcome chapter's rendering + mount.
+
+- **OutcomeChapter renderer.** New component
+  `src/components/intake/OutcomeChapter.tsx` (sibling of
+  `ArrivalChapter.tsx`; the shared chapter primitives already handle
+  both variants). Consumes an `OutcomeChapterPlan` produced by
+  `planConfirmationChapter` or `planDeclineChapter`. Renders the
+  narration wall-caption slot (sentence case, 2 px border, no badge,
+  no tick, no "verified!" chrome — the voice line is the
+  acknowledgement), the emissive ramp (confirmation only, 0→1 over
+  the place beat, rate-6 curve via `arrivalFactor`), and the
+  dismiss affordance on `ready`. DOM over the `<canvas>` Room; same
+  composition pattern as `ArrivalChapter`. Reduced-motion collapses
+  the ramp to a single-frame step (P19); the narration + settle +
+  ready beats still play under reduced-motion — it's the camera /
+  ramp that clamps, not the ceremony.
+- **Per-work chapter-played latch.** The verification store gains
+  one field per entry: `outcomeChapterShownAt: string | null`. Set
+  to `new Date().toISOString()` the moment the chapter's `ready`
+  beat fires. Idempotent: re-entry to the Room with a non-null
+  `outcomeChapterShownAt` plays nothing. Persisted via the existing
+  OPFS-backed verification persistence (iter #4 `verification.persist.ts`)
+  — a force-quit mid-chapter loses the "played" flag and replays on
+  next entry, which is the correct failure mode (the chapter is
+  short; a once-and-only-once guarantee is neither deliverable nor
+  desirable).
+- **Surface-aware mount trigger.** A new hook
+  `useOutcomeChapterMount(workId)` in `src/ai/chapter/outcome-mount.ts`
+  observes the verification store for
+  `kind: "confirmed" | "declined"` with `outcomeChapterShownAt == null`
+  *while* the Room surface is the active surface (tracked via the
+  existing `pang.surface` OTel dimension + a `useActiveSurface()`
+  hook — iter #3 primitive). The hook queues a single chapter mount
+  per qualifying transition; the mount is the chapter component,
+  the ready beat latches the flag, the dismiss affordance removes
+  the mount. Off-Room entries (the confirmation push arrives while
+  Laura is on the scan surface) queue; the queue flushes on next
+  Room entry. FIFO if multiple confirmations landed (unlikely but
+  possible if the collector had multiple dispatched works confirmed
+  in rapid sequence; each chapter plays in the order they resolved,
+  with a 400 ms inter-chapter gap so there's a recognisable "and
+  now the next one" beat).
+- **Decline variant parity.** Same component, variant branch. No
+  emissive rise — the work stays dormant. Narration line is
+  `OUTCOME_NARRATION.decline` ("the gallery did not confirm this
+  work."). Settle + ready beats play identically to confirmation.
+  Dismiss returns to the Room. No apology chrome, no "try again"
+  affordance (iter #4 open question #3 — decline is final).
+- **Room GL — no change.** The emissive rise already wires through
+  iter #10's confirm-bridge + iter #4's `setWorkVerified`. The
+  chapter's place beat observes the same `arrivalFactor` the
+  material consumes; the chapter + scene share a hand because they
+  share the curve, not because either imports the other.
+- **Observability.** Extend `src/ai/chapter/otel.ts` with four new
+  span kinds scoped to outcome variant:
+  `chapter.outcome.plan`, `chapter.outcome.beat_enter`,
+  `chapter.outcome.beat_exit`, `chapter.outcome.ready`,
+  `chapter.outcome.dismiss`, `chapter.outcome.skipped
+  { reason: "already-shown" | "surface-not-room" }`. Each carries
+  `variant`, `workId`, `decidedAt`. The existing arrival spans
+  stay as-is; outcome spans are their siblings, not their
+  overloads.
+- **Gate uplift scope.** None. Existing gates cover the iteration.
+  Iter #10 uplifted P25 to cross-surface; the chapter renderer
+  inherits. No new gate. Count stays 48.
+
+**Stack:**
+
+- React 19 (existing). The component is a typed `.tsx` island;
+  same composition pattern as `ArrivalChapter`.
+- `src/ai/chapter/*` (existing). `planConfirmationChapter`,
+  `planDeclineChapter`, `activeBeats`, `ariaLineForActive`,
+  `arrivalFactor`, `overlayOpacity`, `isReady`, `diffActiveBeats`,
+  `findBeatByKind`. No new chapter primitives.
+- `src/stores/verification.ts` (existing, extended). One new
+  field (`outcomeChapterShownAt`) + one new action
+  (`markOutcomeChapterShown(workId, shownAt)`). Persisted via
+  existing OPFS writer.
+- `src/lib/otel/span.ts` (existing) — all new spans.
+- No new dep. No new package.
+
+**Reference:**
+
+- **`ArrivalChapter.tsx` (iter #3, shipped 2026-04-23).** The
+  literal composition template. Same slots (narration / place /
+  settle / ready / dismiss), same RAF loop, same
+  `diffActiveBeats`, same edge-event emission. The only shape
+  difference is the variant branch — decline omits the place
+  beat; confirmation's place beat is the emissive rise, not the
+  camera push.
+- **Apple Photos "for you" memory reveal (2024–2026 rev.).** A
+  single silent beat, a quiet caption, a settle. No "tap to
+  see" button — the surface is the invitation. Confirmation's
+  arrival pattern inherits this register.
+- **The arrival ceremony's own Museumsschild test.** Every line
+  in `OUTCOME_NARRATION`, every beat transition, every settle
+  must read like a small gallery-wall sign that Laura walks past
+  without interruption. The ceremony is not about the transaction;
+  it's about the work.
+- **Anti-reference:** any app that plays a celebratory sound /
+  confetti / toast / banner on a success state. The outcome
+  chapter is *silent* (no audio, no haptic — haptics are opt-in
+  per the cannot-do list) and *typographic* (the line is the
+  event).
+
+**Canvas:** DOM chrome over the existing `<canvas>` Room. No new
+canvas surface. The confirmation emissive rise is a GL change
+already wired; the chapter observes the curve, does not author it.
+
+**Failure mode (5th declaration):** five regression classes must
+be observable.
+
+- *Chapter replays on every Room entry.* The latch failed; the
+  flag didn't persist. Enforcement: the OPFS verification
+  persistence writes `outcomeChapterShownAt` synchronously on
+  the ready beat's emission (same tick as the flag mutation),
+  flushed to OPFS within 100 ms. Span
+  `chapter.outcome.skipped { reason: "already-shown", workId }`
+  fires on every subsequent Room entry — if the telemetry shows
+  zero skipped events for a returning collector, the persistence
+  path regressed. Playwright e2e: trigger chapter → ready →
+  remount Room → assert the chapter is not mounted + the
+  `already-shown` skip span fires. A second spec force-quits the
+  browser mid-chapter (before ready) and verifies the *replay*
+  fires on cold start — that's the intentional shape.
+- *Chapter plays on the wrong surface.* The mount trigger fires
+  while Laura is on the scan or focus surface. Enforcement:
+  `useOutcomeChapterMount` gates on `useActiveSurface() === "room"`
+  via a reactive subscription; a transition into Room is the
+  trigger edge, not the verification state change. Span
+  `chapter.outcome.skipped { reason: "surface-not-room" }` on
+  any confirmed state seen off-Room; `chapter.outcome.plan`
+  only fires after the Room-active check passes. Playwright e2e:
+  trigger confirmation while on `/scan`, assert skip span,
+  navigate to Room, assert plan + mount.
+- *Chapter-plan regression.* A future change to
+  `planConfirmationChapter` (total duration drift; beat sequence
+  change; missing narration source) lands without the
+  verification eval catching it. Enforcement: the iter #10
+  `evals/verification/run.ts` already covers 3 fixtures and
+  runs in CI; iter #11 extends it to 5 fixtures adding
+  (a) zero-work-id guard, (b) multi-confirmation FIFO order
+  (two planned chapters in sequence, verify inter-chapter gap +
+  beat monotonicity across the pair). The eval pass-rate stays
+  at 100 %; threshold stays at 100 % (no model in the loop —
+  regressions are deterministic, not statistical).
+- *Reduced-motion regression.* The ramp fails to clamp; the
+  emissive animates under `prefers-reduced-motion: reduce`.
+  Enforcement: the RAF loop reads `matchMedia` on mount and
+  clamps `arrivalFactor` to its final value for the place beat
+  (confirmation) or no-ops (decline, already a no-op). Unit test
+  on the clamp branch; Playwright asserts under the reduced-motion
+  project setting the chapter still paints narration + settle +
+  ready but the emissive value reads 1.0 on the first paint of
+  the place beat (no curve). P19 gate covers the static
+  assertion; the Playwright spec covers runtime.
+- *Frame-time regression under load.* The chapter's RAF loop
+  drops below 50 fps while the Room is holding WebGPU for the
+  verified material + the ambient Room lighting + the chapter's
+  DOM updates. Enforcement: the chapter emits a frame-time
+  histogram span (`chapter.outcome.frame_time_ms` with p50, p95,
+  p99 attributes, derived from the RAF delta samples across the
+  full 14 s run). The iter #3 frame-time shape is the literal
+  template — named in iter #10 findings as the right failure-mode
+  instrumentation. A regression is a widened p95 / p99 tail
+  visible in dev traces *before* it becomes a Laura-hands
+  complaint.
+
+**Gates this iteration must pass:** the 48. Load-bearing:
+
+- **P11 (OKLCH only)** — any new chrome uses existing tokens.
+- **P15 (View Transitions capability fallback)** — chapter
+  remount without `startViewTransition` still paints correctly.
+- **P19 (reduced-motion)** — the ramp clamp is the critical
+  path.
+- **P20 (ARIA)** — narration beat exposes an ARIA live region
+  (polite) via the existing `ariaLineForActive` helper.
+- **P23 (keyboard a11y)** — dismiss is Enter / Space activatable
+  on the ready beat. No focus steal during narration / settle.
+- **P25 (zero-tap review — cross-surface, iter #10 uplift)** —
+  the chapter mounts on its own; there is no "play the
+  confirmation chapter" button. The only tap in the chapter
+  is dismiss, which lives on ready.
+- **A5 (banned vocabulary)** — `OUTCOME_NARRATION` already
+  passes; no new strings land.
+- **A10 (OTel spans)** — every new `chapter.outcome.*` span
+  fires with the required attribute set.
+- **A22 (eval corpus)** — verification eval extended from 3 to
+  5 fixtures; pass-rate 100 %.
+
+**Test criteria:**
+
+1. `npm run verify` clean. Unit tests cover the
+   `useOutcomeChapterMount` latch (no replay), the surface-gate
+   (skip when not Room), the decline no-emissive branch, the
+   reduced-motion clamp, the inter-chapter gap for multi-
+   confirmation queues.
+2. The verification store's `markOutcomeChapterShown` action is
+   idempotent; a double-call with the same workId + shownAt is
+   a no-op; the OPFS persistence writes once per transition.
+3. Playwright spec `confirmation-chapter.spec.ts`: cold-start
+   with a `requested` work; simulate the gallery confirm (reuse
+   the iter #10 mint-dev + confirm route); observe the push
+   land; return to Room; assert the chapter mounts, plays the
+   narration beat, the emissive rises over the place beat, the
+   settle holds, ready + dismiss affordance appears, dismiss
+   returns to the Room with no chapter DOM. Span sequence
+   matches the expected order.
+4. Playwright spec `decline-chapter.spec.ts`: same walk, decline
+   path. Chapter mounts; narration beat plays; no emissive
+   change (the material reads its dormant value at every
+   sample); settle + ready + dismiss complete; chapter unmounts.
+5. Playwright spec `outcome-chapter-replay-guard.spec.ts`:
+   after a successful confirmation chapter play, navigate away,
+   navigate back to Room; assert the chapter does not mount;
+   `chapter.outcome.skipped { reason: "already-shown" }` fires
+   exactly once per Room entry.
+6. Playwright spec `outcome-chapter-surface-gate.spec.ts`:
+   trigger confirmation while on `/scan`; assert the chapter
+   does not mount on `/scan`; assert the skip span
+   `{ reason: "surface-not-room" }` fires; navigate to Room;
+   assert the chapter mounts on arrival.
+7. Playwright spec `outcome-chapter-reduced-motion.spec.ts`:
+   run under the reduced-motion project setting; assert the
+   emissive is at final value (1.0) on first paint of the
+   place beat; assert the narration + settle + ready beats
+   still fire in sequence; dismiss works.
+8. `check:eval:verification` — 5/5 fixtures pass, including
+   the two new ones (zero-work-id, multi-confirm FIFO).
+9. Observability: walking each flow emits the exact span set;
+   `chapter.outcome.frame_time_ms` histogram is present with
+   populated p50 / p95 / p99 attributes; dev-trace export shows
+   no frames above the 50 fps floor under the reference
+   hardware profile.
+
+**Pre-existing work this depends on:**
+
+- Iter #3's chapter primitive (planner, beats, driver, voice
+  corpus, `ArrivalChapter.tsx` composition template).
+- Iter #4's verification store + OPFS persistence. The
+  `outcomeChapterShownAt` field is a one-line addition to the
+  existing `VerificationState` union; the persistence writer
+  picks it up by default.
+- Iter #10's confirm-bridge (works store status flip) +
+  Correspondence round-trip producing a confirmed state in
+  the first place + the mint-dev seam used in Playwright.
+- Iter #10's `useActiveSurface()` hook (exposed via the
+  `AppBoot` subscription to `pang.surface` spans).
+  If the hook doesn't exist in that exact shape today, iter
+  #11 creates it — the shape is small, the iter-#3 spans
+  already carry `pang.surface` so the derivation is
+  mechanical. (Open question #3 below names this.)
+
+**Open questions (answered before execution):**
+
+1. **One chapter per confirm, or a single "here are your three
+   confirmations" omnibus when multiple land during a single
+   away-from-Room window?** One per. FIFO. Each work is its
+   own moment. An omnibus chapter would conflate two
+   acknowledgements into one wall-caption, which reads as a
+   summary rather than a ceremony. If the queue depth becomes
+   a real pain point (observability shows long queue drains
+   on frequent collectors), iteration #12 revisits — not this
+   one.
+2. **Does the dismiss affordance accept a swipe-up / swipe-down
+   gesture?** No. Tap / Enter / Space only. Swipe gestures on
+   a DOM-over-canvas chapter conflict with the Room's own
+   pinch / pan grammar. The one-tap dismiss is the whole
+   gesture surface, same as `ArrivalChapter`.
+3. **Does `useActiveSurface()` exist today or does iter #11
+   create it?** It exists conceptually via the
+   `pang.surface` OTel dimension emitted by every surface
+   component on mount. Iter #11 formalises it as a hook
+   over a Zustand slice (`src/stores/surface.ts`) — tiny
+   slice, one string, updated on route changes + on the
+   Room's own mount / unmount edges. The slice is the
+   canonical source; the OTel emissions continue to derive
+   from it. Not a new primitive so much as a named
+   crystallisation of an implicit one.
+4. **What if a confirmation lands during a scan intake
+   chapter?** Queue. Intake's arrival chapter finishes first
+   (it is also surface-aware — the Room returns after
+   intake's dismiss), then the outcome chapter fires on
+   the next Room-active edge. A Playwright spec covers the
+   sequence.
+5. **Does the chapter freeze the Room's own interactions
+   (pinch, pan, focus)?** Yes for the duration of the
+   chapter. The existing `ArrivalChapter` composition
+   already sets `pointerEvents: none` on the Room canvas
+   while the chapter is mounted; iter #11 inherits.
+6. **Is the chapter dismissable before `ready`?** No. Same
+   policy as `ArrivalChapter`. The ceremony is the
+   ceremony; early dismiss would make the confirmation
+   feel cheapened. If a collector is truly trapped
+   (bug; reduced-motion misbehaviour), the existing global
+   `ESC` → home path remains — that's a fire-escape, not
+   an affordance.
+7. **Does the chapter play if the collector disables the
+   verification push and only receives the outcome via the
+   reconciler on next app cold-start?** Yes. The trigger
+   is the verification state transition + the Room-active
+   edge, not the push event. The reconciler-sourced
+   transition is equivalent; the chapter fires on the next
+   Room entry after the store flips. This was a soft
+   question in iter #10; iter #11 answers it.
+8. **Does the decline chapter ship in iter #11 or wait for
+   a separate iter?** Ships in iter #11. Same renderer,
+   same latch, same surface gate, variant branch in the
+   component. Splitting would double the test infrastructure
+   without halving the cost of either chapter.
+9. **Narration source for the outcome chapters: existing
+   corpus or a voice refresh?** Existing. The corpus passes
+   Museumsschild, passes A5, already ran through the
+   verification eval for three iterations of review. No
+   edit in iter #11. A future PANG Voice v1 pass (spine
+   moment #9) audits all corpora in one sweep.
+
+**Out of scope (explicit):**
+
+- **New chapter variants.** Documents chapter, deep-zoom
+  chapter, etc. already exist; nothing new in this iter.
+- **Ambient audio during the chapter.** Cannot-do. Opt-in
+  spatial audio is a future iteration.
+- **Confetti / celebration / toast.** Anti-reference.
+- **"Share this confirmation" affordance.** Cannot-do —
+  PANG is not a social network; the confirmation is a
+  relationship moment with the gallery, not a post.
+- **Replay-the-chapter gesture.** The chapter plays once.
+  A "play again" affordance would turn the ceremony into a
+  trophy room.
+- **Gallery-side outcome chapter.** The gallery sees the
+  confirm page, not a ceremony. The chapter is the
+  collector's side only.
+- **Narrative Agent integration.** Narrative is the next
+  agent slot (after this iter or after Intake eval
+  expansion); iter #11 ships with the existing one-line
+  narration corpus, not a composed paragraph.
+- **Supabase wiring for the `outcomeChapterShownAt`
+  field.** OPFS client-side is sufficient; the flag is a
+  UX-state concern, not a provenance concern. Supabase
+  iteration absorbs it when it lands.
+
+**Outcome gate:** codify or iterate once. Codify targets if
+the chapter lands cleanly:
+
+- **Outcome ceremonies share one renderer, variant-branched,
+  not a renderer per variant.** Add to
+  `PANG_Primitives_2026.md` § *Chapter primitives* as a
+  clarifying clause on the existing chapter primitive. The
+  same shape will govern Narrative Agent's chapter extension
+  when it lands.
+- **Surface-aware chapter mount is the invariant, not an
+  optimisation.** Add to `PANG_Primitives_2026.md` § *State*
+  or equivalent. Chapters belong to their surface; a
+  confirmation that lands while the collector is on scan
+  waits for the Room, always. The named hook
+  (`useActiveSurface`) becomes the sanctioned gate.
+- **Chapter-played latch is a per-entity UX-state field,
+  not a global "dismissed" table.** Add to
+  `PANG_Architecture_2026.md` § *Data primitives* as a
+  clarifying clause: UX-state flags (chapter-shown, tip-
+  seen, once-only-banner-displayed) live alongside the
+  entity they describe, not in a central dismissals table
+  that becomes a catch-all over time.
+- **Frame-time histogram on every chapter's RAF loop is
+  the sanctioned rendering-regression signal.** Add to
+  `PANG_Gates.md` under P7 (INP p75) or as a clarifying
+  note under A10 (OTel). The histogram is the mechanism
+  the iter #10 findings named as the right failure-mode
+  instrumentation; this iteration lands it for the first
+  time; the next GL iteration inherits.
+
+Laura's hands: **after merge.** From an existing dispatched
+work, trigger the gallery confirm on the second phone, let
+the push land, return to her phone, open PANG, tap into the
+Room. Watch the chapter play: the line lands on the wall,
+the work's light rises, the room settles, the affordance
+appears, the tap returns her to the Room with the work now
+verified. Pass = "it felt like a moment, not a state change."
+Fail = chapter replayed / didn't play / played on the wrong
+surface / felt too long or too short / narration misread in
+context. Iterate once or drop the failing branch.
+
+---
+
 ## Archived iterations
 
 The pre-reset sprint family (A1–A11, iterations #1–#13 of the old
