@@ -75,6 +75,8 @@ import { FOCUSED_WORK_LABEL } from "@/ai/verification/voice";
 import { TWEAKS } from "@/ai/dev/voice";
 import { INVITE_LANDING_LABEL } from "@/ai/invite/voice";
 import { GALLERY_OUTCOME_PROSE } from "@/ai/gallery/voice";
+import { ROOM_MAIN_LABEL } from "@/ai/room/voice";
+import { DEEP_ZOOM_SMOKE, ROOM_SMOKE } from "@/ai/smoke/voice";
 
 // ---------- Namespaces ---------------------------------------------
 //
@@ -262,6 +264,24 @@ export const INVITE_LANDING = Object.freeze({
 
 export const GALLERY_OUTCOME = GALLERY_OUTCOME_PROSE;
 
+export const ROOM = Object.freeze({
+  /** Landmark label on The Room `<main>`. */
+  main_label: ROOM_MAIN_LABEL,
+}) satisfies Readonly<Record<"main_label", string>>;
+
+export const SMOKE = Object.freeze({
+  /** /deep-zoom-smoke surface. */
+  deep_zoom_header: DEEP_ZOOM_SMOKE.header,
+  deep_zoom_open: DEEP_ZOOM_SMOKE.open,
+  deep_zoom_close: DEEP_ZOOM_SMOKE.close,
+  deep_zoom_cycles_label: DEEP_ZOOM_SMOKE.cycles_label,
+  /** /room-smoke HUD. */
+  room_tier_label: ROOM_SMOKE.tier_label,
+  room_ready_label: ROOM_SMOKE.ready_label,
+  room_works_label: ROOM_SMOKE.works_label,
+  room_focus_label: ROOM_SMOKE.focus_label,
+}) satisfies Readonly<Record<string, string>>;
+
 export const ARIA = ARIA_ANNOUNCE;
 
 // ---------- The bundle ---------------------------------------------
@@ -286,6 +306,12 @@ export const PANG_VOICE_STRINGS = Object.freeze({
   intake: INTAKE,
   enrichment: ENRICHMENT,
   scanner: SCANNER,
+  verification: VERIFICATION,
+  dev_tweaks: DEV_TWEAKS,
+  invite_landing: INVITE_LANDING,
+  gallery_outcome: GALLERY_OUTCOME,
+  room: ROOM,
+  smoke: SMOKE,
   aria: ARIA,
 }) satisfies PangVoiceStringsShape;
 
@@ -320,6 +346,12 @@ type PangVoiceStringsShape = Readonly<{
   intake: Namespace;
   enrichment: Namespace;
   scanner: Namespace;
+  verification: Namespace;
+  dev_tweaks: Namespace;
+  invite_landing: Namespace;
+  gallery_outcome: Namespace;
+  room: Namespace;
+  smoke: Namespace;
   aria: Namespace;
 }>;
 

@@ -12,6 +12,7 @@ import { useState } from "react";
 import type { ReactElement } from "react";
 import { TheRoomCanvas } from "@/room/dom/TheRoomCanvas";
 import type { Tier, Work } from "@/room/types";
+import { ROOM_SMOKE } from "@/ai/smoke/voice";
 
 // Three stub works on the back wall. Positions in metres, Y-up,
 // back wall at z = -3. Sizes chosen to echo typical small/medium
@@ -70,10 +71,10 @@ export function RoomSmokeClient(): ReactElement {
         className="pointer-events-none absolute left-4 top-4 font-mono text-xs text-ink"
         data-smoke-hud
       >
-        <div>tier: {tier}</div>
-        <div>ready: {ready ? "yes" : "no"}</div>
-        <div>works: {STUB_WORKS.length}</div>
-        <div>focus: {focus ?? "(none)"}</div>
+        <div>{ROOM_SMOKE.tier_label} {tier}</div>
+        <div>{ROOM_SMOKE.ready_label} {ready ? "yes" : "no"}</div>
+        <div>{ROOM_SMOKE.works_label} {STUB_WORKS.length}</div>
+        <div>{ROOM_SMOKE.focus_label} {focus ?? "(none)"}</div>
       </div>
     </div>
   );

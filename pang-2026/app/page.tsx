@@ -32,12 +32,13 @@ import { EnrichmentPanel } from "@/components/enrichment/EnrichmentPanel";
 import { DeepZoomOverlay } from "@/components/deep-zoom/DeepZoomOverlay";
 import { RoomSurfaceClaim } from "@/components/room/RoomSurfaceClaim";
 import { OutcomeChapterMount } from "@/components/intake/OutcomeChapterMount";
+import { ROOM_MAIN_LABEL } from "@/ai/room/voice";
 
 export default function TheRoom(): ReactElement {
   return (
     <main
       className="relative h-dvh w-full bg-paper"
-      aria-label="Your collection"
+      aria-label={ROOM_MAIN_LABEL}
     >
       {/* Iteration #11 — Claim the active surface for chapter-mount
        *  gating. Renders nothing; subscribes to mount/unmount edges. */}
