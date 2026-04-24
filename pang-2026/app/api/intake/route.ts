@@ -29,6 +29,7 @@ import {
   withOtelSpan,
 } from "@/ai/agents/_shared";
 import { brand } from "@/ai/camel/trust";
+import { requireSession, UnauthenticatedError } from "@/auth/server/session";
 
 export const runtime = "nodejs";
 // Route-level headers — the route handler echoes POST-only with a
@@ -40,6 +41,18 @@ export async function POST(request: Request): Promise<Response> {
   return withOtelSpan("pang.api.intake", async (span) => {
     span.setAttribute("http.method", "POST");
     span.setAttribute("http.route", "/api/intake");
+
+    // Auth gate (iter #9). 401 with zero body — no enumeration crumb.
+    try {
+      const session = await requireSession();
+      span.setAttribute("pang.auth.user_id", session.userId);
+    } catch (err) {
+      if (err instanceof UnauthenticatedError) {
+        span.setAttribute("pang.auth.fail_reason", err.reason);
+        return new Response(null, { status: 401 });
+      }
+      throw err;
+    }
 
     if (!process.env["ANTHROPIC_API_KEY"]) {
       span.setAttribute("pang.error.kind", "missing_api_key");

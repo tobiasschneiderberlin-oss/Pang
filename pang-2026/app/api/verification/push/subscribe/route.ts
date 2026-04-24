@@ -33,6 +33,7 @@ import {
   type PushSubscribeAck,
   type PushSubscribePayload,
 } from "@/push/schema";
+import { requireSession, UnauthenticatedError } from "@/auth/server/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,6 +51,20 @@ export async function POST(request: Request): Promise<Response> {
         "http.route",
         "/api/verification/push/subscribe",
       );
+
+      // Auth gate (iter #9). Subscriptions are per-collector; a
+      // missing session means the browser forgot the cookie or the
+      // collector signed out — either way this is 401, no body.
+      try {
+        const session = await requireSession();
+        span.setAttribute("pang.auth.user_id", session.userId);
+      } catch (err) {
+        if (err instanceof UnauthenticatedError) {
+          span.setAttribute("pang.auth.fail_reason", err.reason);
+          return new Response(null, { status: 401 });
+        }
+        throw err;
+      }
 
       let bodyText: string;
       try {

@@ -58,6 +58,7 @@ import {
   VoiceViolation,
 } from "@/ai/camel/sanitize";
 import { requestAckEvent } from "@/verification/otel";
+import { requireSession, UnauthenticatedError } from "@/auth/server/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -79,6 +80,18 @@ export async function POST(request: Request): Promise<Response> {
     span.setAttribute("http.method", "POST");
     span.setAttribute("http.route", "/api/verification/request");
     const startedAt = performance.now();
+
+    // Auth gate (iter #9).
+    try {
+      const session = await requireSession();
+      span.setAttribute("pang.auth.user_id", session.userId);
+    } catch (err) {
+      if (err instanceof UnauthenticatedError) {
+        span.setAttribute("pang.auth.fail_reason", err.reason);
+        return new Response(null, { status: 401 });
+      }
+      throw err;
+    }
 
     // Body size gate — read as text to measure before parsing.
     let bodyText: string;

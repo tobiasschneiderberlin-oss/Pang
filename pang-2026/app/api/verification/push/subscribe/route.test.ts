@@ -9,18 +9,27 @@
  *   - 400 on a schema miss.
  *   - 400 on invalid JSON.
  *   - 413 on an oversized body.
+ *   - Iter #9 auth gate — 401 empty when no session cookie.
  *
  * The route writes to `.pang/push-subs/<requestId>.json`. Tests
  * clean up their artefacts.
+ *
+ * Iter #9: same `next/headers` mock + session-seed pattern as the
+ * sibling `request/route.test.ts` file.
  */
 
-import { describe, it, after } from "node:test";
+import { describe, it, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { POST } from "./route";
+import { installNextHeadersMock } from "@/test/next-headers-mock";
+import { seedSession } from "@/test/seed-session";
+import { __resetAuthStoresForTests } from "@/auth/server/store";
 import { newRequestId } from "@/verification/schema";
 import type { PushSubscribePayload } from "@/push/schema";
+
+const jar = installNextHeadersMock();
+const { POST } = await import("./route");
 
 const PUSH_SUBS_DIR = path.resolve(process.cwd(), ".pang", "push-subs");
 
@@ -59,13 +68,37 @@ function rememberFile(requestId: string): void {
   createdFiles.push(path.join(PUSH_SUBS_DIR, `${requestId}.json`));
 }
 
+before(async () => {
+  await __resetAuthStoresForTests();
+  await seedSession(jar);
+});
+
 after(async () => {
   for (const file of createdFiles) {
     await fs.rm(file, { force: true });
   }
 });
 
+// ---------- Auth gate (iter #9) -----------------------------------
+
+describe("POST /api/verification/push/subscribe — auth gate", () => {
+  it("returns 401 with empty body when the session cookie is missing", async () => {
+    jar.clear();
+    const res = await POST(makeRequest(validBody()));
+    assert.equal(res.status, 401);
+    const text = await res.text();
+    assert.equal(text, "");
+    await seedSession(jar);
+  });
+});
+
 describe("POST /api/verification/push/subscribe — happy path", () => {
+  beforeEach(async () => {
+    if (!jar.has("pang_session")) {
+      await seedSession(jar);
+    }
+  });
+
   it("stores a valid subscription and returns a stored ack", async () => {
     const body = validBody();
     rememberFile(body.requestId);
@@ -92,6 +125,12 @@ describe("POST /api/verification/push/subscribe — happy path", () => {
 });
 
 describe("POST /api/verification/push/subscribe — idempotency", () => {
+  beforeEach(async () => {
+    if (!jar.has("pang_session")) {
+      await seedSession(jar);
+    }
+  });
+
   it("returns the original storedAt on a repeat POST of the same requestId", async () => {
     const body = validBody();
     rememberFile(body.requestId);
@@ -108,6 +147,12 @@ describe("POST /api/verification/push/subscribe — idempotency", () => {
 });
 
 describe("POST /api/verification/push/subscribe — rejections", () => {
+  beforeEach(async () => {
+    if (!jar.has("pang_session")) {
+      await seedSession(jar);
+    }
+  });
+
   it("returns 400 on invalid JSON", async () => {
     const res = await POST(makeRequest("{not json"));
     assert.equal(res.status, 400);
