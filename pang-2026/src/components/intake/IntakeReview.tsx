@@ -20,6 +20,16 @@ import { useReducer, type ReactElement } from "react";
 import type { IntakeOutput } from "@/ai/tools/artwork";
 import { Confidence } from "./Confidence";
 import { Diff } from "./Diff";
+import {
+  FIELD_LABELS,
+  INTAKE_ADD_TO_WALL,
+  INTAKE_EDIT_YEAR_LABEL,
+  INTAKE_HEADER_SUBTITLE,
+  INTAKE_RESHOOT,
+  INTAKE_REVIEW_LABEL,
+  INTAKE_YEAR_LABEL,
+  editLabelFor,
+} from "@/ai/intake/voice";
 
 export interface IntakeReviewProps {
   readonly output: IntakeOutput;
@@ -82,7 +92,7 @@ export function IntakeReview(props: IntakeReviewProps): ReactElement {
   return (
     <main
       className="flex min-h-dvh flex-col gap-8 bg-paper p-8 text-ink"
-      aria-label="intake review"
+      aria-label={INTAKE_REVIEW_LABEL}
       // Named for View Transitions (Primitive §3). The arrival
       // chapter animates this frame into the wall.
       style={{ viewTransitionName: "intake-frame" }}
@@ -91,7 +101,7 @@ export function IntakeReview(props: IntakeReviewProps): ReactElement {
           the review. Voice: Museumsschild test. */}
       <header className="flex flex-col gap-2">
         <span className="text-xs uppercase tracking-wide text-ink-ai">
-          the work
+          {INTAKE_HEADER_SUBTITLE}
         </span>
         <p className="max-w-2xl text-lg text-ink" data-pang-source="ai">
           {current.arrivalLine}
@@ -100,7 +110,7 @@ export function IntakeReview(props: IntakeReviewProps): ReactElement {
 
       <section className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <FieldRow
-          label="artist"
+          field="artist"
           editing={state.editing.has("artist")}
           previous={original.artwork.artist}
           current={current.artwork.artist}
@@ -109,7 +119,7 @@ export function IntakeReview(props: IntakeReviewProps): ReactElement {
           onChange={(v) => dispatch({ type: "set", field: "artist", value: v })}
         />
         <FieldRow
-          label="title"
+          field="title"
           editing={state.editing.has("title")}
           previous={original.artwork.title}
           current={current.artwork.title}
@@ -118,7 +128,7 @@ export function IntakeReview(props: IntakeReviewProps): ReactElement {
           onChange={(v) => dispatch({ type: "set", field: "title", value: v })}
         />
         <FieldRow
-          label="medium"
+          field="medium"
           editing={state.editing.has("medium")}
           previous={original.artwork.medium}
           current={current.artwork.medium}
@@ -161,18 +171,18 @@ export function IntakeReview(props: IntakeReviewProps): ReactElement {
           type="button"
           onClick={props.onReshoot}
           className="border border-ink-ai px-6 py-3 text-ink-ai"
-          aria-label="reshoot"
+          aria-label={INTAKE_RESHOOT.label}
         >
-          reshoot
+          {INTAKE_RESHOOT.action}
         </button>
         <button
           type="button"
           onClick={() => props.onAddToWall(current)}
           className="border border-ink bg-ink px-8 py-3 text-paper"
-          aria-label="add to wall"
+          aria-label={INTAKE_ADD_TO_WALL.label}
           style={{ viewTransitionName: "add-to-wall" }}
         >
-          add to wall
+          {INTAKE_ADD_TO_WALL.action}
         </button>
       </footer>
     </main>
@@ -181,8 +191,10 @@ export function IntakeReview(props: IntakeReviewProps): ReactElement {
 
 // ---------- Row components ---------------------------------------
 
+type FieldKind = "artist" | "title" | "medium";
+
 interface FieldRowProps {
-  readonly label: string;
+  readonly field: FieldKind;
   readonly editing: boolean;
   readonly previous: string | null;
   readonly current: string | null;
@@ -192,11 +204,12 @@ interface FieldRowProps {
 }
 
 function FieldRow(props: FieldRowProps): ReactElement {
+  const label = FIELD_LABELS[props.field];
   if (props.editing) {
     return (
       <label className="flex flex-col gap-1">
         <span className="text-xs uppercase tracking-wide text-ink-ai">
-          {props.label}
+          {label}
         </span>
         <input
           type="text"
@@ -205,7 +218,7 @@ function FieldRow(props: FieldRowProps): ReactElement {
           onBlur={props.onToggle}
           autoFocus
           className="border-b border-ink bg-transparent py-1 text-ink outline-none"
-          aria-label={props.label}
+          aria-label={FIELD_LABELS[props.field]}
         />
       </label>
     );
@@ -217,18 +230,18 @@ function FieldRow(props: FieldRowProps): ReactElement {
       type="button"
       onClick={props.onToggle}
       className="flex flex-col gap-1 text-left"
-      aria-label={`edit ${props.label}`}
+      aria-label={editLabelFor(FIELD_LABELS[props.field])}
     >
       {changed ? (
         <Diff
-          label={props.label}
+          label={label}
           previous={props.previous}
           next={props.current}
         />
       ) : (
         <Confidence
           source="ai"
-          label={props.label}
+          label={label}
           score={props.confidence}
         >
           {props.current ?? "—"}
@@ -252,7 +265,7 @@ function YearRow(props: YearRowProps): ReactElement {
     return (
       <label className="flex flex-col gap-1">
         <span className="text-xs uppercase tracking-wide text-ink-ai">
-          year
+          {INTAKE_YEAR_LABEL}
         </span>
         <input
           type="number"
@@ -265,7 +278,7 @@ function YearRow(props: YearRowProps): ReactElement {
           autoFocus
           inputMode="numeric"
           className="border-b border-ink bg-transparent py-1 text-ink outline-none"
-          aria-label="year"
+          aria-label={INTAKE_YEAR_LABEL}
         />
       </label>
     );
@@ -276,16 +289,16 @@ function YearRow(props: YearRowProps): ReactElement {
       type="button"
       onClick={props.onToggle}
       className="flex flex-col gap-1 text-left"
-      aria-label="edit year"
+      aria-label={INTAKE_EDIT_YEAR_LABEL}
     >
       {changed ? (
         <Diff
-          label="year"
+          label={INTAKE_YEAR_LABEL}
           previous={props.previous !== null ? String(props.previous) : null}
           next={props.current !== null ? String(props.current) : null}
         />
       ) : (
-        <Confidence source="ai" label="year" score={props.confidence}>
+        <Confidence source="ai" label={INTAKE_YEAR_LABEL} score={props.confidence}>
           {props.current !== null ? props.current : "—"}
         </Confidence>
       )}

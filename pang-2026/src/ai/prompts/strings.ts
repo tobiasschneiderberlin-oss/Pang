@@ -53,6 +53,24 @@ import {
   OUTCOME_SURFACE_LABEL,
   SURFACE_LABEL,
 } from "@/ai/chapter/voice";
+import {
+  DIFF_LABELS,
+  FIELD_LABELS,
+  INTAKE_ADD_TO_WALL,
+  INTAKE_EDIT_YEAR_LABEL,
+  INTAKE_HEADER_SUBTITLE,
+  INTAKE_RESHOOT,
+  INTAKE_REVIEW_LABEL,
+  INTAKE_YEAR_LABEL,
+  SCAN_STAGE,
+  editLabelFor,
+} from "@/ai/intake/voice";
+import { ENRICHMENT_PANEL_LABEL } from "@/ai/enrichment/voice";
+import {
+  CAPTURE_LABEL,
+  TORCH_TOGGLE,
+  VIEWFINDER_LABEL,
+} from "@/ai/scanner/voice";
 
 // ---------- Namespaces ---------------------------------------------
 //
@@ -180,6 +198,52 @@ export const CHAPTER_CHROME = Object.freeze({
   bullet: BULLET_SEPARATOR,
 }) satisfies Readonly<Record<"bullet", string>>;
 
+export const INTAKE = Object.freeze({
+  /** Landmark label for the intake review `<main>`. */
+  review_label: INTAKE_REVIEW_LABEL,
+  /** Subtitle above the P-LLM arrival line. */
+  header_subtitle: INTAKE_HEADER_SUBTITLE,
+  /** Reshoot button — same text / aria-label pair. */
+  reshoot_label: INTAKE_RESHOOT.label,
+  reshoot_action: INTAKE_RESHOOT.action,
+  /** Add-to-wall button — same text / aria-label pair. */
+  add_to_wall_label: INTAKE_ADD_TO_WALL.label,
+  add_to_wall_action: INTAKE_ADD_TO_WALL.action,
+  /** Year-row slots. */
+  year_label: INTAKE_YEAR_LABEL,
+  edit_year_label: INTAKE_EDIT_YEAR_LABEL,
+  /** `edit ${label}` helper. */
+  edit_label_for: editLabelFor,
+  /** Artwork field labels. */
+  field_artist: FIELD_LABELS.artist,
+  field_title: FIELD_LABELS.title,
+  field_medium: FIELD_LABELS.medium,
+  field_year: FIELD_LABELS.year,
+  /** `<Diff>` a11y labels. */
+  diff_previous: DIFF_LABELS.previous,
+  diff_current: DIFF_LABELS.current,
+  /** `/scan` stage chrome. */
+  scan_reading_label: SCAN_STAGE.reading_label,
+  scan_reading_text: SCAN_STAGE.reading_text,
+  scan_failed_label: SCAN_STAGE.failed_label,
+  scan_failed_reshoot: SCAN_STAGE.failed_reshoot,
+}) satisfies Readonly<Record<string, string | ((label: string) => string)>>;
+
+export const ENRICHMENT = Object.freeze({
+  /** Landmark label for the enrichment panel. */
+  panel_label: ENRICHMENT_PANEL_LABEL,
+}) satisfies Readonly<Record<"panel_label", string>>;
+
+export const SCANNER = Object.freeze({
+  /** Viewfinder canvas landmark. */
+  viewfinder_label: VIEWFINDER_LABEL,
+  /** Manual-capture button. */
+  capture_label: CAPTURE_LABEL,
+  /** Torch toggle (text + aria-label shared). */
+  torch_on: TORCH_TOGGLE.on,
+  torch_off: TORCH_TOGGLE.off,
+}) satisfies Readonly<Record<string, string>>;
+
 export const ARIA = ARIA_ANNOUNCE;
 
 // ---------- The bundle ---------------------------------------------
@@ -201,6 +265,9 @@ export const PANG_VOICE_STRINGS = Object.freeze({
   documents: DOCUMENTS,
   deep_zoom: DEEP_ZOOM,
   chapter_chrome: CHAPTER_CHROME,
+  intake: INTAKE,
+  enrichment: ENRICHMENT,
+  scanner: SCANNER,
   aria: ARIA,
 }) satisfies PangVoiceStringsShape;
 
@@ -232,6 +299,9 @@ type PangVoiceStringsShape = Readonly<{
   documents: Namespace;
   deep_zoom: Namespace;
   chapter_chrome: Namespace;
+  intake: Namespace;
+  enrichment: Namespace;
+  scanner: Namespace;
   aria: Namespace;
 }>;
 
