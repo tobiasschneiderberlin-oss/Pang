@@ -35,6 +35,7 @@ import {
   reconcileVerification,
   walkDispatchedOnce,
 } from "@/verification/reconcile";
+import { installConfirmBridge } from "@/verification/confirm-bridge";
 import { registerServiceWorker } from "@/sw/register";
 import { detectCapabilityTier } from "@/auth/tier";
 import {
@@ -101,6 +102,7 @@ export function AppBoot(): null {
     let unsubscribeVerification: (() => void) | null = null;
     let unsubscribeOnline: (() => void) | null = null;
     let unsubscribeDispatchedWalker: (() => void) | null = null;
+    let unsubscribeConfirmBridge: (() => void) | null = null;
     let cancelled = false;
     void (async () => {
       try {
@@ -150,6 +152,15 @@ export function AppBoot(): null {
         // that landed while the tab was closed.
         unsubscribeDispatchedWalker = installDispatchedVisibilityWalker();
         void walkDispatchedOnce().catch(() => {});
+        // Verification → works bridge. On every transition of a
+        // verification state into "confirmed" the bridge flips the
+        // owning collection entry's status to "verified", so The
+        // Room's emissive lifts from dormant to verified-rest on
+        // the same tick the gallery answers. Installs after
+        // hydration so the subscription observes real transitions
+        // (a fresh install sees an already-confirmed snapshot as
+        // current, not a change event).
+        unsubscribeConfirmBridge = installConfirmBridge();
       } catch (err) {
         reportFailure({
           errorKey: "persist/bootstrap",
@@ -170,6 +181,7 @@ export function AppBoot(): null {
       unsubscribeVerification?.();
       unsubscribeOnline?.();
       unsubscribeDispatchedWalker?.();
+      unsubscribeConfirmBridge?.();
       unbindPrefs();
     };
   }, []);
