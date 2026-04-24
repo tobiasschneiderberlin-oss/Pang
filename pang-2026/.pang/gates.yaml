@@ -423,3 +423,10 @@ gates:
     folder: src/ai/agents/
     auto: true
     fails_when: "Any client.messages.create on the P-LLM path whose `system` arg does not resolve to PANG_VOICE_SYSTEM_PROMPT (direct identifier, or the first entry's text in a system array). CaMeL Q-LLM sites — identifiers whose name ends in QUARANTINED_SYSTEM_PROMPT — are exempt. A4 checks the file; A24 checks the call site."
+
+  - id: A25
+    name: Corpus discipline
+    family: voice_authoring
+    folder: src/components/, app/
+    auto: true
+    fails_when: "Any JsxText node or JsxAttribute (title | aria-label | placeholder | alt) whose value is a string literal, a template with prose in its quasis, or a non-corpus identifier. Corpus modules match src/**/{voice,strings,corpus}*.ts or re-export through PANG_VOICE_STRINGS (src/ai/prompts/strings.ts)."

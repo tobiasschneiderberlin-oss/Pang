@@ -54,6 +54,7 @@
     "node_modules",
     ".next",
     "out",
-    "scripts/__fixtures__"
+    "scripts/__fixtures__",
+    "tests/fixtures"
   ]
 }
