@@ -147,6 +147,10 @@ async function main(): Promise<void> {
     "src/ai/camel/sanitize.ts",
     "src/ai/prompts/voice.ts",
     "src/ai/prompts/intake.ts",
+    // Iteration #14 — the narrative prompt quotes evaluative + marketing
+    // vocabulary in its "never write these words" list; the strings
+    // under audit are instructions to the P-LLM, not UI copy.
+    "src/ai/prompts/narrative.ts",
     // Test fixtures that contain the ban list as data to assert
     // against — the strings are the vocabulary under review, not
     // UI copy.

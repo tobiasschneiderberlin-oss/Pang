@@ -29,8 +29,11 @@
     "eval:enrichment:mock": "PANG_EVAL_MOCK=1 tsx evals/enrichment/run.ts",
     "eval:correspondence": "tsx evals/correspondence/run.ts",
     "eval:correspondence:mock": "PANG_EVAL_MOCK=1 tsx evals/correspondence/run.ts",
+    "eval:narrative": "tsx evals/narrative/run.ts",
+    "eval:narrative:mock": "PANG_EVAL_MOCK=1 tsx evals/narrative/run.ts",
+    "narrative:tick": "tsx scripts/narrative-tick.ts",
     "eval:verification": "tsx evals/verification/run.ts",
-    "check:eval": "npm run eval:intake:mock && npm run eval:enrichment:mock && npm run eval:correspondence:mock && npm run eval:verification",
+    "check:eval": "npm run eval:intake:mock && npm run eval:enrichment:mock && npm run eval:correspondence:mock && npm run eval:narrative:mock && npm run eval:verification",
     "verify": "npm run typecheck && npm run lint && npm run check:manifest && npm run check:strings && npm run check:voice-prompt && npm run check:gates && npm run check:eval",
     "setup:hooks": "git -C .. config core.hooksPath pang-2026/scripts/git-hooks && echo 'pre-push hook wired. Skip with: git push --no-verify'"
   },
