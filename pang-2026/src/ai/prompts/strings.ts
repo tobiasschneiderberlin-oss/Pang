@@ -71,6 +71,10 @@ import {
   TORCH_TOGGLE,
   VIEWFINDER_LABEL,
 } from "@/ai/scanner/voice";
+import { FOCUSED_WORK_LABEL } from "@/ai/verification/voice";
+import { TWEAKS } from "@/ai/dev/voice";
+import { INVITE_LANDING_LABEL } from "@/ai/invite/voice";
+import { GALLERY_OUTCOME_PROSE } from "@/ai/gallery/voice";
 
 // ---------- Namespaces ---------------------------------------------
 //
@@ -243,6 +247,20 @@ export const SCANNER = Object.freeze({
   torch_on: TORCH_TOGGLE.on,
   torch_off: TORCH_TOGGLE.off,
 }) satisfies Readonly<Record<string, string>>;
+
+export const VERIFICATION = Object.freeze({
+  /** Landmark label on the focused-work panel. */
+  focused_work_label: FOCUSED_WORK_LABEL,
+}) satisfies Readonly<Record<"focused_work_label", string>>;
+
+export const DEV_TWEAKS = TWEAKS;
+
+export const INVITE_LANDING = Object.freeze({
+  /** Landmark label on the invite `<main>`. */
+  label: INVITE_LANDING_LABEL,
+}) satisfies Readonly<Record<"label", string>>;
+
+export const GALLERY_OUTCOME = GALLERY_OUTCOME_PROSE;
 
 export const ARIA = ARIA_ANNOUNCE;
 

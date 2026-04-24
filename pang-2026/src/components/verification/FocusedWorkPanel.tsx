@@ -23,6 +23,7 @@
 import type { ReactElement } from "react";
 import { useWorks, type CollectionEntry } from "@/stores/works";
 import { AskGallery } from "./AskGallery";
+import { FOCUSED_WORK_LABEL } from "@/ai/verification/voice";
 
 export function FocusedWorkPanel(): ReactElement | null {
   const focusedId = useWorks((s) => s.focusedId);
@@ -43,7 +44,7 @@ function Panel(props: { readonly entry: CollectionEntry }): ReactElement {
     <aside
       className="pointer-events-auto absolute bottom-8 left-8 flex max-w-sm flex-col gap-3 bg-paper p-4"
       style={{ borderRadius: 0 }}
-      aria-label="focused work"
+      aria-label={FOCUSED_WORK_LABEL}
     >
       {(artist || title) && (
         <div className="flex flex-col">
