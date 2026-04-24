@@ -408,6 +408,14 @@ async function p10(): Promise<GateResult> {
     "app/api/auth/session/route.ts",
     "app/api/auth/logout/route.ts",
     "app/api/auth/e2e-seam/route.ts",
+    // Gallery-facing verification routes (iter #10). The gallery is
+    // anonymous; the signed link (audience=gallery-confirm /
+    // gallery-decline) IS the auth and the routes verify it via
+    // `verifySignedLink` before any state mutation. A collector
+    // session is not applicable — the registrar clicking from an
+    // email has no PANG account.
+    "app/api/verification/confirm/route.ts",
+    "app/api/verification/decline/route.ts",
   ];
   const allowSet = new Set(ALLOWLIST);
   const apiFiles = await walkRepoFiles(["app/api"], ["ts", "tsx"]);

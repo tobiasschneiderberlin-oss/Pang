@@ -114,7 +114,7 @@ export const correspondenceTool: Anthropic.Tool = {
       bannedVocabularyDetected: {
         type: "boolean",
         description:
-          "Set true if you drifted into banned vocabulary (dive, unlock, seamless, leverage, journey, etc.). The runner rejects and retries.",
+          "Set true if any marketing-register word from the A5 ban list slipped into subject or body. The runner rejects and retries.",
       },
     },
     required: ["subject", "body", "bannedVocabularyDetected"],
