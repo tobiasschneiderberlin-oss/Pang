@@ -58,13 +58,28 @@ describe("serialiseIndex + parseIndex round-trip", () => {
     assert.deepEqual(parsed.entries, input);
   });
 
-  it("round-trips a 'confirmed' entry", () => {
+  it("round-trips a 'confirmed' entry (with latch null)", () => {
     const input: Record<string, VerificationState> = {
       "w-a": {
         kind: "confirmed",
         requestId: "req-1",
         submittedAt: "2026-04-23T10:00:00.000Z",
         decidedAt: "2026-04-24T10:00:00.000Z",
+        outcomeChapterShownAt: null,
+      },
+    };
+    const parsed = parseIndex(serialiseIndex(input));
+    assert.deepEqual(parsed.entries, input);
+  });
+
+  it("round-trips a 'confirmed' entry with outcomeChapterShownAt set", () => {
+    const input: Record<string, VerificationState> = {
+      "w-a": {
+        kind: "confirmed",
+        requestId: "req-1",
+        submittedAt: "2026-04-23T10:00:00.000Z",
+        decidedAt: "2026-04-24T10:00:00.000Z",
+        outcomeChapterShownAt: "2026-04-24T10:00:14.000Z",
       },
     };
     const parsed = parseIndex(serialiseIndex(input));
@@ -78,10 +93,35 @@ describe("serialiseIndex + parseIndex round-trip", () => {
         requestId: "req-1",
         submittedAt: "2026-04-23T10:00:00.000Z",
         decidedAt: "2026-04-24T10:00:00.000Z",
+        outcomeChapterShownAt: null,
       },
     };
     const parsed = parseIndex(serialiseIndex(input));
     assert.deepEqual(parsed.entries, input);
+  });
+
+  it("parses a legacy 'confirmed' entry without outcomeChapterShownAt (migration)", () => {
+    // A v1 index written before iter #11 has no latch field. The
+    // parser defaults to `null`, which replays the chapter on next
+    // Room entry — the correct migration posture.
+    const legacyText = JSON.stringify({
+      version: "v1",
+      entries: {
+        "w-a": {
+          kind: "confirmed",
+          requestId: "req-1",
+          submittedAt: "2026-04-23T10:00:00.000Z",
+          decidedAt: "2026-04-24T10:00:00.000Z",
+        },
+      },
+    });
+    const parsed = parseIndex(legacyText);
+    const entry = parsed.entries["w-a"];
+    assert.ok(entry);
+    assert.equal(entry.kind, "confirmed");
+    if (entry.kind === "confirmed") {
+      assert.equal(entry.outcomeChapterShownAt, null);
+    }
   });
 
   it("round-trips a 'failed' entry", () => {
@@ -109,6 +149,7 @@ describe("serialiseIndex + parseIndex round-trip", () => {
         requestId: "req-b",
         submittedAt: "2026-04-22T10:00:00.000Z",
         decidedAt: "2026-04-23T10:00:00.000Z",
+        outcomeChapterShownAt: null,
       },
       "w-c": { kind: "none" },
     };

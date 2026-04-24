@@ -73,6 +73,7 @@ describe("confirm-bridge — flips status on confirmed", () => {
       requestId: "r-2",
       submittedAt: "2026-04-23T10:00:00.000Z",
       decidedAt: "2026-04-23T11:00:00.000Z",
+      outcomeChapterShownAt: null,
     });
 
     const entry = useWorks
@@ -95,6 +96,7 @@ describe("confirm-bridge — idempotency", () => {
       requestId: "r-3",
       submittedAt: "2026-04-23T10:00:00.000Z",
       decidedAt: "2026-04-23T11:00:00.000Z",
+      outcomeChapterShownAt: null,
     });
     const after1 = flipCount;
 
@@ -105,6 +107,7 @@ describe("confirm-bridge — idempotency", () => {
       requestId: "r-3",
       submittedAt: "2026-04-23T10:00:00.000Z",
       decidedAt: "2026-04-23T11:00:00.000Z",
+      outcomeChapterShownAt: null,
     });
 
     unsub();
@@ -122,6 +125,7 @@ describe("confirm-bridge — idempotency", () => {
       requestId: "r-4",
       submittedAt: "2026-04-23T10:00:00.000Z",
       decidedAt: "2026-04-23T11:00:00.000Z",
+      outcomeChapterShownAt: null,
     });
     const entry = useWorks
       .getState()
@@ -136,6 +140,7 @@ describe("confirm-bridge — idempotency", () => {
         requestId: "r-5",
         submittedAt: "2026-04-23T10:00:00.000Z",
         decidedAt: "2026-04-23T11:00:00.000Z",
+        outcomeChapterShownAt: null,
       });
     });
   });
@@ -151,6 +156,7 @@ describe("confirm-bridge — teardown", () => {
       requestId: "r-6",
       submittedAt: "2026-04-23T10:00:00.000Z",
       decidedAt: "2026-04-23T11:00:00.000Z",
+      outcomeChapterShownAt: null,
     });
 
     const entry = useWorks

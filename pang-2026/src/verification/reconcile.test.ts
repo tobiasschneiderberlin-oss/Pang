@@ -78,6 +78,7 @@ describe("planReconcile — outbox-first drift shapes", () => {
         requestId: "ku7mt1xp-abc123def456",
         submittedAt: "2026-04-23T10:00:00.000Z",
         decidedAt: "2026-04-23T11:00:00.000Z",
+        outcomeChapterShownAt: null,
       },
     };
     const plan = planReconcile(records, byWorkId);
@@ -93,6 +94,7 @@ describe("planReconcile — outbox-first drift shapes", () => {
         requestId: "ku7mt1xp-abc123def456",
         submittedAt: "2026-04-23T10:00:00.000Z",
         decidedAt: "2026-04-23T11:00:00.000Z",
+        outcomeChapterShownAt: null,
       },
     };
     const plan = planReconcile(records, byWorkId);
@@ -184,12 +186,14 @@ describe("planReconcile — store-first drift shapes", () => {
         requestId: "r-a",
         submittedAt: "2026-04-23T10:00:00.000Z",
         decidedAt: "2026-04-23T11:00:00.000Z",
+        outcomeChapterShownAt: null,
       },
       "w-b": {
         kind: "declined",
         requestId: "r-b",
         submittedAt: "2026-04-23T10:00:00.000Z",
         decidedAt: "2026-04-23T11:00:00.000Z",
+        outcomeChapterShownAt: null,
       },
       "w-c": {
         kind: "failed",
@@ -218,6 +222,7 @@ describe("planReconcile — mixed pass", () => {
         requestId: "r-2",
         submittedAt: "2026-04-23T10:00:00.000Z",
         decidedAt: "2026-04-23T11:00:00.000Z",
+        outcomeChapterShownAt: null,
       },
       "w-3": {
         kind: "requesting",

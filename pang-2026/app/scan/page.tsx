@@ -31,6 +31,7 @@ import {
   type FailureKey,
 } from "@/ai/prompts/failure";
 import { reportFailure } from "@/lib/telemetry/beacon";
+import { useSurfaceClaim } from "@/stores/use-surface-claim";
 
 type Stage =
   | { kind: "viewfinder" }
@@ -46,6 +47,13 @@ type Stage =
 export default function ScanPage(): ReactElement {
   const [stage, setStage] = useState<Stage>({ kind: "viewfinder" });
   const router = useRouter();
+
+  // Iteration #11 — claim the "scan" surface for the duration of
+  // this route. The outcome chapter mount gates on Room-active; an
+  // incoming confirmation while the collector is in the middle of
+  // an intake queues and fires on the next Room entry instead of
+  // stomping the arrival chapter.
+  useSurfaceClaim("scan");
 
   const onCapture = useCallback(async (bytes: Uint8Array, sha: string) => {
     // TS 5.7 narrows `Uint8Array<ArrayBufferLike>` out of `BlobPart`.

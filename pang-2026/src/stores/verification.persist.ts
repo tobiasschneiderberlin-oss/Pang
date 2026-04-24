@@ -135,7 +135,33 @@ function parseState(raw: unknown): VerificationState | null {
       };
     }
     case "confirmed":
-    case "declined":
+    case "declined": {
+      if (!isString(r["requestId"])) return null;
+      if (!isString(r["submittedAt"])) return null;
+      if (!isString(r["decidedAt"])) return null;
+      // Iteration #11 — `outcomeChapterShownAt` is optional on the
+      // wire (a legacy v1 index written before iter #11 has no such
+      // field; it parses as `null`, which replays the chapter on
+      // next Room entry — the correct migration posture). Present
+      // values are validated as ISO-ish strings; any non-null
+      // non-string is rejected rather than coerced.
+      const shownAtRaw = r["outcomeChapterShownAt"];
+      let outcomeChapterShownAt: string | null;
+      if (shownAtRaw === undefined || shownAtRaw === null) {
+        outcomeChapterShownAt = null;
+      } else if (typeof shownAtRaw === "string" && shownAtRaw.length > 0) {
+        outcomeChapterShownAt = shownAtRaw;
+      } else {
+        return null;
+      }
+      return {
+        kind,
+        requestId: r["requestId"] as string,
+        submittedAt: r["submittedAt"] as string,
+        decidedAt: r["decidedAt"] as string,
+        outcomeChapterShownAt,
+      };
+    }
     case "expired":
       if (!isString(r["requestId"])) return null;
       if (!isString(r["submittedAt"])) return null;

@@ -79,6 +79,29 @@ const FIXTURES: readonly VerificationFixture[] = [
     workId: "w-gamma",
     decidedAt: "2026-05-01T16:42:00.000Z",
   },
+  // Iter #11 — the outcome-mount queue surfaces chapters FIFO, one at a
+  // time. The planner is a pure function of (workId, decidedAt), so
+  // FIFO correctness at the *plan* level means each fixture produces a
+  // plan whose workId is exactly its input — no cross-contamination
+  // when multiple plans exist in-flight. verif-04 / verif-05 add two
+  // rapid-fire decidedAt timestamps sharing the same second; a bug
+  // that keyed the planner on decidedAt alone would show up here.
+  {
+    id: "verif-04-confirm-rapidfire-first",
+    description:
+      "Confirmation chapter — first of two rapid-fire confirms sharing a decidedAt window.",
+    variant: "confirmation",
+    workId: "w-delta",
+    decidedAt: "2026-04-23T11:00:00.100Z",
+  },
+  {
+    id: "verif-05-decline-rapidfire-second",
+    description:
+      "Decline chapter — second of two rapid-fire outcomes; workId identifies the plan, not time.",
+    variant: "decline",
+    workId: "w-epsilon",
+    decidedAt: "2026-04-23T11:00:00.180Z",
+  },
 ];
 
 // Accepts any timing band the planner produces today; the floor /

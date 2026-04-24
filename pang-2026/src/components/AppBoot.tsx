@@ -83,10 +83,11 @@ export function AppBoot(): null {
         window as unknown as {
           __PANG?: {
             useWorks: typeof useWorks;
+            useVerification: typeof useVerification;
             authSeed: typeof authSeed;
           };
         }
-      ).__PANG = { useWorks, authSeed };
+      ).__PANG = { useWorks, useVerification, authSeed };
     }
 
     const unbindPrefs = bindPreferencesToRoot();

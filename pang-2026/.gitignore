@@ -66,6 +66,8 @@ yarn-error.log*
 !.pang/server-invites/.gitkeep
 .pang/server-challenges/*
 !.pang/server-challenges/.gitkeep
+.pang/server-outcomes/*
+!.pang/server-outcomes/.gitkeep
 .pang/push-subs/*
 !.pang/push-subs/.gitkeep
 

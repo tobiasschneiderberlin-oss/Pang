@@ -44,6 +44,7 @@ import {
   type ReactElement,
 } from "react";
 import { useWorks } from "@/stores/works";
+import { useSurfaceClaim } from "@/stores/use-surface-claim";
 import { DOCUMENTS_VIEWER } from "@/ai/chapter";
 import { readDocumentBytes } from "@/documents/bytes";
 import {
@@ -114,6 +115,11 @@ type LoadState =
   | { kind: "missing" };
 
 function DocumentViewer(props: DocumentViewerProps): ReactElement {
+  // Iteration #11 — claim the document-viewer surface. The outcome
+  // chapter waits for Room; a confirmation during a viewer session
+  // queues until the collector closes back to the Room.
+  useSurfaceClaim("document-viewer");
+
   const setActiveViewer = useWorks((s) => s.setActiveViewer);
 
   const hostRef = useRef<HTMLDivElement | null>(null);
