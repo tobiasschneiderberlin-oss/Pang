@@ -277,14 +277,31 @@ export async function getTileBlob(url: string): Promise<Blob | null> {
 }
 
 /**
+ * Called whenever LRU eviction fires as a side effect of a write.
+ * `count` is the number of tiles removed; `bytesFreed` is the total
+ * sum of their sizes; `bytesRemaining` is the new index footprint.
+ * The cache treats the callback as advisory — its own state
+ * converges regardless of what the callback does or throws.
+ */
+export type OnEvict = (
+  count: number,
+  bytesFreed: number,
+  bytesRemaining: number,
+) => void;
+
+/**
  * Write a tile to OPFS and update the index. No-ops silently if
  * OPFS is unavailable or the write throws — we never want the
  * cache's presence to change what the user sees (only how fast).
+ *
+ * `opts.onEvict` is called once *per eviction batch*, not per
+ * evicted tile. Telemetry attaches here so the callback is
+ * scope-agnostic.
  */
 export async function putTileBlob(
   url: string,
   blob: Blob,
-  opts: { maxBytes?: number } = {},
+  opts: { maxBytes?: number; onEvict?: OnEvict } = {},
 ): Promise<void> {
   if (!hasOpfs()) return;
   const hash = cacheKey(url);
@@ -330,6 +347,17 @@ export async function putTileBlob(
     const removeSet = new Set(plan.hashesToRemove);
     const remaining = next.filter((e) => !removeSet.has(e.hash));
     await writeIndex(remaining);
+    if (opts.onEvict) {
+      try {
+        opts.onEvict(
+          plan.hashesToRemove.length,
+          plan.bytesFreed,
+          plan.remainingBytes,
+        );
+      } catch {
+        // Callback is advisory; a throw must not poison the cache.
+      }
+    }
   } catch {
     // best-effort
   }
@@ -412,13 +440,16 @@ export async function cacheStats(): Promise<{
 export async function fetchTileCached(
   url: string,
   fetcher: (u: string) => Promise<Blob> = defaultFetcher,
+  opts: { onEvict?: OnEvict } = {},
 ): Promise<{ blob: Blob; source: "opfs" | "network" }> {
   const cached = await getTileBlob(url);
   if (cached) {
     return { blob: cached, source: "opfs" };
   }
   const blob = await fetcher(url);
-  void putTileBlob(url, blob);
+  const putOpts: { onEvict?: OnEvict } = {};
+  if (opts.onEvict) putOpts.onEvict = opts.onEvict;
+  void putTileBlob(url, blob, putOpts);
   return { blob, source: "network" };
 }
 
