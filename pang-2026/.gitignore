@@ -49,6 +49,26 @@ yarn-error.log*
 # opfs scratch (should never be checked in, but be safe)
 .opfs-cache/
 
+# server-side dev stand-in stores (iter #4 outbox, iter #9 auth). The
+# directories exist so the app doesn't have to mkdir on first write,
+# but their contents are per-device runtime records and never tracked.
+.pang/server-outbox/*
+!.pang/server-outbox/.gitkeep
+.pang/server-users/*
+!.pang/server-users/.gitkeep
+.pang/server-credentials/*
+!.pang/server-credentials/.gitkeep
+.pang/server-credentials-revoked/*
+!.pang/server-credentials-revoked/.gitkeep
+.pang/server-sessions/*
+!.pang/server-sessions/.gitkeep
+.pang/server-invites/*
+!.pang/server-invites/.gitkeep
+.pang/server-challenges/*
+!.pang/server-challenges/.gitkeep
+.pang/push-subs/*
+!.pang/push-subs/.gitkeep
+
 # next --experimental-https self-signed certs (dev:device)
 /certificates/
 
