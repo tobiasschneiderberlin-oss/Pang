@@ -17,7 +17,11 @@
  */
 
 import { useEffect } from "react";
-import { bindPreferencesToRoot } from "@design/preferences";
+import { bindPreferencesToRoot, usePreferences } from "@design/preferences";
+import {
+  hydratePreferences,
+  installPreferencesPersistence,
+} from "@design/preferences.persist";
 import { bootstrapOpfs } from "@/lib/storage/bootstrap";
 import { useWorks } from "@/stores/works";
 import {
@@ -60,6 +64,27 @@ export function AppBoot(): null {
     // full-stack intake in CI). Exposure is the minimal API — the
     // store instance itself, no setters — because Zustand stores
     // carry their own `.getState()` / `.setState()` already.
+    // Iter #15: expose a hydration-ready promise the E2E spec awaits
+    // before interacting. Declared here so the closure over
+    // `resolveHydrationReady` lives through the async chain below.
+    // The Deferred pattern avoids TypeScript narrowing the setter
+    // through flow analysis of the Promise constructor.
+    interface Deferred {
+      promise: Promise<void>;
+      resolve: () => void;
+    }
+    function makeDeferred(): Deferred {
+      let res: () => void = () => {};
+      const promise = new Promise<void>((r) => {
+        res = r;
+      });
+      return { promise, resolve: res };
+    }
+    const hydrationDeferred =
+      process.env["NEXT_PUBLIC_PANG_E2E"] === "1" ? makeDeferred() : null;
+    const hydrationReady: Promise<void> | null =
+      hydrationDeferred?.promise ?? null;
+
     if (process.env["NEXT_PUBLIC_PANG_E2E"] === "1") {
       const token = process.env["NEXT_PUBLIC_PANG_E2E_TOKEN"] ?? "";
       type E2ESeed =
@@ -86,10 +111,19 @@ export function AppBoot(): null {
             useWorks: typeof useWorks;
             useVerification: typeof useVerification;
             useNarrative: typeof useNarrative;
+            usePreferences: typeof usePreferences;
             authSeed: typeof authSeed;
+            hydrationReady: Promise<void> | null;
           };
         }
-      ).__PANG = { useWorks, useVerification, useNarrative, authSeed };
+      ).__PANG = {
+        useWorks,
+        useVerification,
+        useNarrative,
+        usePreferences,
+        authSeed,
+        hydrationReady,
+      };
     }
 
     const unbindPrefs = bindPreferencesToRoot();
@@ -104,6 +138,7 @@ export function AppBoot(): null {
     // snapshot. After that, the subscription keeps OPFS in sync.
     let unsubscribeWorks: (() => void) | null = null;
     let unsubscribeVerification: (() => void) | null = null;
+    let unsubscribePreferences: (() => void) | null = null;
     let unsubscribeOnline: (() => void) | null = null;
     let unsubscribeDispatchedWalker: (() => void) | null = null;
     let unsubscribeOutcomeBroadcast: (() => void) | null = null;
@@ -113,6 +148,21 @@ export function AppBoot(): null {
       try {
         await bootstrapOpfs();
         if (cancelled) return;
+        // Preferences hydrate ahead of any other surface so the
+        // :root projection (which already mounted above) reflects
+        // the collector's prior choices the first paint after boot.
+        // Silence-default (primitive 73) wins on fresh install because
+        // the OPFS file does not exist yet.
+        const persistedPrefs = await hydratePreferences();
+        if (cancelled) return;
+        usePreferences.getState().hydrate(persistedPrefs);
+        unsubscribePreferences = installPreferencesPersistence();
+        // Hydration-ready signal for the E2E spec. Resolves after
+        // the OPFS snapshot has been absorbed AND the persistence
+        // subscription is live — so a test click after this fires
+        // a durable write to OPFS, not a value clobbered by a late
+        // hydrate().
+        hydrationDeferred?.resolve();
         // Works + verification hydrate in parallel — the two stores
         // are independent slices of OPFS.
         const [hydratedWorks, hydratedVerification] = await Promise.all([
@@ -191,6 +241,7 @@ export function AppBoot(): null {
       cancelled = true;
       unsubscribeWorks?.();
       unsubscribeVerification?.();
+      unsubscribePreferences?.();
       unsubscribeOnline?.();
       unsubscribeDispatchedWalker?.();
       unsubscribeOutcomeBroadcast?.();

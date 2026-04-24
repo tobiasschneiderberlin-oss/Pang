@@ -173,3 +173,15 @@ body {
   animation-duration: 320ms;
   animation-timing-function: linear(0, 0.05, 0.28 12%, 0.86 38%, 1);
 }
+
+/* --- Popover API reset ------------------------------------------- */
+/* Tailwind v4's display utilities (`flex`, `grid`, etc.) win over the
+   UA default of `display: none` for closed popovers, so a popover with
+   a layout class would stay visible when closed — breaking the open /
+   close state machine (iter #15). This rule restores the UA behaviour:
+   a `[popover]` element that isn't currently open stays hidden.
+   Components opt back in by applying their layout classes; `:popover-
+   open` flips the state on via `showPopover()` / `hidePopover()`. */
+[popover]:not(:popover-open):not(dialog:not([open])) {
+  display: none;
+}

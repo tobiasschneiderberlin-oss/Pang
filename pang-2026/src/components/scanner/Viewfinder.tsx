@@ -54,6 +54,7 @@ import {
   TORCH_TOGGLE,
   VIEWFINDER_LABEL,
 } from "@/ai/scanner/voice";
+import { triggerHaptic } from "@/audio";
 
 export interface ViewfinderProps {
   onCapture: (bytes: Uint8Array, sha256: string) => void;
@@ -225,12 +226,20 @@ export function Viewfinder(props: ViewfinderProps): React.ReactElement {
         !!seg && seg.coverage > SEGMENT_COVERAGE_GATE;
 
       if (rectHeld || segHeld) {
-        heldSinceRef.current ??= time;
+        // Fire the `tap` haptic on the rectangle-lock edge — the
+        // frame when the detector first crosses the stability gate
+        // and starts the auto-capture hold timer. One-shot per lock
+        // session; the ref clears on loss so a re-lock re-fires.
+        if (heldSinceRef.current === null) {
+          heldSinceRef.current = time;
+          triggerHaptic("tap");
+        }
         if (
           time - heldSinceRef.current > autoCaptureMs &&
           !capturingRef.current
         ) {
           capturingRef.current = true;
+          triggerHaptic("capture");
           void capture(cam, onCaptureRef.current, onErrorRef.current).finally(
             () => {
               capturingRef.current = false;
@@ -286,6 +295,7 @@ export function Viewfinder(props: ViewfinderProps): React.ReactElement {
     if (!cam || capturingRef.current) return;
     capturingRef.current = true;
     heldSinceRef.current = null;
+    triggerHaptic("capture");
     void capture(cam, onCaptureRef.current, onErrorRef.current).finally(() => {
       capturingRef.current = false;
     });

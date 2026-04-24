@@ -8561,6 +8561,394 @@ Three discoveries, each with its verdict:
 
 ---
 
+## Iteration #15 — Spatial audio + haptics v1 (opened 2026-04-24)
+
+### Why this, why now
+
+Spine moment #11:
+
+> **Spatial audio + haptics (opt-in).** The Room acquires an acoustic
+> body; arrival acquires a physical one. Silence is the default;
+> sound happens only when Laura turns it on.
+
+The four-agent architecture closed in iter #14. The spine now pivots
+from *the data layer* (intake → enrichment → correspondence →
+narrative) to *the body of the surface itself*. Iter #15 gives the
+Room an acoustic presence and the arrival ceremony a tactile one —
+two modalities Laura has never felt from PANG before.
+
+Why now, not later:
+
+- **The Room has a body to fill.** Iter #6 shipped the deep-zoom
+  paint layer; iter #8 shipped second-tap escalation; iter #14
+  shipped the passive narrative overlay. The Room is a place with
+  depth, focus, and prose. An acoustic body is the next sense it
+  hasn't been given.
+- **Arrival is structurally complete.** Intake + scanner +
+  ArrivalChapter + OutcomeChapter + narrative all converge on the
+  same settle beat. That settle beat is the single canonical moment
+  a haptic pulse belongs — and we've written it without one for
+  fourteen iterations. Adding it now lands the pulse inside the
+  existing choreography rather than retrofitting it.
+- **Browser primitives are ready, not aspirational.** Web Audio
+  with HRTF `PannerNode`, `navigator.vibrate`, and `AudioContext`
+  gesture-policy are all 2026-baseline. Zero experimental flags.
+  See `PANG_Architecture_2026.md` lines 49–50: "Web Audio API +
+  `PannerNode` / `navigator.vibrate`" — the primitives have had
+  their placeholder line in the stack table since the pivot. Iter
+  #15 fills the placeholder.
+- **Silence-default is a doctrine claim we haven't tested.**
+  `PANG_Spine.md` line 213 ("Audio on by default (cut). Spatial
+  audio in iteration #11 is opt-in. Silence is the default.") is
+  a negative commitment. Iter #15 is where we prove we can ship a
+  body Laura can turn on — and, more load-bearing, that it stays
+  off until she does.
+
+### Scope
+
+**CEILING.** Full spatial audio v1 + full haptics v1 + shipping
+settings toggle surface + telemetry + tests. No ship-less-than-the-
+spec. No "haptics first, audio v2" split — the spine spec binds
+them into one moment; splitting them would leak "silence is the
+default" because haptics-only defaults to a tactile regime without
+audio to match it.
+
+**Audio scope:**
+- **AudioContext lifecycle.** Constructed lazily on first
+  opt-in + user-gesture pair; suspended when the tab hides; closed
+  on unmount of the Room. Never constructed in SSR / test envs
+  unless mocked.
+- **Master gain.** Starts at `0` (silent even when the context is
+  alive). A ramp from 0 to target over ~600 ms is the "turn on"
+  gesture Laura feels. Conversely "turn off" ramps back to 0 over
+  ~300 ms before the context suspends. No abrupt gates.
+- **Acoustic room bed.** A single shared low-amplitude filtered
+  noise source (brown noise through a low-pass biquad at ~400 Hz,
+  peaking at ~-42 dBFS target). The bed plays through a
+  `PannerNode` with HRTF `panningModel`. The panner tracks the
+  focused work's `Work.position` — when Laura's focus moves across
+  the Room, the bed pans with her attention. No per-work drones;
+  the Room is one acoustic body, not a chorus.
+- **Focus emphasis.** The master gain is modulated by a small
+  factor when a work is focused (×1.2) vs. unfocused (×0.8). The
+  modulation is handled by the existing RAF loop's focus state —
+  no new animation driver.
+- **AudioWorklet? No.** v1 uses `AudioBufferSourceNode` looping a
+  2-second pre-computed brown-noise buffer (generated once in
+  JS at context init). Worklets earn their keep when we synthesize
+  per-work material; v1 doesn't.
+
+**Haptic scope:**
+- **Vocabulary.** Four reserved patterns, hand-authored, constants:
+  - `tap` — 10 ms. Rectangle lock in the scanner viewfinder.
+  - `focus` — `[6, 20, 6]`. Room focus change (canvas tap or
+    twin activation).
+  - `capture` — `[40]`. Shutter closing moment in intake.
+  - `arrive` — `[6, 30, 6, 30, 6]`. ArrivalChapter settle beat.
+  Any call outside this set fails an AST / grep gate (see *Gates
+  touched*).
+- **Dispatch.** A single `triggerHaptic(kind: HapticKind)` module
+  function. Reads `usePreferences.getState().haptics === "on"` and
+  returns `false` if off, if `navigator.vibrate` is unavailable,
+  or if `(prefers-reduced-motion: reduce)` is active without
+  explicit motion override. Never throws.
+- **Wiring.** Four call sites: scanner rectangle lock, intake
+  capture, Room focus change (canvas + twin paths converge on
+  `setFocusedId`), ArrivalChapter settle frame.
+
+**Settings surface scope:**
+- Two new preferences on `PreferencesSchema`:
+  - `audioSpatial: z.enum(["on", "off"])` — default `"off"`.
+  - `haptics: z.enum(["on", "off"])` — default `"off"`.
+- Rendered in a new shipping `SettingsOverlay.tsx` chrome
+  component — a small anchored panel (Popover API + CSS Anchor
+  Positioning, per P17) opened from a chrome affordance on the
+  Room. Not the full DS Chapter 11 Tweaks sheet — that lands in a
+  later iter. v1 is the two toggles plus a voice-corpus
+  explainer line each.
+- OPFS persistence through the existing preferences hydration
+  path — no new storage adapter.
+- Voice corpus entries in `PANG_VOICE_STRINGS` (iter #12 bundle
+  namespace). All copy through the voice seed + A25 discipline.
+
+**Telemetry (failure mode):**
+- OTel span `pang.audio.state` — fires on every AudioContext
+  state transition (`running` / `suspended` / `closed`). Carries
+  `pang.audio.reason` = `"opt-in" | "visibility" | "unmount" | "blocked"`.
+- Counter `pang.audio.blocked_total` — Laura tapped turn-on but
+  the browser refused (autoplay policy, device muted, etc.).
+- Counter `pang.haptics.unsupported_total` — boot-time once per
+  session when `navigator.vibrate` is absent. iOS Safari is the
+  canonical hit.
+- Counter `pang.haptics.suppressed_total{reason}` — every
+  `triggerHaptic` that short-circuited; `reason` ∈
+  `"off" | "unsupported" | "reduced-motion"`.
+- Dev console warning on `triggerHaptic(kind)` with an
+  out-of-vocabulary kind (belt, not suspenders — the gate below is
+  suspenders).
+
+### Stack
+
+- **Audio:** Web Audio API — `AudioContext`, `AudioBufferSourceNode`
+  (looped brown-noise buffer), `BiquadFilterNode` (low-pass),
+  `PannerNode` (HRTF panningModel), `GainNode` (master + ramps).
+  No AudioWorklet. No external libs.
+- **Haptics:** `navigator.vibrate` only. No Capacitor, no plugin
+  (both already dropped; `PANG_Architecture_2026.md` lines 257–259).
+  Capability probe on boot writes `hapticsSupported: boolean` into
+  a module-local flag.
+- **Settings surface:** `SettingsOverlay.tsx` — Popover API +
+  CSS Anchor Positioning (P17), View Transitions for the open/
+  close fade (P16), sharp corners (P9), OKLCH only (P11),
+  sentence case (P14). Zustand preferences store already carries
+  the wiring.
+- **Voice:** All strings through `PANG_VOICE_STRINGS` / A25
+  default-pipeline. No hand-written chrome copy.
+- **Storage:** Existing OPFS preferences adapter; extend
+  `PreferencesSchema` with two enum fields + `DEFAULT_PREFERENCES`
+  entries.
+- **Tests:** Vitest for unit tests (audio-graph construction
+  mocked via `vitest.setup.ts` AudioContext stub; haptic vocabulary
+  enforced by TS type + runtime guard); Playwright e2e for the
+  settings toggle lifecycle (toggle on → confirm pref persists →
+  reload → pref rehydrates → toggle off → context suspends).
+
+### Reference
+
+- **Museum-gallery sound discipline.** Tate Modern and the MoMA
+  timed-release audio tours — headphones are offered, not required.
+  Silence is the baseline; sound is a choice.
+- **Apple Photo Memories (iOS 18+).** The gentle transition
+  haptic that lives under photo parallax, not on top of it. The
+  tactile is a seam-crosser, not a reward.
+- **Sonos Trueplay room-correction.** Acoustic body tied to a
+  physical space. Not that we calibrate, but the register — "the
+  room sounds like the room" — is the reference.
+- **Eno — *Ambient 1: Music for Airports*.** The target amplitude
+  and frequency band. "It must be as ignorable as it is
+  interesting." Brown noise through a 400 Hz low-pass is the
+  minimum-viable embodiment of that rule.
+
+### Canvas
+
+- **The Room** stays on `<canvas>` (P19). No DOM reflow for audio;
+  the Web Audio graph lives outside React.
+- **Arrival ceremony** stays on `<canvas>` + DOM overlay. The
+  haptic pulse is a side effect of the existing settle frame; no
+  new RAF driver.
+- **SettingsOverlay** is DOM (Popover API + Anchor Positioning),
+  not canvas. Chrome is DOM per doctrine.
+- Audio graph is outside the canvas's GPU lifetime. Context
+  construction happens in a module singleton (`src/audio/context.ts`)
+  subscribed to preference changes.
+
+### Failure mode (fifth declaration, CLAUDE.md § 9)
+
+When this surface breaks it breaks silently — a deliberately
+quiet system is the worst kind to debug. The observables below
+are the difference between "nothing happened" meaning "it worked"
+and meaning "it's broken."
+
+- **Audio off but user flipped toggle on.** `pang.audio.state` with
+  `reason: "blocked"` span fires on the user-gesture handler;
+  Laura's tap produced a `running` state transition attempt that
+  the browser refused. The dev console prints the AudioContext
+  `state` at attempt time. Replay: the eval fixture includes a
+  "missing gesture" case where the toggle is flipped
+  programmatically without a gesture; the test asserts the span
+  body and that master gain stays at 0.
+- **Audio on, no sound.** Telemetry shows
+  `pang.audio.state { state: "running" }` but Laura hears nothing.
+  Diagnostic: a `pang.audio.graph_debug` dev-only span logs the
+  connection chain and the final gain value on every state
+  transition. A missing `.connect(ctx.destination)` or a gain at 0
+  is visible in one log line.
+- **Haptics never fire.** Single source of truth is
+  `pang.haptics.suppressed_total` by reason. If iOS Safari: every
+  trigger hits `unsupported`. If user has reduced motion without
+  override: every trigger hits `reduced-motion`. If
+  preferences off: `off`. No trigger = "I never called it" — a
+  missing call site regression, observable by the
+  `pang.haptics.attempted_total` counter failing to increment at
+  the four known sites.
+- **Settings overlay doesn't open.** Playwright e2e opens the
+  overlay, asserts `[role="dialog"]` visibility within 200 ms,
+  asserts the toggle state matches the store, and asserts
+  Keyboard-Escape closes it (P23). A failure here surfaces as
+  a named Playwright test, not "somehow the toggle doesn't
+  work."
+- **Preference regressed to on.** The test suite includes a
+  "fresh install" test that mounts the app with an empty OPFS
+  adapter and asserts both preferences hydrate to `"off"`. Any
+  drift in `DEFAULT_PREFERENCES` that flips default-on fails CI.
+
+### Out of scope
+
+- **Per-work acoustic material.** v1 uses a single shared room
+  bed; per-work drones / colour-to-frequency mapping is a v2
+  concern. Would need an eval corpus and real sample sources.
+- **AudioWorklet DSP.** Brown noise + biquad + HRTF panner is
+  enough for "acoustic body." Worklets earn their keep when
+  we synthesize per-work material.
+- **Haptic feedback during the Room RAF loop.** Continuous
+  vibration would drain the battery and fail the Museumsschild
+  test. The four discrete vocabulary events are the ceiling.
+- **Audio during arrival scanner workflow.** The scanner is a
+  CV-heavy surface; adding audio would split attention. v1
+  keeps the Room and ArrivalChapter audio-bearing and leaves
+  the scanner silent (except haptic rectangle-lock).
+- **The DS Chapter 11 Tweaks sheet.** v1 ships a minimal
+  SettingsOverlay with two toggles. The full seven-knob Tweaks
+  sheet is a later iter.
+- **iOS Safari haptic workaround.** No `WKWebView` bridging, no
+  Capacitor, no "tactile illusion" animations. If
+  `navigator.vibrate` is absent, haptics are a silent no-op
+  on that device — the `hapticsSupported` flag renders the
+  toggle as disabled with a short voice-corpus explainer line.
+- **Ambient audio between sessions.** PANG is ambient within
+  a session only. Nothing plays in the background when the tab
+  is hidden — `visibilitychange` suspends the context.
+
+### Test criteria / outcome gate
+
+**Unit (Vitest):**
+1. AudioContext never constructed when `audioSpatial === "off"`.
+2. AudioContext constructed exactly once when toggle flips on
+   under a user-gesture stub; subsequent toggles route through
+   `resume()` / `suspend()` only.
+3. Master gain ramps 0 → target over ≥ 500 ms on turn-on; ramps
+   target → 0 over ≥ 250 ms on turn-off.
+4. Focused-work panner position tracks `Work.position` (cartesian
+   x/y/z) within ε.
+5. `triggerHaptic(kind)` returns `false` when any suppression
+   reason applies; returns `true` and records
+   `pang.haptics.attempted_total` otherwise.
+6. Fresh install: `DEFAULT_PREFERENCES.audioSpatial === "off"` and
+   `DEFAULT_PREFERENCES.haptics === "off"`.
+7. Haptic vocabulary is finite: TS `HapticKind` type + runtime
+   guard reject any string outside the four constants.
+8. Voice corpus keys (`SETTINGS_OVERLAY` namespace) parse against
+   A25 default-pipeline with zero banned-vocabulary hits.
+
+**Integration (Playwright):**
+9. Opens SettingsOverlay from the Room; both toggles default off.
+10. Flips `audioSpatial` on → AudioContext state span fires
+    `"running"`.
+11. Flips it off → state span fires `"suspended"`, master gain
+    reaches 0 before suspension.
+12. Reload → pref rehydrates `"on"`; AudioContext does *not*
+    auto-construct (still requires a user-gesture on re-open).
+13. Flips `haptics` on → `navigator.vibrate` called with the
+    `focus` pattern when a work is tapped (spy).
+14. Overlay keyboard escape closes + focuses return to the
+    trigger (P23).
+
+**Outcome gate (manual, Laura's hands):**
+- **Silent by default.** Cold install: open the Room → dead
+  silence. No buzz. Everything in the app works as before.
+- **Body when asked.** Open Settings → flip audio on. Within one
+  second, a low room bed becomes audible. Tap across the Room;
+  the bed *pans with focus*, smoothly, HRTF-correctly on
+  headphones.
+- **Tactile seam-crossers.** Flip haptics on. Return to the
+  scanner. Rectangle-lock hands Laura a 10 ms pulse. Capture
+  hands her a 40 ms pulse. The arrival settle hands her a
+  three-beat arrive pattern. All four sites fire; none is
+  gratuitous.
+- **Quiet turn-off.** Flip audio off → bed fades, doesn't
+  guillotine. Flip haptics off → next scanner tap produces no
+  pulse. No residue.
+
+### Open questions
+
+1. **Audio gesture re-prompt on reload.** When Laura reloads with
+   audio-on already persisted, browser policy requires a fresh
+   user gesture before `AudioContext.resume()`. v1 stance: the
+   context stays suspended until her first tap anywhere in the
+   document, at which point we resume silently. Whether that
+   first-tap-resume surfaces a voice-corpus line ("turn the room
+   on again") or happens silently is a Laura-hands question.
+2. **Acoustic bed amplitude on speaker vs. headphones.** HRTF
+   panning collapses on mono speakers; the bed still plays but
+   the "acoustic body" effect is degraded. Whether to detect
+   speaker output and switch panning model (stereo / equalPower)
+   is a v2 signal question.
+3. **Haptic suppression under `prefers-reduced-motion`.** The
+   argument is a pulse of vibration is motion. The counter-
+   argument is haptics substitute for motion for some users. v1
+   stance: reduced-motion suppresses haptics by default; the
+   preferences overlay can add a future override. Flag if Laura
+   objects.
+4. **Tab-visibility-hidden audio policy.** Suspending on
+   `visibilitychange` is clean; but if Laura alt-tabs to
+   research a work mid-session, returning to PANG should
+   resume the bed without a re-prompt. v1 stance: suspended
+   means suspended; resume needs a gesture. Revisit if Laura
+   objects.
+
+### Gates touched
+
+- **P9 sharp corners.** SettingsOverlay container at radius 0;
+  toggle controls at 2 px chrome radius. Validated by the
+  existing token-discipline gate.
+- **P11 OKLCH only.** Overlay chrome resolves through
+  `tokens.css`.
+- **P14 no title case.** All overlay copy sentence case.
+- **P15 motion.** Gain ramps use `AudioParam.linearRampToValueAtTime`
+  (not CSS); the overlay open/close uses View Transitions
+  (P16).
+- **P17 Popover API + Anchor Positioning.** SettingsOverlay
+  uses native Popover, not portal.
+- **P19 reduced motion.** `prefers-reduced-motion` suppresses
+  haptics by default.
+- **P22 structured logging.** All audio + haptic telemetry
+  spans ship through the existing OTel adapter.
+- **P23 a11y floor.** Overlay toggles ≥ 24 × 24, keyboard
+  operable, focus returns to trigger on close.
+- **P24 token discipline.** Every length / color through the
+  token layer.
+- **A4 voice seed.** Any future agent with access to audio /
+  haptic state carries the seed. v1 has no such agent, so
+  trivial.
+- **A25 default-pipeline.** SettingsOverlay strings land in
+  `PANG_VOICE_STRINGS` and parse through the A25 smoke.
+- **No new gate this iter** — the discipline surfaces as new
+  primitives + tests. Pattern matches iter #14.
+
+### New primitive candidates (codification)
+
+- **71 — acoustic-body-as-opt-in.** `AudioContext` is never
+  constructed until (a) `preferences.audioSpatial === "on"` AND
+  (b) a user gesture has occurred. Enforced by a guarded
+  factory module (`src/audio/context.ts`) — the only export is
+  a `getAudioContext()` function that returns `null` otherwise.
+  Grep gate: no other module may `new AudioContext(...)`.
+- **72 — haptic-vocabulary-limited.** `navigator.vibrate` is
+  called only through `triggerHaptic(kind)` with a finite
+  `HapticKind` union. Grep / AST gate rejects raw
+  `navigator.vibrate(...)` calls outside the dispatcher.
+- **73 — silence-default.** Cold install is silent: both
+  preferences default `"off"`. `DEFAULT_PREFERENCES` is the
+  single source of truth; tests pin the defaults; hydration
+  can override but the default cannot drift without a failing
+  test.
+
+*Each of these will land as a primitive line with an enforcement
+note in `PANG_Primitives_2026.md` if iter #15 closes green. If
+any are overkill, they drop in the findings with a named reason.*
+
+### Execution notes
+
+- One branch (`iter-15-spatial-audio-haptics`) off main.
+- Self-contained execution prompt for a delegated agent; this
+  brief is the full contract.
+- PR body cites this brief by line range so the reviewer has
+  one artifact to compare against.
+- Test criteria + outcome gate have to pass before the PR opens.
+- Findings section appended below this brief at iter close.
+
+---
+
 ## Archived iterations
 
 The pre-reset sprint family (A1–A11, iterations #1–#13 of the old

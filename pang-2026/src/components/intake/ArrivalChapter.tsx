@@ -82,6 +82,7 @@ import {
   ARRIVAL_IMAGE_ALT,
 } from "@/ai/chapter/voice";
 import { ArtifactCarrier } from "./ArtifactCarrier";
+import { triggerHaptic } from "@/audio";
 
 export interface ArrivalChapterProps {
   readonly output: IntakeOutput;
@@ -198,11 +199,15 @@ export function ArrivalChapter(props: ArrivalChapterProps): ReactElement {
   }, [active, plan, tMs]);
 
   // Latch the `chapter.ready` event — fires the first tick after the
-  // ready beat's start has been crossed.
+  // ready beat's start has been crossed. The settle beat is the one
+  // canonical moment `arrive` belongs (iter #15 primitive 72). The
+  // dispatcher respects silence-default; if `haptics === "off"` the
+  // call is a no-op counter-increment.
   useEffect(() => {
     if (readyNow && !readyEmittedRef.current) {
       readyEmittedRef.current = true;
       chapterReadyEvent(tMs);
+      triggerHaptic("arrive");
     }
   }, [readyNow, tMs]);
 

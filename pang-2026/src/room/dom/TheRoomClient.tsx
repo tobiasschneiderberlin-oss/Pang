@@ -24,6 +24,7 @@ import type { TheRoomCanvasHandle } from "@/room/dom/TheRoomCanvas";
 import { RoomDOMTwin } from "@/room/dom/RoomDOMTwin";
 import { roomHandleRef } from "@/room/dom/roomHandleRef";
 import { layoutEntries, useWorks } from "@/stores/works";
+import { setFocusedWork, triggerHaptic } from "@/audio";
 
 /**
  * Forwardable handle — parents that need to drive scene-level state
@@ -90,9 +91,28 @@ export function TheRoomClient(props: TheRoomClientProps = {}): ReactElement {
   // the RAF loop; this effect keeps it synchronised with store
   // writes (arrival chapter, twin, programmatic reveal) without
   // requiring every caller to know about the imperative handle.
+  //
+  // Also dispatches a `focus` haptic and pans the acoustic room bed
+  // to the newly-focused work (iter #15, primitives 71 + 72). Both
+  // respect silence-default via their dispatchers — if preferences
+  // are off, nothing happens. The initial mount (focusedId null →
+  // null) is guarded by a latch so a cold arrival doesn't buzz.
+  const prevFocusRef = useRef<string | null>(focusedId);
   useEffect(() => {
     canvasRef.current?.focusWork(focusedId);
-  }, [focusedId]);
+
+    // Skip the synthetic "first tick" transition; only fire on edges.
+    if (prevFocusRef.current !== focusedId) {
+      if (prevFocusRef.current !== null || focusedId !== null) {
+        triggerHaptic("focus");
+      }
+      const nextWork = focusedId
+        ? works.find((w) => w.id === focusedId) ?? null
+        : null;
+      setFocusedWork(nextWork);
+      prevFocusRef.current = focusedId;
+    }
+  }, [focusedId, works]);
 
   return (
     <div className="relative h-full w-full">
