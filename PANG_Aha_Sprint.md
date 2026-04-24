@@ -7902,6 +7902,86 @@ Iter #13 succeeds when:
 5. Laura's next install surface shows no string regression vs the
    iter #12 commit — every moved string reads identically on screen.
 
+### Findings (closed 2026-04-24)
+
+**Outcome.** All five outcome-gate criteria landed. A25 green in
+the default `npm run test`, 58 → 0 inline violations across 19
+files, no seed diff on rebuild. Test count 821 → 822 (the formerly
+skipped production-surface smoke runs unconditionally). Zero
+Playwright spec churn.
+
+**What the sweep actually looked like.** Four move-only commits,
+each covering a surface cluster, each listing every literal
+verbatim in the commit body (the audit log). The brief predicted
+four sweeps along `chapter+ask-gallery / intake+enrichment /
+auth+outcome+documents / smoke` lines; the real filesystem aligned
+differently (no `src/components/auth/**`, no `src/components/chapter/**`)
+so the sweeps realigned to `chapter+outcome+documents+deep-zoom /
+intake+enrichment+scanner / verification+dev+invite+gallery /
+pages+smoke`. The byte-count prediction held: zero net bundle
+delta after deduplication.
+
+**New corpus domains.** Eight new `voice.ts` files shipped —
+`intake`, `enrichment`, `scanner`, `verification`, `dev`, `invite`,
+`gallery`, `smoke`, plus a new `room`. All eight follow the
+`chapter/voice.ts` pattern (frozen `satisfies Readonly<...>`) and
+re-export through `PANG_VOICE_STRINGS` (the bundle gained nine new
+top-level namespaces: `outcome_chapter`, `chapter_chrome`,
+`intake`, `enrichment`, `scanner`, `verification`, `dev_tweaks`,
+`invite_landing`, `gallery_outcome`, `room`, `smoke`).
+
+**Off-register flag (deferred to a voice iteration).** The
+`src/components/dev/Tweaks.tsx` panel ships a cluster of title-case
+dev chrome ("Developer tweaks", "Tweaks", "Time warmth", "Open
+tweaks", "Collapse tweaks") that violates PANG_Voice.md's
+sentence-case rule. Preserved verbatim per the move-only discipline
+and flagged in `src/ai/dev/voice.ts` JSDoc; a voice-correction
+iteration owns the rewrite. Tweaks is dev-only (dead-code-eliminated
+in production bundles) so collector-facing register is unaffected
+either way. The `/room-smoke` and `/deep-zoom-smoke` surfaces ship
+similarly terse dev labels (`tier:`, `open`, `close`, `cycles:`);
+`src/ai/smoke/voice.ts` documents the register exemption — smoke
+routes are infrastructure chrome, not museumsschild.
+
+**One shape refactor worth noting.** `IntakeReview`'s `<FieldRow>`
+had a `label: string` prop passed inline (`<FieldRow label="artist"
+…>`). Because `label=` isn't in A25's four user-facing attribute
+set, the call-site literal wasn't flagged — but the component's
+internal `aria-label={\`edit ${props.label}\`}` template was,
+because `props.label` doesn't resolve to a corpus. The fix: rename
+the prop to `field: FieldKind` and index into `FIELD_LABELS` from
+the intake corpus. ElementAccessExpression's root identifier
+(`FIELD_LABELS`) is corpus-sourced, so the template passes. The
+pattern generalises to any component whose `aria-label` composes a
+user-facing string from a prop — the prop must either be a
+corpus-resolvable type or a discriminated enum the corpus indexes.
+Worth a primitive note if the pattern recurs.
+
+**Codify / iterate-once / drop.**
+
+- **Codify:** primitive 64 gains the default-pipeline enforcement
+  addendum (done this iteration).
+- **Codify:** the eight new domain corpora are now the template —
+  any new agent-adjacent surface gets a `voice.ts` from day one,
+  re-exports through `PANG_VOICE_STRINGS`.
+- **Iterate once:** the Tweaks title-case rewrite + any other
+  off-register literal surfaced during the sweep. A follow-up
+  voice-only iteration owns those rewrites (no code changes, only
+  string replacements inside corpora).
+- **Drop:** the ESLint companion rule mentioned as optional in iter
+  #12. A25's ts-morph walker is authoritative; adding a parallel
+  ESLint rule would double-maintain. Confirmed dropped.
+
+**Cadence gain.** The regression cadence moved from "quarterly
+cleanup iteration" to "within one commit": a new inline literal in
+any component or route now fails `npm run test` at the commit that
+introduces it. The audit-sweep iteration pattern is a one-time
+cost, not a recurring one — future voice discipline lands as
+commit-level enforcement.
+
+**Merge.** Squashed to commit `<filled after merge>` on main,
+PR `#<filled after merge>`.
+
 ---
 
 ## Archived iterations
