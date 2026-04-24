@@ -56,8 +56,33 @@ export function AppBoot(): null {
     // store instance itself, no setters — because Zustand stores
     // carry their own `.getState()` / `.setState()` already.
     if (process.env["NEXT_PUBLIC_PANG_E2E"] === "1") {
-      (window as unknown as { __PANG?: { useWorks: typeof useWorks } }).__PANG =
-        { useWorks };
+      const token = process.env["NEXT_PUBLIC_PANG_E2E_TOKEN"] ?? "";
+      type E2ESeed =
+        | { action: "clear" }
+        | { action?: "seed"; userId?: string };
+      async function authSeed(input: E2ESeed = {}): Promise<unknown> {
+        const res = await fetch("/api/auth/e2e-seam", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-pang-e2e": token,
+          },
+          credentials: "same-origin",
+          body: JSON.stringify(input),
+        });
+        if (!res.ok && res.status !== 204) {
+          throw new Error(`authSeed failed: ${res.status}`);
+        }
+        return res.status === 204 ? null : res.json();
+      }
+      (
+        window as unknown as {
+          __PANG?: {
+            useWorks: typeof useWorks;
+            authSeed: typeof authSeed;
+          };
+        }
+      ).__PANG = { useWorks, authSeed };
     }
 
     const unbindPrefs = bindPreferencesToRoot();

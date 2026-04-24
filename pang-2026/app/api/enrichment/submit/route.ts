@@ -99,6 +99,12 @@ export async function POST(request: Request): Promise<Response> {
     span.setAttribute("http.route", "/api/enrichment/submit");
 
     // ---- Auth ---------------------------------------------------
+    // Contributor auth (gallery/museum/prior-owner) — distinct from
+    // the collector passkey session (iter #9). A contributor is not
+    // a collector: galleries reach this route from their own tools,
+    // Laura never does. The P10 gate exempts this route from the
+    // `requireSession()` check and enforces the contributor header
+    // auth here instead. OAuth lands in iteration #7.
     const token = request.headers.get("x-pang-gallery-token");
     if (!GALLERY_TOKEN || !token || token !== GALLERY_TOKEN) {
       span.setAttribute("pang.error.kind", "auth");

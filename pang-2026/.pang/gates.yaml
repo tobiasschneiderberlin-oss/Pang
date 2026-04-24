@@ -116,7 +116,26 @@ gates:
     family: pwa_primitives
     folder: src/auth/
     auto: true
-    fails_when: "Password field present. Auth is passkeys + magic link only."
+    fails_when: |
+      Passkey surface not wired or any collector route ungated. Uplift in
+      iteration #9 (2026-04-24): mechanical enforcement of four halves.
+        1. No <input type="password"> anywhere under app/** or src/components/**.
+        2. WebAuthn wired: src/auth/webauthn/{options,verify}.ts,
+           src/auth/server/{session,invite}.ts, src/hooks/usePasskey.ts
+           all present with the declared exports (mintEnrollOptions,
+           verifyEnroll, requireSession, UnauthenticatedError, signInvite,
+           verifyInvite, startRegistration).
+        3. Every collector-facing route.ts under app/api/** that exports
+           a handler must import from @/auth/server/session AND call
+           requireSession(). Allowlist for routes that are auth-free by
+           design: /api/telemetry (beacon), /api/enrichment/submit
+           (contributor auth via x-pang-gallery-token; OAuth lands iter #7),
+           /api/auth/** (the auth surface itself).
+        4. Invite landing mounts <InviteLandingClient> which uses the
+           usePasskey hook — no in-page secret form.
+      Magic Link OTP fallback is named principle-scope deferral in iter
+      #9's kickoff brief; the session record's `method` union admits it
+      from day one ("passkey" | "otp" | "e2e-seam").
 
   - id: P11
     name: OKLCH only

@@ -28,6 +28,26 @@ const baseURL = process.env["PANG_E2E_BASE_URL"] ?? "http://localhost:3000";
 // localhost. Against a preview URL, we skip the webServer clause.
 const useLocalServer = baseURL.startsWith("http://localhost");
 
+// Iter #9: the e2e-seam route requires a shared secret so specs can
+// mint synthetic sessions against gated routes. Fixed dev fallback
+// keeps local + CI deterministic; prod bundles with
+// NEXT_PUBLIC_PANG_E2E unset bypass the seam regardless.
+// `PANG_AUTH_INVITE_SECRET` is also set here so `signInvite` in the
+// `/api/auth/invite/mint-dev` route produces deterministic JWTs for
+// `passkey.spec.ts`. The folder names are `e2e-seam` + `mint-dev` (not
+// `__e2e` / `__dev`) because Next.js app router treats `_`-prefixed
+// folders as private and silently 404s them — see the route docstrings.
+const DEV_E2E_TOKEN =
+  process.env["PANG_AUTH_E2E_TOKEN"] ?? "pang-e2e-dev-token-0123456789abcdef";
+const DEV_INVITE_SECRET =
+  process.env["PANG_AUTH_INVITE_SECRET"] ??
+  "pang-dev-invite-secret-do-not-use-in-prod-48chars";
+// Plumb the values back into the test-runner environment so
+// `e2e/support/auth.ts` can read them without the spec author
+// having to set them manually on each CI job.
+process.env["PANG_AUTH_E2E_TOKEN"] = DEV_E2E_TOKEN;
+process.env["NEXT_PUBLIC_PANG_AUTH_E2E_TOKEN"] = DEV_E2E_TOKEN;
+
 export default defineConfig({
   testDir: "./e2e",
   // Mobile-ish viewport by default — PANG is a PWA and the primary
@@ -107,6 +127,13 @@ export default defineConfig({
             // webServer; prod bundles with NEXT_PUBLIC_PANG_E2E unset
             // ship no seed hook.
             NEXT_PUBLIC_PANG_E2E: "1",
+            // Iter #9 auth seam credentials. `PANG_AUTH_E2E_TOKEN`
+            // gates `/api/auth/e2e-seam` + `/api/auth/invite/mint-dev`.
+            // `PANG_AUTH_INVITE_SECRET` is the HS256 key invite JWTs
+            // are signed with — `mint-dev` reads it on sign, and
+            // `/api/auth/invite/bind` verifies with the same key.
+            PANG_AUTH_E2E_TOKEN: DEV_E2E_TOKEN,
+            PANG_AUTH_INVITE_SECRET: DEV_INVITE_SECRET,
             ...(process.env["NEXT_PUBLIC_SUPABASE_HOST"]
               ? {
                   NEXT_PUBLIC_SUPABASE_HOST:

@@ -8,22 +8,40 @@
  *   - Prove idempotency on `requestId` (same `receivedAt` on re-POST).
  *   - Lock the 400 / 413 / 422 failure paths so the retry loop knows
  *     which errors are terminal vs transient (a 4xx ≠ retry).
+ *   - Lock the iter #9 auth gate — a request without a session cookie
+ *     returns 401 with an empty body.
  *
  * The route writes to `.pang/server-outbox/<requestId>.json` under
  * `process.cwd()`. Tests generate unique request ids per case to
  * avoid cross-test interference, and clean up their own artefacts at
  * the end.
+ *
+ * Iter #9: the route now calls `requireSession()`, which transitively
+ * calls `cookies()` from `next/headers`. `node --test` has no Next
+ * request scope, so the test installs a `next/headers` mock + seeds
+ * a valid session in the filesystem store before importing the
+ * handler.
  */
 
-import { describe, it, after } from "node:test";
+import { describe, it, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { POST } from "./route";
+import { installNextHeadersMock } from "@/test/next-headers-mock";
+import { seedSession } from "@/test/seed-session";
+import { __resetAuthStoresForTests } from "@/auth/server/store";
 import {
   newRequestId,
   type VerificationRequest,
 } from "@/verification/schema";
+
+// Install the `next/headers` mock BEFORE importing the route — the
+// route statically imports `requireSession`, which statically
+// imports `cookies` from `next/headers`.
+const jar = installNextHeadersMock();
+
+// Dynamic-import the route *after* the mock is installed.
+const { POST } = await import("./route");
 
 const SERVER_OUTBOX_DIR = path.resolve(
   process.cwd(),
@@ -69,6 +87,13 @@ function rememberFile(requestId: string): void {
   createdFiles.push(path.join(SERVER_OUTBOX_DIR, `${requestId}.json`));
 }
 
+// Seed once; every test below runs authenticated. The dedicated
+// "auth gate" describe block clears the jar to exercise the 401 path.
+before(async () => {
+  await __resetAuthStoresForTests();
+  await seedSession(jar);
+});
+
 after(async () => {
   // Clean up every artefact the tests wrote.
   for (const file of createdFiles) {
@@ -76,9 +101,31 @@ after(async () => {
   }
 });
 
+// ---------- Auth gate (iter #9) -----------------------------------
+
+describe("POST /api/verification/request — auth gate", () => {
+  it("returns 401 with an empty body when the session cookie is missing", async () => {
+    // Clear the cookie jar — no pang_session cookie present.
+    jar.clear();
+    const res = await POST(makeRequest(validBody()));
+    assert.equal(res.status, 401);
+    const text = await res.text();
+    assert.equal(text, "");
+    // Re-seed for subsequent tests.
+    await seedSession(jar);
+  });
+});
+
 // ---------- Happy path --------------------------------------------
 
 describe("POST /api/verification/request — happy path", () => {
+  beforeEach(async () => {
+    // Re-seed between tests in case a previous test cleared the jar.
+    if (!jar.has("pang_session")) {
+      await seedSession(jar);
+    }
+  });
+
   it("returns 200 with an ack", async () => {
     const body = validBody();
     rememberFile(body.requestId);
@@ -159,6 +206,12 @@ describe("POST /api/verification/request — happy path", () => {
 // ---------- Validation failures -----------------------------------
 
 describe("POST /api/verification/request — validation", () => {
+  beforeEach(async () => {
+    if (!jar.has("pang_session")) {
+      await seedSession(jar);
+    }
+  });
+
   it("returns 400 on invalid JSON", async () => {
     const res = await POST(makeRequest("{not json"));
     assert.equal(res.status, 400);

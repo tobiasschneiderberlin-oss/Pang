@@ -8,6 +8,7 @@
  *   iter #0  — P1–P10, P23, P24                                  (platform floor)
  *   iter #1  — + A1–A4, A7, A8, A16, A21                         (intake agent)
  *   iter #2  — + P11, P15, P19, P20, P25, A10                    (the Room + zero-tap review)
+ *   iter #9  — P10 uplift                                        (passkeys; real enforcement)
  *
  * Each gate is a pure function `() => GateResult`. A gate can pass,
  * fail (CI-blocking), or skip (with a named reason — e.g. "no /fonts
@@ -312,17 +313,144 @@ async function p9(): Promise<GateResult> {
 }
 
 /**
- * P10 — Passkey-only auth. Iteration #0 reserves the surface; the
- * invite route must not set a password field.
+ * P10 — Passkey-only auth (iter #9 uplift).
+ *
+ * Mechanical enforcement of the "passkeys or nothing" contract. The
+ * iter #0 placeholder only checked for `type="password"` on the invite
+ * page. The full check:
+ *
+ *   1. No `type="password"` input anywhere under `app/**` or
+ *      `src/components/**`. A password box is the failure mode the
+ *      gate exists to prevent.
+ *
+ *   2. The WebAuthn surface is wired:
+ *        - `src/auth/webauthn/options.ts` exports option minters
+ *        - `src/auth/webauthn/verify.ts` exports verifiers
+ *        - `src/auth/server/session.ts` exports `requireSession` +
+ *          `UnauthenticatedError`
+ *        - `src/auth/server/invite.ts` exports sign + verify
+ *        - `src/hooks/usePasskey.ts` exists (client ceremony)
+ *
+ *   3. Every collector-facing API route gates with `requireSession`.
+ *      An allowlist carries the routes that are auth-free *by design*:
+ *        - `/api/auth/**`         — the auth surface itself
+ *        - `/api/telemetry`       — beacon, metadata-only
+ *        - `/api/enrichment/submit` — contributor (gallery) surface,
+ *          uses its own `x-pang-gallery-token` header auth (OAuth
+ *          lands in iter #7; see the route's own comment)
+ *
+ *      Any route outside the allowlist must `import { requireSession }
+ *      from "@/auth/server/session"` AND call it. A route that
+ *      imports but never calls is a silent regression; both halves
+ *      are required.
+ *
+ *   4. The invite landing page doesn't self-enroll a secret — it
+ *      mounts `InviteLandingClient` which calls the passkey hook.
  */
 async function p10(): Promise<GateResult> {
   const id = "P10";
-  const title = "no password surfaces; passkey-only";
+  const title = "no password surfaces; passkey-only (WebAuthn wired + routes gated)";
+
+  // --- 1. No password inputs anywhere in user-facing surface. ---
+  const uiFiles = await walkRepoFiles(
+    ["app", "src/components"],
+    ["ts", "tsx"],
+  );
+  for (const f of uiFiles) {
+    const src = await read(f);
+    if (/type\s*=\s*["']password["']/.test(src)) {
+      return fail(id, title, `${f} contains a <input type="password"> — passkeys only`);
+    }
+  }
+
+  // --- 2. WebAuthn surface present. ---
+  const required: Array<[string, string]> = [
+    ["src/auth/webauthn/options.ts", "mintEnrollOptions"],
+    ["src/auth/webauthn/verify.ts", "verifyEnroll"],
+    ["src/auth/server/session.ts", "requireSession"],
+    ["src/auth/server/session.ts", "UnauthenticatedError"],
+    ["src/auth/server/invite.ts", "signInvite"],
+    ["src/auth/server/invite.ts", "verifyInvite"],
+    ["src/hooks/usePasskey.ts", "startRegistration"],
+  ];
+  const seen = new Set<string>();
+  for (const [path] of required) {
+    if (!(await exists(path))) {
+      return fail(id, title, `${path} missing — passkey surface not wired`);
+    }
+    seen.add(path);
+  }
+  // Re-scan each file once, looking for every needle it owns.
+  const needlesByFile = new Map<string, string[]>();
+  for (const [path, needle] of required) {
+    const list = needlesByFile.get(path) ?? [];
+    list.push(needle);
+    needlesByFile.set(path, list);
+  }
+  for (const [path, needles] of needlesByFile) {
+    const src = await read(path);
+    for (const n of needles) {
+      if (!src.includes(n))
+        return fail(id, title, `${path} does not reference ${n}`);
+    }
+  }
+
+  // --- 3. Every non-allowlisted API route calls requireSession. ---
+  const ALLOWLIST = [
+    "app/api/telemetry/route.ts",
+    "app/api/enrichment/submit/route.ts",
+    // The auth surface itself — these routes are the auth gate.
+    "app/api/auth/invite/bind/route.ts",
+    "app/api/auth/invite/mint-dev/route.ts",
+    "app/api/auth/passkey/options/route.ts",
+    "app/api/auth/passkey/enroll/route.ts",
+    "app/api/auth/passkey/assert/route.ts",
+    "app/api/auth/session/route.ts",
+    "app/api/auth/logout/route.ts",
+    "app/api/auth/e2e-seam/route.ts",
+  ];
+  const allowSet = new Set(ALLOWLIST);
+  const apiFiles = await walkRepoFiles(["app/api"], ["ts", "tsx"]);
+  for (const f of apiFiles) {
+    if (!f.endsWith("/route.ts")) continue;
+    if (allowSet.has(f)) continue;
+    const src = await read(f);
+    // POST/GET/PUT/DELETE handlers may not export if route is typed-only.
+    // Any route with a handler export must gate; we require the import
+    // and the call both.
+    const hasHandler =
+      /export\s+async\s+function\s+(?:GET|POST|PUT|PATCH|DELETE|HEAD)\b/.test(
+        src,
+      );
+    if (!hasHandler) continue;
+    if (!/from\s+["']@\/auth\/server\/session["']/.test(src)) {
+      return fail(
+        id,
+        title,
+        `${f} does not import from @/auth/server/session (requireSession gate missing)`,
+      );
+    }
+    if (!/requireSession\s*\(\s*\)/.test(src)) {
+      return fail(
+        id,
+        title,
+        `${f} imports auth helpers but never calls requireSession()`,
+      );
+    }
+  }
+
+  // --- 4. Invite landing mounts the client ceremony. ---
   if (!(await exists("app/i/[token]/page.tsx")))
     return fail(id, title, "invite route missing");
-  const src = await read("app/i/[token]/page.tsx");
-  if (/type=["']password["']/.test(src))
-    return fail(id, title, "password input present");
+  const pageSrc = await read("app/i/[token]/page.tsx");
+  if (!/InviteLandingClient/.test(pageSrc))
+    return fail(id, title, "invite route must mount <InviteLandingClient>");
+  if (!(await exists("app/i/[token]/InviteLandingClient.tsx")))
+    return fail(id, title, "InviteLandingClient.tsx missing");
+  const clientSrc = await read("app/i/[token]/InviteLandingClient.tsx");
+  if (!/usePasskey/.test(clientSrc))
+    return fail(id, title, "InviteLandingClient must use the usePasskey hook");
+
   return pass(id, title);
 }
 
@@ -1105,8 +1233,9 @@ async function main(): Promise<void> {
   };
 
   console.log(
-    "\nPANG gates — iteration #2 scope\n" +
-      "  P1–P11, P15, P19, P20, P23–P25  +  A1–A4, A7, A8, A10, A16, A21",
+    "\nPANG gates — iteration #9 scope\n" +
+      "  P1–P11, P15, P19, P20, P23–P25  +  A1–A4, A7, A8, A10, A16, A21\n" +
+      "  (P10 uplifted: passkeys wired + every API route gated with requireSession)",
   );
   console.log("─".repeat(70));
   for (const r of results) {

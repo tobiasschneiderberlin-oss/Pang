@@ -7,10 +7,15 @@
 > Sits above `CLAUDE.md` in priority. `CLAUDE.md` is *how* we build.
 > `PANG_Spine.md` is *what* we build.
 >
-> Last updated: 2026-04-22 — iteration #1 findings codified: the
-> scanner review form is dropped (intake is zero-tap from capture to
-> arrival; fields are editable later on the detail surface). See
-> gate P25.
+> Last updated: 2026-04-24 — iteration #9 landed: spine moment #7
+> (Passkeys auth) is wired end-to-end. The collector's invite link
+> binds to a passkey on their device; `requireSession` gates every
+> non-public API route; the session rides an opaque bearer cookie
+> backed by server-side state. "Laura is the baseline" now means
+> session identity, not seed data. Earlier 2026-04-22 — iteration
+> #1 findings codified: the scanner review form is dropped (intake
+> is zero-tap from capture to arrival; fields are editable later on
+> the detail surface). See gate P25.
 
 ---
 
@@ -278,8 +283,18 @@ encounters them.**
    escalation in iter #8. Laura can stand in front of her Van
    Gogh and see the paint strokes.
 
-7. **Passkeys auth.** WebAuthn primary; Magic Link OTP retained as
-   a one-time fallback for first-time device binding only.
+7. **Passkeys auth.** *Landed 2026-04-24, iter #9.* WebAuthn primary
+   via `@simplewebauthn/{server,browser}@11`; invite JWT (HS256 via
+   `jose`, 14d TTL, single-use via consumed-`jti` markers) trades for
+   a short-TTL bind cookie; platform-authenticator + resident-key +
+   required-UV enrollment; opaque 32-byte bearer cookie
+   (HttpOnly+SameSite=Strict+Path=/, `Secure` in prod) backed by
+   server-side session records; counter-rollback clone detection
+   revokes the credential to a separate directory (audit trail
+   preserved). `requireSession()` gates every non-public API route;
+   P10 uplifts from trivial-pass to mechanical enforcement across
+   `app/api/**/route.ts`. Magic Link OTP remains principle-deferred
+   until observability shows Tier-C devices arriving.
 
 8. **Verification request flow.** Intake detects gallery of origin;
    PANG pre-writes the message (email or WhatsApp, collector

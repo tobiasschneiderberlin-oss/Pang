@@ -586,14 +586,46 @@ Gate **P6** (see `.pang/gates.yaml`):
 
 ### Auth
 
-- Passkeys primary. `navigator.credentials.create({ publicKey, ... })`
-  with user verification required.
-- Magic Link OTP as one-time first-bind fallback. Short TTL (5 min).
-- Session: HttpOnly, SameSite=Strict, Secure cookie + rotating
-  server-side token.
-- No password login anywhere. No social SSO.
-- Gallery invite JWT is signed with a rotating HMAC key; tokens are
-  single-use.
+- **Landed ceiling, iter #9 (2026-04-24).** Passkeys primary via
+  `@simplewebauthn/{server,browser}@11` with `residentKey:
+  "required"` + `authenticatorAttachment: "platform"` + `userVerification:
+  "required"`. Conditional UI via `autocomplete="username webauthn"`
+  on cookie-less cold start.
+- **Session is an opaque bearer cookie + server-side record, not a
+  JWT.** Cookie carries a 32-byte hex lookup key; the session truth
+  lives server-side. Revocation is a file delete (or row delete
+  in prod); rotation is a rename + new cookie write. JWT-as-session
+  drifts into deny-list territory; the opaque design keeps
+  revocation cheap. TTL 14 days, rotated on every assert.
+  Attributes: HttpOnly + SameSite=Strict + Path=/; `Secure` gated
+  on `NODE_ENV==="production"` so Playwright-against-localhost
+  still sees the cookie. Codified 2026-04-24, iter #9.
+- **JWT earns its keep at the invite boundary only.** Gallery
+  invite is an HS256 JWT (via `jose@5`, 14-day TTL) identifying
+  gallery + recipient metadata, single-use via a consumed-`jti`
+  marker written **before** the session cookie is issued (crash-
+  between-steps fails closed; primitive 51). Signed with
+  `PANG_AUTH_INVITE_SECRET`. The invite JWT is the only JWT in
+  the session path.
+- **Counter-rollback detection revokes to a separate directory
+  (primitive 50).** A credential whose assert counter does not
+  strictly exceed the stored counter moves from
+  `.pang/server-credentials/` to
+  `.pang/server-credentials-revoked/` and returns 410 Gone on
+  the assert. The audit trail is a directory listing, not a
+  log grep.
+- **`requireSession(request)` is the only API auth helper.**
+  Lives in `src/auth/server/session.ts`. Every non-public
+  `app/api/**/route.ts` either calls it as the first meaningful
+  statement of its handler or appears on the ALLOWLIST (ceremony
+  routes + telemetry beacon). P10 walks the surface in CI.
+- **No password login anywhere. No social SSO.** The cannot-do
+  list from `CLAUDE.md` holds.
+- **Magic Link OTP remains principle-deferred** (iter #9 kickoff
+  brief § Scope). The `method: "passkey" | "otp"` rails are in
+  place; the OTP branch lights up the day
+  `auth.passkey.enroll.failed { reason: "not-supported" }` spans
+  show a Tier-C device arriving.
 
 ### Data
 
@@ -709,6 +741,108 @@ real UI through a scanner + intake fake-media stream per
 spec) would couple every documents / enrichment / room spec
 to the intake flow's shape; when that flow changes, unrelated
 specs break for the wrong reason.
+
+### Next.js `_`-prefixed folders are private — routable folders must never start with `_`
+
+Next 16's app router treats any segment folder whose name
+starts with `_` as a **private folder**: excluded from
+routing, no handler compiled, no dev-server diagnostic
+fired. A request for `/api/auth/__dev` or `/api/auth/__e2e`
+lands as a 404 that is indistinguishable from a missing
+route. The convention is documented upstream but does not
+surface in `next dev` logs.
+
+**The rule:** every `app/**/<segment>/route.ts` (or
+`page.tsx`) whose parent folder is addressable over HTTP
+must have a name that does not start with `_`. Reserve `_`
+for helper folders that the route handlers reach into
+(e.g. `app/_components/`, which is never routable and
+lives alongside for co-location).
+
+Canonical counter-example: iter #9 first named the E2E
+seams `app/api/auth/__e2e/route.ts` +
+`app/api/auth/invite/__dev/route.ts`. Both 404'd with env
+vars correctly plumbed; a `console.log` at the top of
+each handler never fired because the handlers never
+compiled. Fix: renamed to `e2e-seam/` + `mint-dev/`.
+Cost: half an evening of diagnosis. Codified 2026-04-24
+from iter #9.
+
+### Node test runner + module mocks need `--test-concurrency=1`
+
+Node's `--experimental-test-module-mocks` registers mocks
+in a **process-global** module registry. Parallel test
+files race on that registry — one file's mocked
+`cookies()` will occasionally return another file's
+seeded value. The failure is intermittent and impossible
+to reproduce deterministically on a single-file run.
+
+**The rule:** `package.json`'s `test` script uses
+`node --experimental-test-module-mocks --import tsx --test
+--test-concurrency=1`. The concurrency cap is not
+negotiable while node's mock registry stays process-global.
+Cost: modest test-duration increase (~3s → ~5s for the
+current suite); the determinism gain is worth it several
+times over.
+
+Canonical reference: the iter #9 route unit tests
+(`app/api/auth/**/*.test.ts` +
+`app/api/verification/**/*.test.ts`) mock `next/headers`
+so `cookies()` returns a seeded cookie jar. Without the
+concurrency cap, the mocks leaked. Codified 2026-04-24
+from iter #9.
+
+### Idempotency markers commit before the side effect they guard
+
+A single-use token (invite `jti`, outbox record id, etc.)
+must write the "consumed" marker **before** the guarded
+side effect (issue a session, send an email, charge a
+card). The inverse order re-opens the replay window for
+the time between the side effect's success and the
+marker's write.
+
+**The rule:** the handler reads *"if consumed return 409;
+else mark consumed; else do the thing"*. A crash between
+the mark and the thing reads as "consumed, not issued" —
+the caller retries, the retry fails closed, and the caller
+escalates to the human path (ask the gallery for a new
+invite). "Commit after" reads as "issued, not consumed" —
+an attacker with a stolen token has the effect already.
+
+Canonical reference:
+`app/api/auth/invite/bind/route.ts` consumes the `jti`
+before issuing the session cookie; the replay Playwright
+test proves the contract. The rule generalises to every
+outbox dispatcher and single-use token in the codebase.
+Codified 2026-04-24 from iter #9.
+
+### Filesystem-backed server stand-in for durable state in dev
+
+Any durable server-side store that a non-final deploy
+target needs (users, sessions, credentials, outbox rows,
+rate-limit counters) lives under `.pang/server-<name>/`
+as one JSON file per record. The directory is
+`.gitignore`d with a `.gitkeep` stub so the shape is
+tracked but the contents aren't. The JSON shape is 1:1
+with the future Supabase row shape so the migration is a
+helper-body swap (`JSON.parse(readFile)` → `await
+supabase.from(table).select(...)`), not a call-site
+rewrite.
+
+**The rule:** a new iteration that needs durable server
+state proposes `.pang/server-<name>/`, not an in-memory
+`Map` and not a Supabase block. The `Map` loses state
+on `next dev` restart and can't be migrated; the
+Supabase block blocks the iteration on infra wiring that
+isn't scheduled yet.
+
+Canonical references:
+`.pang/server-outbox/` (iter #4, verification dispatcher)
+and `.pang/server-{users,credentials,sessions,invites,
+challenges,credentials-revoked,rate-limit}/` (iter #9,
+auth). Seven directories, one pattern. Codified
+2026-04-24 from iter #9 as the sanctioned dev stand-in
+after three reuses.
 
 ---
 
