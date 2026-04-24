@@ -281,8 +281,12 @@ test.describe("settings-overlay-persistence — audioSpatial rehydrates", () => 
     await audioToggle.click();
     await expect(audioToggle).toHaveAttribute("data-state", "on");
 
-    // Wait for the 120 ms persist debounce to land in OPFS.
-    await page.waitForTimeout(250);
+    // Wait for the 120 ms persist debounce to land in OPFS. CI load
+    // can push the write past a 250 ms margin on cold kernel cache,
+    // so we give a generous window here; the `waitForFunction` after
+    // the reload still has to see `"on"` for the spec to pass, so a
+    // real regression trips regardless.
+    await page.waitForTimeout(750);
 
     // Reload.
     await page.reload();
