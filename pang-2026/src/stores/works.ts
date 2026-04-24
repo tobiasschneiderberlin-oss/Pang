@@ -30,6 +30,7 @@ import { ROOM, WORK_CENTRE_HEIGHT } from "@/room/constants";
 import type { Work } from "@/room/types";
 import type { IntakeOutput } from "@/ai/tools/artwork";
 import type { ArtworkSnapshot } from "@/verification/schema";
+import type { TileSource } from "@/deep-zoom/source";
 
 /**
  * A durable document attached to a work. Iteration #1's intake extracts
@@ -115,6 +116,22 @@ export interface CollectionEntry {
    * the spine is the work, not the paperwork.
    */
   readonly documents?: readonly DocumentRecord[];
+  /**
+   * The pyramid (or flat-image fallback) the deep-zoom surface
+   * pulls tiles from. Populated by the build-time DZI generator
+   * (`scripts/build-deepzoom-pyramids.ts`) for seeded works, and by
+   * the gallery-side enrichment path for collector-scanned works
+   * once the museum-grade capture flow lands. Optional: an entry
+   * without a tile source still hangs on the wall, and Laura's
+   * pinch-past-flat lands on the simple-image fallback derived
+   * from `imageUrl` (handled by the connector resolver, not this
+   * field).
+   *
+   * Iter #8 (data phase) — see `PANG_Aha_Sprint.md` for the full
+   * iteration brief. Shape + Zod schema live in
+   * `src/deep-zoom/source.ts`.
+   */
+  readonly tileSource?: TileSource;
 }
 
 interface WorksStore {

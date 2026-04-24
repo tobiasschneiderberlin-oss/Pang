@@ -17,7 +17,7 @@
  */
 
 import { beatEnvelope, beatProgress } from "./envelope";
-import type { ActiveBeat, Beat, ChapterPlanBase } from "./types";
+import type { ActiveBeat, Beat, BeatKind, ChapterPlanBase } from "./types";
 
 /** Return the beats visible at `tMs`, paired with their envelope. */
 export function activeBeats(
@@ -40,6 +40,62 @@ export function activeBeats(
     });
   }
   return out;
+}
+
+/**
+ * Walk the plan's beats of the given `kind` and return one
+ * `ActiveBeat`-shaped entry per beat that has already revealed
+ * (`startMs <= tMs`). Past-end beats hold at rest (envelope 1,
+ * progress 1) so the tap surface survives the reveal — the chapter
+ * is the reveal + the resting evidence, not only the reveal.
+ *
+ * Named `persistentSlots` because the contract is "reveal + rest,"
+ * not "currently painting." The narration sibling
+ * (`activeBeats`) is transient; this one is additive over time.
+ * Use this for any artifact-like beat whose surface has a tap
+ * target (documents, deep-zoom previews, arrival document cards).
+ *
+ * Codified in `PANG_Primitives_2026.md` § 43 (chapter grammar =
+ * reveal + persistent rest state). Landed in iter #6's
+ * `DocumentsChapter.tsx` as a local helper; lifted here in iter #8
+ * so every ChapterShape renderer uses the same primitive.
+ */
+export function persistentSlots(
+  beats: readonly Beat[],
+  tMs: number,
+  kind: BeatKind,
+): readonly ActiveBeat[] {
+  const out: ActiveBeat[] = [];
+  for (const beat of beats) {
+    if (beat.kind !== kind) continue;
+    if (tMs < beat.startMs) continue;
+    const endMs = beat.startMs + beat.durationMs;
+    if (tMs >= endMs) {
+      out.push({ beat, envelope: 1, progress: 1 });
+      continue;
+    }
+    out.push({
+      beat,
+      envelope: beatEnvelope(beat, tMs),
+      progress: beatProgress(beat, tMs),
+    });
+  }
+  return out;
+}
+
+/**
+ * Specialised sugar for the common case: walk artifact beats with
+ * reveal + rest semantics. Equivalent to
+ * `persistentSlots(beats, tMs, "artifact")`. Kept as a dedicated
+ * export because artifact surfaces are by far the most common
+ * consumer; other kinds (`pose`, `camera`, `context`) that adopt
+ * the reveal-plus-rest contract use the generic form.
+ */
+export function persistentArtifactSlots(
+  beats: readonly Beat[],
+  tMs: number,
+): readonly ActiveBeat[] {
+  return persistentSlots(beats, tMs, "artifact");
 }
 
 /** Look up a single beat by kind. Returns the first match, or null. */

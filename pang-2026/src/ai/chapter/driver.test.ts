@@ -24,6 +24,8 @@ import {
   diffActiveBeats,
   findBeatByKind,
   isReady,
+  persistentArtifactSlots,
+  persistentSlots,
 } from "./driver";
 import { planChapter } from "./plan";
 import type { ActiveBeat, Beat } from "./types";
@@ -373,5 +375,113 @@ describe("ariaLineForActive", () => {
     );
     // Neither is rising (envelope=1). Last wins.
     assert.equal(ariaLineForActive([camera, narration]), "settled text");
+  });
+});
+
+// ---- persistentSlots / persistentArtifactSlots --------------------
+
+describe("persistentSlots / persistentArtifactSlots", () => {
+  function artifactBeat(
+    id: string,
+    startMs: number,
+    durationMs: number,
+  ): Beat {
+    return {
+      id,
+      kind: "artifact",
+      startMs,
+      durationMs,
+      fadeInMs: 200,
+      fadeOutMs: 200,
+      payload: {
+        kind: "artifact",
+        artifact: {
+          id,
+          kind: "coa",
+          label: "certificate of authenticity",
+          fields: [],
+          fileRef: `opfs://${id}.pdf`,
+          mime: "application/pdf",
+        },
+      },
+    };
+  }
+  function textBeat(id: string, startMs: number, durationMs: number): Beat {
+    return {
+      id,
+      kind: "settle",
+      startMs,
+      durationMs,
+      fadeInMs: 200,
+      fadeOutMs: 200,
+      payload: { kind: "text", text: id, source: "ai" },
+    };
+  }
+
+  it("skips beats whose reveal hasn't started", () => {
+    const beats: Beat[] = [
+      artifactBeat("a", 1000, 800),
+      artifactBeat("b", 2000, 800),
+    ];
+    const slots = persistentArtifactSlots(beats, 500);
+    assert.equal(slots.length, 0);
+  });
+
+  it("returns revealing beats with mid-reveal envelope < 1", () => {
+    // artifactBeat uses fadeInMs=200. At tMs=100 we're halfway through
+    // the rising phase [0, 200) — envelope is strictly between 0 and 1
+    // (hasn't reached the hold-phase plateau at tMs >= 200 yet).
+    const beats: Beat[] = [artifactBeat("a", 0, 1000)];
+    const slots = persistentArtifactSlots(beats, 100);
+    assert.equal(slots.length, 1);
+    assert.ok((slots[0]?.envelope ?? 1) < 1);
+    assert.ok((slots[0]?.envelope ?? 0) > 0);
+  });
+
+  it("holds past-end beats at rest (envelope 1, progress 1)", () => {
+    const beats: Beat[] = [artifactBeat("a", 0, 500)];
+    // tMs past the end — local helper formerly dropped it; the
+    // persistent variant must clamp to rest state.
+    const slots = persistentArtifactSlots(beats, 10_000);
+    assert.equal(slots.length, 1);
+    assert.equal(slots[0]?.envelope, 1);
+    assert.equal(slots[0]?.progress, 1);
+  });
+
+  it("filters out beats of other kinds", () => {
+    const beats: Beat[] = [
+      artifactBeat("a", 0, 500),
+      textBeat("t", 0, 500),
+    ];
+    const slots = persistentArtifactSlots(beats, 10_000);
+    assert.equal(slots.length, 1);
+    assert.equal(slots[0]?.beat.id, "a");
+  });
+
+  it("persistentSlots generalises — can filter on any kind", () => {
+    const beats: Beat[] = [
+      artifactBeat("a", 0, 500),
+      textBeat("t", 0, 500),
+    ];
+    const artifactSlots = persistentSlots(beats, 10_000, "artifact");
+    const settleSlots = persistentSlots(beats, 10_000, "settle");
+    assert.equal(artifactSlots.length, 1);
+    assert.equal(artifactSlots[0]?.beat.id, "a");
+    assert.equal(settleSlots.length, 1);
+    assert.equal(settleSlots[0]?.beat.id, "t");
+  });
+
+  it("is monotonic in count — more beats revealed at later t", () => {
+    const beats: Beat[] = [
+      artifactBeat("a", 0, 400),
+      artifactBeat("b", 1000, 400),
+      artifactBeat("c", 2000, 400),
+    ];
+    const n1 = persistentArtifactSlots(beats, 200).length;
+    const n2 = persistentArtifactSlots(beats, 1200).length;
+    const n3 = persistentArtifactSlots(beats, 2200).length;
+    assert.equal(n1, 1);
+    assert.equal(n2, 2);
+    assert.equal(n3, 3);
   });
 });

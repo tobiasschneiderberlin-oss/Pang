@@ -182,3 +182,95 @@ describe("serialiseIndex / parseIndex", () => {
     assert.equal(parsed[1]?.id, "e3");
   });
 });
+
+// ---------- tileSource round-trip (iter #8 data phase) -----------
+
+describe("projectDurable / parseDurable — tileSource", () => {
+  const E_WITH_DZI: CollectionEntry = {
+    id: "e-dzi",
+    imageUrl: "blob:dead",
+    status: "verified",
+    size: [0.6, 0.8],
+    tileSource: {
+      kind: "dzi",
+      url: "/deep-zoom/vermeer-pearl/manifest.dzi",
+    },
+  };
+  const E_WITH_SIMPLE: CollectionEntry = {
+    id: "e-flat",
+    imageUrl: "blob:dead",
+    status: "unverified",
+    size: [0.6, 0.8],
+    tileSource: { kind: "simple-image", url: "/works/flat.jpg" },
+  };
+
+  it("projectDurable preserves a DZI tileSource", () => {
+    const d = projectDurable(E_WITH_DZI);
+    assert.deepEqual(d.tileSource, {
+      kind: "dzi",
+      url: "/deep-zoom/vermeer-pearl/manifest.dzi",
+    });
+  });
+
+  it("projectDurable preserves a simple-image tileSource", () => {
+    const d = projectDurable(E_WITH_SIMPLE);
+    assert.deepEqual(d.tileSource, {
+      kind: "simple-image",
+      url: "/works/flat.jpg",
+    });
+  });
+
+  it("projectDurable omits tileSource when absent (no undefined keys)", () => {
+    const d = projectDurable(E1) as unknown as Record<string, unknown>;
+    assert.equal("tileSource" in d, false);
+  });
+
+  it("parseDurable accepts a valid tileSource", () => {
+    const parsed = parseDurable({
+      id: "e-dzi",
+      status: "verified",
+      size: [0.6, 0.8],
+      tileSource: { kind: "dzi", url: "/x.dzi" },
+    });
+    assert.ok(parsed);
+    assert.equal(parsed.tileSource?.kind, "dzi");
+    assert.equal(parsed.tileSource?.url, "/x.dzi");
+  });
+
+  it("parseDurable drops a malformed tileSource, keeps the rest", () => {
+    // Malformed: unknown discriminator. The entry itself is fine.
+    const parsed = parseDurable({
+      id: "e-dzi",
+      status: "verified",
+      size: [0.6, 0.8],
+      tileSource: { kind: "iiif", url: "/x" },
+    });
+    assert.ok(parsed);
+    assert.equal(parsed.id, "e-dzi");
+    assert.equal(parsed.tileSource, undefined);
+  });
+
+  it("parseDurable hydrates entries with no tileSource (legacy compat)", () => {
+    const parsed = parseDurable({
+      id: "e-legacy",
+      status: "unverified",
+      size: [0.5, 0.5],
+    });
+    assert.ok(parsed);
+    assert.equal(parsed.tileSource, undefined);
+  });
+
+  it("serialiseIndex / parseIndex round-trips a tileSource losslessly", () => {
+    const text = serialiseIndex([E_WITH_DZI, E_WITH_SIMPLE]);
+    const parsed = parseIndex(text);
+    assert.equal(parsed.length, 2);
+    assert.deepEqual(parsed[0]?.tileSource, {
+      kind: "dzi",
+      url: "/deep-zoom/vermeer-pearl/manifest.dzi",
+    });
+    assert.deepEqual(parsed[1]?.tileSource, {
+      kind: "simple-image",
+      url: "/works/flat.jpg",
+    });
+  });
+});

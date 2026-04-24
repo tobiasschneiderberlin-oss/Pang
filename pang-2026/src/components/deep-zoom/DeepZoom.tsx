@@ -60,6 +60,8 @@ import {
   deepZoomTileLoadEvent,
   deepZoomDepthLevel,
 } from "@/deep-zoom/otel";
+import type { TileSource } from "@/deep-zoom/source";
+import { installOpfsTileCacheOverride } from "@/deep-zoom/opfs-override";
 
 /**
  * Tile source contract. The two shapes OSD consumes natively:
@@ -69,10 +71,13 @@ import {
  *     strokes visible" promise waits on real DZI source.
  *   - `{ kind: "dzi", url }` — URL to a `.dzi` manifest. OSD reads
  *     the manifest, requests tile levels on demand. Real deep zoom.
+ *
+ * Definition lives in `src/deep-zoom/source.ts` (Zod-validated, used
+ * by both the durable store and the runtime viewer). Re-exported
+ * here under the legacy name `DeepZoomSource` so existing call
+ * sites keep compiling.
  */
-export type DeepZoomSource =
-  | { readonly kind: "simple-image"; readonly url: string }
-  | { readonly kind: "dzi"; readonly url: string };
+export type DeepZoomSource = TileSource;
 
 export interface DeepZoomProps {
   readonly workId: string;
@@ -206,6 +211,14 @@ export function DeepZoom(props: DeepZoomProps): ReactElement {
     });
     viewerRef.current = viewer;
 
+    // Install the OPFS tile-cache override before OSD fires `open` —
+    // `addOnceHandler` runs before the subsequent `addHandler("open",
+    // …)` below because OSD dispatches in registration order. The
+    // override owns `downloadTileStart` for this viewer's tile source
+    // and emits `deep_zoom.cache.{hit,miss,evict}` + the
+    // `source`-attributed `deep_zoom.tile.load` span.
+    installOpfsTileCacheOverride(viewer, props.workId, props.fileRef);
+
     viewer.addHandler("open", () => {
       setReady(true);
       deepZoomOpenEvent(props.workId, props.fileRef, props.source.kind);
@@ -220,24 +233,13 @@ export function DeepZoom(props: DeepZoomProps): ReactElement {
       }
     });
 
-    // Track tile load latency. The `time` attribute OSD hands us is
-    // request-start wall clock ms; `Date.now() - time` is the
-    // resolution duration. v1 reports `"network"`; the OPFS
-    // write-through cache lands in a later iteration + will pass
-    // `"cache"` instead.
-    const onTileLoaded = (event: OpenSeadragon.TileLoadedEvent): void => {
-      const tile = event.tile as unknown as { loadTime?: number };
-      const started =
-        typeof tile.loadTime === "number" ? tile.loadTime : Date.now();
-      const durationMs = Math.max(0, Date.now() - started);
-      deepZoomTileLoadEvent(
-        props.workId,
-        props.fileRef,
-        durationMs,
-        true,
-        "network",
-      );
-    };
+    // Tile-load spans are emitted by the OPFS override above — it has
+    // the real `source` attribution (opfs vs. network) and the
+    // wall-clock duration of the cache-through fetch. OSD's own
+    // `tile-load-failed` event still fires for failures the override
+    // doesn't route through (e.g., a TileSource OSD fabricates
+    // internally); we keep a safety-net handler so those still land
+    // in telemetry with `ok: false`.
     const onTileLoadFailed = (
       event: OpenSeadragon.TileLoadFailedEvent,
     ): void => {
@@ -250,7 +252,6 @@ export function DeepZoom(props: DeepZoomProps): ReactElement {
         "network",
       );
     };
-    viewer.addHandler("tile-loaded", onTileLoaded);
     viewer.addHandler("tile-load-failed", onTileLoadFailed);
 
     return () => {

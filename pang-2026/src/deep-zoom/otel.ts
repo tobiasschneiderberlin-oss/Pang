@@ -36,7 +36,10 @@ export type DeepZoomEvent =
   | "deep_zoom.open"
   | "deep_zoom.close"
   | "deep_zoom.zoom_depth"
-  | "deep_zoom.tile.load";
+  | "deep_zoom.tile.load"
+  | "deep_zoom.cache.hit"
+  | "deep_zoom.cache.miss"
+  | "deep_zoom.cache.evict";
 
 export interface DeepZoomEventPayload {
   readonly event: DeepZoomEvent;
@@ -116,18 +119,26 @@ export function deepZoomZoomDepthEvent(
 }
 
 /**
- * Tile-load event. `durationMs` is the resolution delta reported by
- * OSD's own `tile-loaded` (or `tile-load-failed`) handler. `source`
- * is `"network"` in v1; when the OPFS write-through tile cache lands
- * it becomes `"cache" | "network"` so the SLO dashboard can separate
- * cold + warm paths.
+ * Tile-load event. `durationMs` is the resolution delta measured by
+ * the OPFS override (from its entry into `fetchTileCached` to the
+ * point it hands bytes back to OSD). `source` separates cold
+ * (`"network"`) from warm (`"opfs"`) paths so the SLO dashboard can
+ * alert on a warm-path regression without drowning in cold noise.
+ * A failed network fetch still fires once with `ok: false` and
+ * `source: "network"` — the cache never serves garbage, so a failure
+ * attribution is always network-side.
+ *
+ * Legacy note: the iter #7 signature accepted `"cache"` as a
+ * synonym for `"opfs"`. Keeping the union narrow (just `"opfs"`)
+ * avoids telemetry confusion — the OPFS layer is the only cache we
+ * ship; there is no in-memory middle tier.
  */
 export function deepZoomTileLoadEvent(
   workId: string,
   fileRef: string,
   durationMs: number,
   ok: boolean,
-  source: "network" | "cache" = "network",
+  source: "network" | "opfs" = "network",
 ): void {
   emit({
     event: "deep_zoom.tile.load",
@@ -138,6 +149,74 @@ export function deepZoomTileLoadEvent(
       "pang.deep_zoom.tile_duration_ms": durationMs,
       "pang.deep_zoom.tile_ok": ok,
       "pang.deep_zoom.tile_source": source,
+    },
+  });
+}
+
+/**
+ * Cache hit — the OPFS layer resolved a tile without a network
+ * round-trip. `bytes` is the tile size so a dashboard can reason
+ * about hit-rate weighted by payload (a 50× warm-path speedup on
+ * 3 KB tiles is different from the same speedup on 50 KB tiles).
+ */
+export function deepZoomCacheHitEvent(
+  workId: string,
+  fileRef: string,
+  bytes: number,
+): void {
+  emit({
+    event: "deep_zoom.cache.hit",
+    t: Date.now(),
+    attrs: {
+      "pang.deep_zoom.work_id": workId,
+      "pang.deep_zoom.file_ref": fileRef,
+      "pang.deep_zoom.cache_bytes": bytes,
+    },
+  });
+}
+
+/**
+ * Cache miss — the tile was not in OPFS and a network fetch is
+ * about to fire. Companion to `deep_zoom.cache.hit`; their sum +
+ * evict count is the per-session cache accounting signal.
+ */
+export function deepZoomCacheMissEvent(
+  workId: string,
+  fileRef: string,
+): void {
+  emit({
+    event: "deep_zoom.cache.miss",
+    t: Date.now(),
+    attrs: {
+      "pang.deep_zoom.work_id": workId,
+      "pang.deep_zoom.file_ref": fileRef,
+    },
+  });
+}
+
+/**
+ * Cache eviction — LRU trimmed `count` tiles (total `bytesFreed`)
+ * to keep the cache at or under its soft ceiling. Diagnostic: a
+ * dashboard that sees evicts climbing on warm sessions is a signal
+ * the working set has outgrown the ceiling and we should bump
+ * `DEFAULT_MAX_BYTES` (or, more likely, the quota probe has
+ * tightened the effective ceiling because the origin is crowded).
+ *
+ * The event is scope-less (no work id) — eviction decisions are
+ * global LRU, not per-work.
+ */
+export function deepZoomCacheEvictEvent(
+  count: number,
+  bytesFreed: number,
+  bytesRemaining: number,
+): void {
+  emit({
+    event: "deep_zoom.cache.evict",
+    t: Date.now(),
+    attrs: {
+      "pang.deep_zoom.evict_count": count,
+      "pang.deep_zoom.evict_bytes_freed": bytesFreed,
+      "pang.deep_zoom.evict_bytes_remaining": bytesRemaining,
     },
   });
 }
