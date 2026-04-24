@@ -22,7 +22,13 @@ const DEFAULT_MODELS = {
   enrichment: "claude-sonnet-4-6",
   enrichmentQuarantine: "claude-haiku-4-6", // per-record note sanitiser
   narrative: "claude-sonnet-4-6",
-  correspondence: "claude-sonnet-4-6",
+  // Correspondence authors a short email / WhatsApp body — not a long
+  // essay, not a vision call. Haiku is the right tool: faster (sub-
+  // second round-trip), cheaper, and the voice doctrine does all the
+  // register work through the shared P-LLM system prompt. Iter #10
+  // pins this; an eval regression under A22 is the only thing that
+  // moves it.
+  correspondence: "claude-haiku-4-5",
 } as const;
 
 /** Read an env override, falling back to the pinned default. */

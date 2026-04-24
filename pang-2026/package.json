@@ -26,8 +26,10 @@
     "eval:intake:mock": "PANG_EVAL_MOCK=1 tsx evals/intake/run.ts",
     "eval:enrichment": "tsx evals/enrichment/run.ts",
     "eval:enrichment:mock": "PANG_EVAL_MOCK=1 tsx evals/enrichment/run.ts",
+    "eval:correspondence": "tsx evals/correspondence/run.ts",
+    "eval:correspondence:mock": "PANG_EVAL_MOCK=1 tsx evals/correspondence/run.ts",
     "eval:verification": "tsx evals/verification/run.ts",
-    "check:eval": "npm run eval:intake:mock && npm run eval:enrichment:mock && npm run eval:verification",
+    "check:eval": "npm run eval:intake:mock && npm run eval:enrichment:mock && npm run eval:correspondence:mock && npm run eval:verification",
     "verify": "npm run typecheck && npm run lint && npm run check:manifest && npm run check:strings && npm run check:gates && npm run check:eval",
     "setup:hooks": "git -C .. config core.hooksPath pang-2026/scripts/git-hooks && echo 'pre-push hook wired. Skip with: git push --no-verify'"
   },
@@ -46,6 +48,7 @@
     "react": "19.2.5",
     "react-dom": "19.2.5",
     "three": "^0.170.0",
+    "web-push": "^3.6.7",
     "zod": "^3.24.0",
     "zustand": "^5.0.0"
   },
@@ -58,6 +61,7 @@
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@types/three": "^0.170.0",
+    "@types/web-push": "^3.6.4",
     "eslint": "^9.20.0",
     "eslint-config-next": "^16.2.4",
     "qrcode-terminal": "^0.12.0",

@@ -35,7 +35,9 @@
 
 import { opfsRead, opfsWrite } from "@/lib/storage/bootstrap";
 import {
+  VerificationDispatchResultSchema,
   VerificationRequestSchema,
+  type VerificationDispatchResult,
   type VerificationRequest,
 } from "./schema";
 import { outboxEnqueueEvent } from "./otel";
@@ -61,6 +63,15 @@ export interface OutboxRecord {
   /** ISO timestamp of the next attempt. On enqueue: now. */
   readonly nextAttemptAt: string;
   readonly lastErrorReason?: string;
+  /**
+   * Cached dispatch result (iter #10). Present once the collector has
+   * run `/api/verification/dispatch` for this requestId; the stored
+   * payload lets the surface re-show the "send now" affordance without
+   * a second AI call + another pair of signed links. Idempotent by
+   * construction — a second dispatch call returns the same payload
+   * verbatim.
+   */
+  readonly dispatch?: VerificationDispatchResult;
 }
 
 export function serialiseOutboxRecord(r: OutboxRecord): string {
@@ -90,19 +101,25 @@ export function parseOutboxRecord(text: string): OutboxRecord | null {
   if (lastErrorReason !== undefined && typeof lastErrorReason !== "string") {
     return null;
   }
-  const record: OutboxRecord =
+  let dispatch: VerificationDispatchResult | undefined;
+  if (r["dispatch"] !== undefined) {
+    const parsedDispatch = VerificationDispatchResultSchema.safeParse(
+      r["dispatch"],
+    );
+    if (!parsedDispatch.success) return null;
+    dispatch = parsedDispatch.data;
+  }
+  const base = {
+    request: parsedRequest.data,
+    attempt,
+    nextAttemptAt,
+  };
+  const withError =
     typeof lastErrorReason === "string"
-      ? {
-          request: parsedRequest.data,
-          attempt,
-          nextAttemptAt,
-          lastErrorReason,
-        }
-      : {
-          request: parsedRequest.data,
-          attempt,
-          nextAttemptAt,
-        };
+      ? { ...base, lastErrorReason }
+      : base;
+  const record: OutboxRecord =
+    dispatch !== undefined ? { ...withError, dispatch } : withError;
   return record;
 }
 

@@ -1,30 +1,41 @@
 /**
- * PANG — invite JWT sign + verify (iter #9).
+ * PANG — invite JWT sign + verify (iter #9, thin wrapper in iter #10).
  *
- * The gallery mints an invite JWT and embeds it in the link shared
- * with the collector. The `/api/auth/invite/bind` route trades the
- * JWT for a bind cookie + starts the enrollment ceremony. Tokens are
- * single-use — the bind route writes a consumed-marker before it
- * issues the cookie.
+ * As of iter #10, the invite token is one audience in the signed-link
+ * family (see `signed-link.ts` for the full doctrine). This file is a
+ * thin compatibility wrapper that:
  *
- * HS256 is the signing alg. The secret rotates per deployment in
- * production; `getInviteSecret()` reads it from env. The jti is a
- * 16-byte CSPRNG value (base64url) assigned at sign time.
+ *   - Delegates sign/verify to `signSignedLink` / `verifySignedLink`
+ *     with `audience: "collector-invite"`.
+ *   - Preserves the iter #9 claims shape for call sites —
+ *     `InviteClaims` is `{gid, uid, uhandle, jti, iat, exp}`; the
+ *     internal `aud` is added by the signed-link layer and stripped
+ *     here so call sites don't need to know about it.
+ *   - Preserves the iter #9 error type `InviteVerifyError` with its
+ *     three reasons `bad-jwt | expired | bad-payload`. If the JWT
+ *     carries a non-collector audience it surfaces here as
+ *     `bad-payload` (the collector-invite bind route has no legitimate
+ *     reason to accept anything else).
  *
- * Claims:
- *   { iat, exp, jti, gid (gallery id), uid (user id assigned at
- *     invite time — the collector's identity is known the moment
- *     the gallery issues the link) }
+ * The wrapper will be removed in a follow-up once the bind route
+ * imports directly from `signed-link.ts`.
  */
 
-import { SignJWT, jwtVerify, type JWTPayload } from "jose";
 import { z } from "zod";
-import { getInviteSecret, INVITE_TTL_SECONDS } from "../config";
-import { newInviteJti, newUserHandle, newUserId } from "../ids";
+import {
+  SignedLinkVerifyError,
+  signSignedLink,
+  verifySignedLink,
+} from "./signed-link";
 import { UserIdSchema } from "../schema";
 
 // ---------- Claims -------------------------------------------------
 
+/**
+ * Public iter #9 claims shape. The `aud` claim is an implementation
+ * detail of the signed-link layer and is stripped at the wrapper
+ * boundary.
+ */
 export const InviteClaimsSchema = z
   .object({
     gid: z.string().min(1).max(64),
@@ -53,29 +64,33 @@ export interface InviteResult {
 }
 
 export async function signInvite(input: InviteInput): Promise<InviteResult> {
-  const userId = input.userId ?? newUserId();
-  const userHandle = input.userHandle ?? newUserHandle();
-  const now = Math.floor(Date.now() / 1000);
-  const exp = now + INVITE_TTL_SECONDS;
-  const jti = newInviteJti();
-  const payload = {
-    gid: input.galleryId,
-    uid: userId,
-    uhandle: userHandle,
-  } satisfies Partial<InviteClaims>;
-  const jwt = await new SignJWT(payload as unknown as JWTPayload)
-    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
-    .setIssuedAt(now)
-    .setExpirationTime(exp)
-    .setJti(jti)
-    .sign(getInviteSecret());
-  const claims: InviteClaims = {
-    ...payload,
-    jti,
-    iat: now,
-    exp,
+  const signInput: {
+    audience: "collector-invite";
+    galleryId: string;
+    userId?: string;
+    userHandle?: string;
+  } = {
+    audience: "collector-invite",
+    galleryId: input.galleryId,
   };
-  return { jwt, claims };
+  if (input.userId !== undefined) signInput.userId = input.userId;
+  if (input.userHandle !== undefined) signInput.userHandle = input.userHandle;
+  const { jwt, claims } = await signSignedLink(signInput);
+  if (claims.aud !== "collector-invite") {
+    // Unreachable — the audience we requested round-trips.
+    throw new Error("audience mismatch in signInvite wrapper");
+  }
+  return {
+    jwt,
+    claims: {
+      gid: claims.gid,
+      uid: claims.uid,
+      uhandle: claims.uhandle,
+      jti: claims.jti,
+      iat: claims.iat,
+      exp: claims.exp,
+    },
+  };
 }
 
 // ---------- Verify -------------------------------------------------
@@ -90,25 +105,37 @@ export class InviteVerifyError extends Error {
 }
 
 export async function verifyInvite(jwt: string): Promise<InviteClaims> {
-  let payload: JWTPayload;
+  let claims;
   try {
-    const result = await jwtVerify(jwt, getInviteSecret(), {
-      algorithms: ["HS256"],
-    });
-    payload = result.payload;
+    claims = await verifySignedLink(jwt, "collector-invite");
   } catch (err) {
-    // jose throws for signature mismatch, expired, malformed.
-    const msg = err instanceof Error ? err.message : String(err);
-    // The exp path surfaces as `ERR_JWT_EXPIRED` in jose's error name.
-    if (err instanceof Error && err.name === "JWTExpired") {
-      throw new InviteVerifyError("expired", msg);
+    if (err instanceof SignedLinkVerifyError) {
+      switch (err.reason) {
+        case "expired":
+          throw new InviteVerifyError("expired", err.message);
+        case "wrong-audience":
+        case "bad-payload":
+          throw new InviteVerifyError("bad-payload", err.message);
+        case "consumed":
+          // Not produced by verify (consumed-marker is caller-owned);
+          // treat defensively as bad-payload.
+          throw new InviteVerifyError("bad-payload", err.message);
+        case "bad-jwt":
+        default:
+          throw new InviteVerifyError("bad-jwt", err.message);
+      }
     }
-    throw new InviteVerifyError("bad-jwt", msg);
+    throw err;
   }
-
-  const parsed = InviteClaimsSchema.safeParse(payload);
-  if (!parsed.success) {
-    throw new InviteVerifyError("bad-payload", JSON.stringify(parsed.error.flatten()));
+  if (claims.aud !== "collector-invite") {
+    throw new InviteVerifyError("bad-payload", "wrong audience");
   }
-  return parsed.data;
+  return {
+    gid: claims.gid,
+    uid: claims.uid,
+    uhandle: claims.uhandle,
+    jti: claims.jti,
+    iat: claims.iat,
+    exp: claims.exp,
+  };
 }

@@ -5020,6 +5020,849 @@ becomes a real gesture instead of a promise.
 
 ---
 
+## Iteration #10 — Verification request flow (opened 2026-04-24)
+
+**Status:** kickoff brief. Scope is **ceiling on the collector↔gallery
+verification loop** with two explicitly named principle-scope
+deferrals (server-side provider dispatch — Resend / Twilio / Slack
+Connect; SMS as a third channel). This iteration closes spine moment
+#8 (`PANG_Spine.md` § *Build order*): *Intake detects gallery of
+origin; PANG pre-writes the message (email or WhatsApp, collector
+chooses); one tap to send. Gallery's side is a two-tap confirm
+surface. Correspondence Agent owns the prose.* The outbox from
+iter #4, the enrichment-contributor lane from iter #5, and the
+session identity from iter #9 finally compose. Laura taps a
+dormant work; PANG composes; one tap sends; the gallery receives
+a signed link; two taps confirm; a push arrives; the work comes
+alive in arrival. The null state stops being an aesthetic and
+becomes a round-trip business event — the gallery's existing
+relationship with the collector produces a confirmed-verification
+moment without either side opening an admin dashboard.
+
+**Why now:** eight spine moments sit in the codebase with their
+scaffolding in place and no round-trip closing them. Iter #4
+shipped the collector-side ask — an outbox, a `requested` state,
+a Declarative Web Push *subscription* that has never received a
+delivery. Iter #5 shipped the enrichment lane; the
+contributor-side pattern (gallery receives a structured
+submission, owns the outcome) is proven for one direction.
+Iter #9 shipped session identity — the cookie knows the
+collector, `requireSession` gates every non-public route, and
+the invite-JWT ↔ consumed-marker ↔ server record pattern is now
+a primitive (50 / 51 / 52). Every primitive this iteration needs
+exists. Nothing left to compose. The gallery side has no surface
+yet — no `/g/` route family, no confirm page, no signed-link
+discriminated by audience. The Correspondence Agent slot is
+declared in `PANG_AI_Era_2026.md` § *Agent order* as the third
+agent after Intake + Enrichment, before Narrative. This is the
+iteration that wires it.
+
+**Scope:** **ceiling** on the collector-to-gallery loop — the
+Correspondence Agent's prose; the pre-written message bound to
+the work's structured snapshot and the gallery's contact rails;
+a one-tap dispatch via `mailto:` or `https://wa.me/<phone>`
+URL-handoff (the "compose" happens in PANG, the "send" happens
+in the collector's mail / WhatsApp client); a signed-link pattern
+generalised from iter #9's invite JWT so the gallery's confirm
+URL is replay-proof, audience-scoped, and single-use; a
+two-tap gallery-side confirm page that reuses iter #9's passkey
+ceremony for the gallery operator's first visit, and a
+server-side session for subsequent returns; a Declarative Web
+Push *delivery* (the subscription iter #4 opened now has a
+counterparty); an outbox-as-truth reconcile on boot so a missed
+push doesn't strand a `requested` state; arrival-on-confirm that
+reuses iter #3's ceremony unchanged; full `verification.dispatch.*`,
+`verification.confirm.*`, `verification.push.deliver.*`,
+`correspondence.compose.*` OTel catalogues; a per-agent eval
+corpus under `evals/correspondence/` with ≥ 5 fixtures covering
+voice, prompt-injection via gallery name, and edge cases
+(unknown-gallery, confidence-low hint, Tier-C no-push). **Two
+principle-scope lines, each with a named reason:**
+
+- **Server-side provider dispatch (Resend / Twilio /
+  Slack Connect / SMTP) is out of scope for this iteration.**
+  Rationale: the ceiling of the round-trip is *the gallery
+  receives a signed link and clicks it*, not *PANG owns the
+  outbound mail-delivery infrastructure*. The `mailto:` /
+  `wa.me` URL-handoff ships the collector's intent out of the
+  browser into the OS-level provider the collector already
+  trusts (iOS Mail, Gmail app, WhatsApp). That's the spine
+  moment: "the collector asks the gallery." Server-side
+  dispatch replaces the handoff with "PANG asks the gallery
+  on the collector's behalf," which is a different gesture
+  with a different trust model — the collector no longer sees
+  the message before it leaves. Observability will decide
+  when / whether to pivot: if the
+  `verification.dispatch.handoff_returned` span shows a high
+  fraction of collectors abandoning between "compose" and
+  "send" (i.e., the OS client opens and they back out), the
+  iteration that wires server-side dispatch earns its slot.
+  Until then, the handoff is the feature. The rails are left
+  in place: `src/verification/dispatch/channel.ts` admits
+  `kind: "mailto" | "wa-me" | "resend" | "twilio" | "slack-
+  connect"` from day one, and the dispatch route flows
+  through a `pickChannel(request, galleryContact,
+  collectorPreference)` selector so future providers are a
+  path addition, not a refactor.
+- **SMS as a third channel is out of scope.** Rationale:
+  SMS requires server-side dispatch (no `sms:` URL handoff
+  is reliable cross-platform — Android drops the body,
+  iOS requires user confirmation of the number) *and* PII
+  storage of the gallery's phone number alongside its email,
+  which is a distinct data-handling surface. The two
+  channels that ship — email via `mailto:`, WhatsApp via
+  `wa.me` — cover 2026 European gallery practice (Berlin /
+  Amsterdam / Cologne / Zurich are all WhatsApp-first for
+  client comms; email is the always-available fallback).
+  When / if the observability signal shows Tier-C markets
+  where SMS is the only reliable channel, the iteration that
+  adds it will be small because the channel abstraction is
+  already in place.
+
+Landing shape:
+
+- **Correspondence Agent.** New agent module at
+  `src/ai/agents/correspondence.ts`. Matches the iter #5
+  Enrichment Agent shape: reads a typed input
+  (`CorrespondenceRequest` — work snapshot, gallery hint,
+  collector preference, channel), produces a typed output
+  (`CorrespondenceDraft` — `subject`, `body`, `toneNote`),
+  runs through `_shared.ts`'s model selector (deterministic:
+  Haiku-tier for latency, per A19), emits
+  `correspondence.compose.{started,succeeded,failed}` spans.
+  Structured output via Anthropic's JSON schema tool — no
+  `JSON.parse` at the boundary. Voice doctrine is injected
+  via `PANG_VOICE_SYSTEM_PROMPT` (already wired per iter #5
+  + the voice corpus); A5's banned-vocabulary check runs
+  on the draft output in CI via the eval corpus. CaMeL
+  untrusted-data discipline: the gallery name (from the
+  invite's `galleryOfOrigin` hint or the collector's free-
+  text override) is `Untrusted<string>` on entry and passes
+  through `sanitize()` before the prompt renders — no
+  gallery-name-containing-prompt-injection path reaches
+  the privileged LLM. The agent never sees the collector's
+  full collection; the composition scope is one work plus
+  one gallery contact.
+- **Signed-link generalisation.** `src/auth/server/invite.ts`
+  graduates to `src/auth/server/signed-link.ts` (invite.ts
+  becomes a thin re-export during the transition and is
+  deleted in the same PR). Three audiences:
+  `collector-invite` (iter #9's existing shape),
+  `gallery-confirm`, `gallery-decline`. Each audience has
+  its own TTL (invite: 14 d; confirm / decline: 30 d —
+  galleries may triage on a weekly cadence), its own
+  claims shape (confirm carries `vrid` verification-request
+  id, `wid` work id, `gid` gallery id), and its own
+  consumed-marker directory
+  (`.pang/server-signed-links/<audience>/<jti>.consumed`).
+  The HS256 + `jose` + jti single-use pattern is unchanged —
+  that's the primitive iter #9 proved. What's new is the
+  audience discriminator, enforced in both sign and verify
+  so a confirm-token presented at the invite-bind route is
+  rejected with `auth.signed_link.rejected { reason:
+  "wrong-audience" }`. A named test covers each of the nine
+  cross-audience pairs (3 × 3 presented-vs-expected).
+- **`POST /api/verification/dispatch`** — new route. Takes
+  the collector's `requestId` (from iter #4's outbox) and
+  the chosen channel (`"mailto" | "wa-me"`). Gates through
+  `requireSession` (iter #9). Calls the Correspondence Agent
+  with the work snapshot + gallery hint + channel preference,
+  receives the draft, mints two signed links (confirm +
+  decline) scoped to this request, packs them into the draft
+  body, returns `{ draftSubject, draftBody, recipient,
+  channelUrl }` where `channelUrl` is the prepared
+  `mailto:` / `wa.me` URL (URL-encoded subject + body +
+  recipient) the client navigates to on the send-tap. The
+  outbox entry (iter #4) flips from `requested` to
+  `dispatched`. Span:
+  `verification.dispatch.{composed,handoff_started,
+  handoff_returned,failed}`. Idempotent on `requestId` —
+  a second dispatch call with the same id returns the
+  same links (consumed-marker pattern applies: the links
+  are minted and cached once; re-dispatch re-uses them).
+- **`GET /g/confirm/[token]` + `GET /g/decline/[token]`** —
+  new gallery surfaces. Server-side verifies the signed
+  link (audience-scoped), displays the work + the
+  collector's identity (first-name + last-initial only;
+  never full PII) + the message the collector sent, with
+  a single primary button ("confirm this work" /
+  "I can't confirm this work"). First visit from a new
+  gallery device: the button tap starts a passkey
+  enrollment ceremony for the gallery operator (reusing
+  the iter #9 passkey module; the gallery operator's
+  identity is minted from the `gid` claim). Subsequent
+  visits: the session cookie bypasses the ceremony —
+  one tap on the button, the action commits. Two taps
+  max — the ceremony tap is the confirmation. No
+  "are you sure" modal; the button copy *is* the commit.
+  Span: `verification.confirm.{started,succeeded,failed}`,
+  `verification.decline.{started,succeeded,failed}`. The
+  token is consumed at commit — replay fails closed.
+- **`POST /api/verification/confirm` + `/decline`** — called
+  from the gallery confirm page. Writes the outcome to
+  `.pang/server-verification-outcomes/<vrid>.json` (shape
+  matches the Supabase table `verification_outcomes` will
+  honour). Fires the Declarative Web Push delivery via
+  the subscription iter #4 stored on the request record.
+  Span: `verification.push.deliver.{attempted,succeeded,
+  failed}` with `pushProvider: "web-push" | "fcm" |
+  "apns-via-webpush"`. VAPID private key pulled from env
+  (`VAPID_PRIVATE_KEY`, per iter #4's open question #5).
+- **Push outcome reconcile.** New boot-time reconciler in
+  `src/verification/reconcile.ts` (extends the iter #4
+  file). Walks the outbox for `dispatched` entries whose
+  store state is still `requested`, calls
+  `GET /api/verification/outcome/{requestId}` (new route,
+  public-but-token-gated: the request ID alone doesn't
+  identify anyone — it's a ULID), and reconciles the store
+  state from the server outcome record. This covers the
+  failure mode where push delivery silently drops (device
+  offline for > TTL, subscription expired). Outbox-as-truth:
+  the server's outcome record is the single source; push
+  is a notification channel, not the state channel.
+- **Arrival-on-confirm.** `src/ai/chapter/plan.ts`
+  already has the `"confirmation"` beat kind from iter #4;
+  this iteration wires the trigger. When the reconciler
+  or the push handler flips the store state to
+  `"confirmed"`, the focused-work surface composes the
+  confirmation chapter automatically; if the collector is
+  away from the Room (other surface, background), the next
+  Room return plays it. The GL warmth rise (iter #4,
+  `RoomScene.setWorkVerified`) fires on the chapter's
+  ready beat. No new GL code — the plumbing composes.
+- **`<VerificationOutcome>` Push handler.** Existing
+  `public/sw.js` push handler (iter #4, line 154) extends
+  to three outcome kinds: `"confirmed"`, `"declined"`,
+  `"expired"` (gallery never responded within 30 d — a
+  quiet client-side derivation, not a server push). The
+  notification body is voice-authored; no marketing
+  vocabulary; A5 eval covers each variant.
+- **Dispatch button on the AskGallery panel.** The
+  `AskGallery.tsx` component (iter #4) grows a second
+  primary state: after `requested` lands in the outbox, a
+  compact "send now" button appears — it calls
+  `/api/verification/dispatch`, receives the
+  `channelUrl`, navigates to it (`window.location.href = …`
+  or `<a>` click depending on handoff stability per
+  browser — open question #3 below). The collector sees
+  the composed message in their mail / WhatsApp
+  client before sending; the "send" tap happens there.
+  The second PANG-side tap is the earlier `ask` that
+  created the outbox entry; this is the dispatch tap.
+  Total taps from intake-end to gallery-inbox: **three**
+  (ask in PANG, channel pick, send in provider client) —
+  within the spine's one-tap-is-sacred invariant for
+  collector-side composition (PANG's taps: one to ask,
+  one to pick channel; the provider's tap is the
+  collector's existing muscle memory, not PANG's design).
+- **P25 (zero-tap review) uplift — not a new gate.** Same
+  discipline as iter #9's P10 uplift. The P25 description
+  extends from "scanner → arrival without a form" to
+  "every PANG-side dispatch or confirm surface without an
+  intermediate confirmation modal." The mechanical check
+  walks `src/components/verification/*.tsx` and
+  `app/g/confirm/[token]/page.tsx` for the anti-pattern
+  `<Dialog>…confirm</Dialog>` / `<ConfirmModal>` in the
+  critical path between a primary action button and its
+  network call. Gate count stays **48**.
+
+**Stack:**
+
+- `@anthropic-ai/sdk@>=0.30` (already in the tree via iter
+  #1) — Correspondence Agent calls Claude Haiku-tier
+  (`claude-haiku-4-5`) with structured output. No new
+  SDK.
+- `jose@>=5` (already in the tree via iter #9) — signed-link
+  sign + verify. The audience discriminator piggybacks on
+  the existing JWT payload; no new dep.
+- `zod@>=3.23` (already in the tree) — `SignedLinkClaimsSchema`,
+  `CorrespondenceRequestSchema`, `CorrespondenceDraftSchema`,
+  `VerificationOutcomeSchema`. All new schemas live under
+  `src/verification/schema.ts` (extends iter #4) and
+  `src/ai/agents/correspondence.schema.ts`.
+- `web-push@>=3` — new dep (18 kB gzipped server-side; not
+  bundled client-side). Server-side VAPID sign + deliver
+  to the `PushSubscription` record iter #4 stored. The
+  browser's service worker (iter #4 `public/sw.js`) already
+  handles the receive side.
+- Filesystem-backed dev stores (the iter #9 / iter #4
+  pattern, now codified as primitive 52):
+  `.pang/server-signed-links/<audience>/<jti>.consumed`,
+  `.pang/server-verification-outcomes/<vrid>.json`,
+  `.pang/server-gallery-users/<gid>.json`,
+  `.pang/server-gallery-credentials/<credentialId>.json`,
+  `.pang/server-gallery-sessions/<sessionToken>.json`.
+  The gallery-side auth stores mirror the collector-side
+  ones from iter #9 — same shapes, different roots. When
+  Supabase lands, the row shapes match 1:1.
+- `src/lib/otel/span.ts` (existing) — all new spans.
+  `correspondence.*` spans add `inputTokens`,
+  `outputTokens`, `model`, `latencyMs`, `voiceCheckPassed`
+  attributes. No new observability primitive.
+- `next/headers` (existing) — `cookies()` + `headers()` on
+  the new gallery confirm routes; same Node runtime as
+  the iter #9 auth routes so the fs stand-in resolves.
+- **No client-side new framework.** The AskGallery panel
+  extension is React. The gallery confirm page is a server
+  component with a small `"use client"` island for the
+  passkey ceremony. No new bundler hooks, no new state lib.
+
+**Reference:**
+
+- **Gmail's "confirm it's you" security prompt (2024).**
+  The two-tap pattern — the first tap is arriving at the
+  surface, the second is the commit. No form fields
+  between. The button's copy *is* the commit.
+  The gallery confirm page takes this shape exactly.
+- **Stripe's magic-link email flow (2025 rev.)** — the
+  canonical signed-link pattern: audience-scoped, single-
+  use, consumed on click, independent of whether the link
+  ever opens (so expiry is a TTL signal, not a "sent
+  successfully" signal). `jose` + `jti` consumed-marker
+  is the shape.
+- **Iter #9's invite ceremony (2026-04-24).** Literal
+  reference for the gallery-side enrollment: the gallery
+  operator's first visit to a confirm link mounts the same
+  `<PasskeyEnrollCeremony>` the collector mounts on invite.
+  Same component. Different ambient chrome
+  (`data-pang-side="gallery"` so the Room doesn't show
+  behind it; a neutral background and the gallery's name).
+- **Granola's "quiet ask" (referenced in iter #4).**
+  Still the spine reference for the *collector's* side of
+  the loop. The Correspondence Agent's composed prose
+  holds to the same register: specific, structured,
+  no marketing surround. The gallery's phrase
+  "we appreciate the opportunity to verify this work"
+  is banned by construction — A5 + voice doctrine.
+- **Apple Mail's handoff to `mailto:`.** The
+  compose-in-OS, send-from-OS pattern. The collector's
+  existing trust surface is the provider; PANG does the
+  hard work (composition, recipient resolution, link
+  minting) and hands off a pre-filled draft. The
+  collector reads what's about to go out before they send.
+- **Anti-reference:** any "contact us" surface that
+  submits a form to a server, replies with "we'll get
+  back to you shortly," and strands the user. The PANG
+  gallery confirm page resolves the collector's state in
+  one round-trip; the confirm tap's server write + push
+  delivery happens before the gallery operator's page
+  redirects to a "done" state. No "we'll notify them
+  soon" chatter anywhere.
+
+**Canvas:** DOM chrome only on the gallery confirm page
+(2 px borders, sharp corners, sentence case). The
+`<canvas>` Room is collector-side only; the gallery side
+never mounts it — gallery operators see a page titled
+"a collector is asking about this work," the work's
+catalogue record, and two buttons. The collector-side
+extension of `AskGallery.tsx` is DOM over the Room
+canvas, same composition iter #4 used. No new canvas
+surface. The passkey ceremony on first-gallery-visit is
+the browser's system sheet (iter #9 pattern); our paint
+is one headline, one sub-line.
+
+**Failure mode (5th declaration):** six regression
+classes must be observable.
+
+- *Mail-client handoff failure.* The collector taps "send
+  now," `mailto:` / `wa.me` navigates, the provider client
+  fails to open (unregistered scheme on desktop; no
+  WhatsApp installed). Enforcement: the dispatch client
+  fires `verification.dispatch.handoff_started` before the
+  navigation and `verification.dispatch.handoff_returned
+  { success: boolean, latencyMs }` on `visibilitychange`
+  after the navigation tries to return focus. If
+  `handoff_returned { success: false }` on
+  `handoff_started`, the component surfaces a small
+  "couldn't open your mail app — copy the message?" affordance
+  with a clipboard copy button. Observability lets us see
+  which collectors land in that state and whether it
+  clusters by OS / browser.
+- *Correspondence Agent voice regression.* The composed
+  draft contains banned vocabulary ("dive", "unlock",
+  "seamless", "leverage", "journey", "we appreciate the
+  opportunity to…"). Enforcement: the A22 eval corpus at
+  `evals/correspondence/` runs in CI on every PR touching
+  `src/ai/agents/correspondence.ts` *or* the voice corpus;
+  threshold is ≥ 90 % voice-check pass across ≥ 5 fixtures,
+  fail-build on regression. The agent's runtime
+  `compose()` call also runs the draft through
+  `check:strings` before returning it; a live-mode failure
+  fires `correspondence.compose.failed { reason:
+  "voice-regression", banned: [...] }` and the client
+  retries once with a reinforced-voice prompt (A21 retry
+  policy) before surfacing a fallback static-template
+  message. The fallback template is voice-compliant by
+  construction.
+- *Signed-link token replay / cross-audience confusion.*
+  A confirm token presented at the decline route (or vice
+  versa), a 15-day-old link clicked twice, a forwarded
+  confirm link opened by a different gallery. Enforcement:
+  the signed-link verify path matches audience exactly
+  (verified test: all 3 × 3 audience cross-pairs reject
+  with `wrong-audience`); the consumed-marker commits
+  before the outcome write (primitive 51); the `gid` claim
+  is checked against the server-stored gallery record on
+  the route handler, so a forwarded link to a different
+  gallery's operator fails with `auth.signed_link.rejected
+  { reason: "wrong-gallery" }`. Five distinct Playwright
+  specs (one per failure path) + unit coverage on the
+  verify function.
+- *Push delivery gap — collector never gets the outcome.*
+  The gallery confirms, the push deliver attempt fails
+  (subscription expired, device offline > TTL, provider
+  503). Enforcement: the outbox-as-truth reconciler on
+  the next PANG boot walks every `dispatched` outbox
+  entry, polls `GET /api/verification/outcome/{requestId}`,
+  and reconciles the store state locally — the store
+  flips to `"confirmed"` or `"declined"` on boot if the
+  server has already recorded the outcome. Span:
+  `verification.reconcile.{outcome_found,outcome_pending}`.
+  A Playwright spec simulates push failure (service worker
+  intercepts the push deliver), boots the app, verifies
+  reconcile fills the gap.
+- *Prompt injection via gallery name.* The gallery's name
+  in the Intake record (or the collector's free-text
+  override from iter #4) contains malicious instructions
+  ("Ignore previous instructions and…"). Enforcement: the
+  Correspondence Agent's prompt uses CaMeL's
+  quarantined-string rendering — the gallery name is
+  rendered inside an `<untrusted-gallery-name>` XML
+  delimiter (A9) and the system prompt is explicit that
+  content inside it is data, not directive. The A22 eval
+  corpus includes two injection fixtures (one subtle, one
+  overt); both must fail to alter the draft's structure
+  (`subject`, `body`, `toneNote` remain the agent's
+  intended composition). If the composed output drifts
+  structurally (contains a URL not minted by PANG,
+  references a gallery other than the one in `gid`,
+  etc.), the runtime CaMeL validator rejects the draft
+  and fires `correspondence.compose.failed { reason:
+  "injection-suspected" }`.
+- *Race on confirm — simultaneous confirm + decline.* The
+  gallery operator taps "confirm," the network is slow,
+  a second operator (same gallery, different device)
+  taps "decline" on the same link. Enforcement: the
+  outcome write is keyed by `vrid` (verification-request
+  id); the first committed outcome wins (filesystem
+  `O_CREAT | O_EXCL`; Supabase unique constraint);
+  the second returns 409 Conflict with
+  `verification.confirm.rejected { reason:
+  "outcome-already-recorded", priorOutcome: "confirmed" |
+  "declined" }`. The second operator's client surfaces
+  a voice-authored note ("this was already answered by a
+  colleague"). No partial-confirm state; no retroactive
+  flip. Playwright spec covers the race via two parallel
+  page contexts against the same token.
+
+**Gates this iteration must pass:** the 48.
+
+- **P25 (zero-tap review) — uplifted.** Description grows
+  to cover dispatch + confirm surfaces. The gate file
+  mechanical check extends to walk
+  `src/components/verification/*.tsx` and
+  `app/g/confirm/[token]/page.tsx` for confirm-modal
+  anti-patterns in critical paths. Gate count stays 48.
+- **P5 (OPFS only, no localStorage) —** the gallery
+  confirm surface is server-rendered; no browser
+  persistence. The collector-side dispatch state flows
+  through the existing OPFS-backed verification store
+  from iter #4.
+- **P6 (CSP)** — the gallery confirm page lives on the
+  same origin; no new iframe, no new `frame-src`. The
+  `mailto:` / `wa.me` handoffs are URL schemes, not
+  cross-origin frames.
+- **P10 (passkey-only primary auth, upgraded in iter #9)
+  —** the gallery operator's first visit reuses the
+  same passkey module. `requireSession` gates
+  `/api/verification/confirm`, `/decline`, `/dispatch`.
+- **P11 (OKLCH only)** — the gallery confirm page's
+  minimal chrome uses existing tokens.
+- **P13 (OPFS + IndexedDB discipline)** — nothing
+  about the gallery confirm surface writes to any
+  client-side store; the auth cookie + server record
+  pattern handles gallery-side state.
+- **P15 (View Transitions capability fallback)** — the
+  arrival-on-confirm chapter inherits iter #3's
+  fallback; no new transition surface.
+- **P19 (reduced-motion)** — the confirmation chapter
+  (from iter #4) already clamps under reduced-motion.
+- **P20 (ARIA)** — the gallery confirm page's two
+  primary buttons are proper `<button>` elements; the
+  outcome state is announced via an ARIA live region.
+- **P22 (structured logging + Web Vitals)** — the gallery
+  confirm page emits the same
+  `pang.page.web_vitals` beacon (iter #1 infra).
+- **P23 (keyboard a11y)** — confirm + decline buttons
+  are Enter / Space activatable; focus ring visible.
+- **A3 (schema.parse at the boundary)** — every
+  signed-link, every Correspondence Agent response,
+  every outcome payload schema-validated.
+- **A5 (banned vocabulary)** — voice pass on every new
+  string: composed draft fallback template, gallery
+  confirm page headline + sub-line, decline state
+  note, outcome push body. Eval corpus enforces at
+  runtime too.
+- **A7 (CaMeL capability graph)** — the Correspondence
+  Agent's capabilities are declared: `read: works
+  (one), galleryContact (one); write: none (returns
+  a draft, doesn't send)`. The dispatch route carries
+  the send side; the agent doesn't.
+- **A8 (Untrusted<T> at the boundary)** — gallery
+  name + collector free-text enter the agent path as
+  `Untrusted<string>`. The composed draft is the
+  structured output, typed; the rendered URL is
+  derived from structured fields only.
+- **A9 (XML-delimited untrusted content in Q-LLM
+  prompts)** — gallery name wrapped in
+  `<untrusted-gallery-name>`. The fixture coverage
+  in A22 verifies the delimiter is honoured.
+- **A10 (OTel GenAI spans)** — every
+  `correspondence.compose.*` span carries the
+  required attribute set.
+- **A16 (OPFS-backed queue discipline)** — the
+  dispatch outbox entry is the same iter #4 outbox;
+  no new queue primitive.
+- **A18 (per-agent token + cost budgets)** — the
+  Correspondence Agent gets a budget entry in
+  `src/ai/agents/budgets.ts` (per-collector daily cap:
+  50 compose calls; per-account monthly cap: 2000).
+- **A19 (deterministic model selection)** — the agent
+  pins `claude-haiku-4-5` explicitly; no dynamic
+  routing.
+- **A21 (schema-failure retry policy)** — one retry
+  with reinforced-voice prompt on A5 regression;
+  one retry on JSON-schema parse failure; no retry
+  on CaMeL rejection (fail-fast, surface fallback
+  template).
+- **A22 (eval corpus)** — `evals/correspondence/run.ts`
+  with ≥ 5 fixtures (voice, unknown-gallery,
+  confidence-low hint, prompt-injection subtle,
+  prompt-injection overt); threshold ≥ 90 % pass in
+  mock mode (CI on every push), live mode on
+  workflow_dispatch.
+- **A23 (per-collector daily + per-account monthly
+  cost caps)** — the agent's cost lines participate
+  in the existing cap telemetry.
+
+**Test criteria:**
+
+1. `npm run verify` clean. `check:gates` runs the
+   uplifted P25. Unit tests cover: signed-link sign +
+   verify round-trip across all three audiences;
+   audience cross-rejection (all 3 × 3 pairs);
+   consumed-marker idempotency on confirm + decline;
+   race-on-confirm (two simultaneous `O_CREAT |
+   O_EXCL` writes, first wins); reconciler outcome
+   fill-in; Correspondence Agent structured-output
+   parse; CaMeL quarantined-string rendering; cost
+   budget enforcement; rate-limit on the dispatch
+   endpoint.
+2. Playwright spec `verification-dispatch.spec.ts`:
+   on `chromium-mobile` with WebAuthn virtual
+   authenticator + a stub mail-client handler (CDP
+   `Browser.setDownloadBehavior` + a navigation
+   intercept on `mailto:` → the spec receives the
+   URL-encoded subject + body + recipient and asserts
+   they match the composed draft). Walk: invite →
+   enroll → Room → focused work → ask → send → assert
+   handoff URL shape → gallery confirm surface in a
+   second page context → passkey ceremony for gallery
+   operator → tap confirm → server write → push
+   delivery intercepted by service worker → first
+   page context receives the outcome → arrival
+   chapter plays → work verified. All spans emitted in
+   order. All state flips recorded. No client-side
+   `localStorage`.
+3. Playwright spec `verification-decline.spec.ts`:
+   same walk, decline branch. No arrival chapter
+   (decline is silent in GL per iter #4). The store
+   flips to `"declined"`. The collector-side surface
+   shows the voice-authored decline note. No re-ask
+   affordance (per iter #4 open question #3).
+4. Playwright spec `verification-race.spec.ts`:
+   two parallel gallery-operator page contexts open
+   the same confirm token, both tap primary, the
+   second receives 409 with the
+   `outcome-already-recorded` state and the voice-
+   authored "already answered" note.
+5. Playwright spec `verification-replay.spec.ts`:
+   (a) confirm-then-confirm-again → second is 410
+   Gone; (b) confirm-token presented at decline
+   route → 401 with `wrong-audience`; (c) confirm
+   token forwarded to a different gallery's
+   operator (sign a fresh gallery's passkey
+   session, present the original `gid`'s token) →
+   401 with `wrong-gallery`.
+6. Playwright spec `verification-reconcile.spec.ts`:
+   simulate push delivery failure (service worker
+   drops the `push` event), reboot the app,
+   verify the outbox reconciler fires the
+   outcome-poll, store state flips, arrival chapter
+   plays on next Room return. Cold start with a
+   `dispatched` outbox entry that never received
+   the push.
+7. Eval corpus: 5 fixtures land in
+   `evals/correspondence/` with a `run.ts` mirroring
+   `evals/intake/run.ts`. Each fixture has an
+   expected-output JSON (structured fields, not
+   free prose); the runner compares the composed
+   output to the expected shape with a voice-check
+   pass on the `body` field. CI mock mode green on
+   every push. Live mode on workflow_dispatch
+   re-runs with real Anthropic API — a pass proves
+   no model drift since the last live run; a fail
+   prints the diff.
+8. `requireSession` coverage: `/api/verification/dispatch`,
+   `/confirm`, `/decline` return 401 without session
+   cookie, 200/422/409 with. The gallery-session
+   cookie is distinct from the collector-session
+   cookie (same primitive, different subject); a
+   collector session presented at
+   `/api/verification/confirm` is rejected as
+   `wrong-subject`.
+9. Observability: walking each path emits the
+   exact span set named above with the required
+   attributes; verified via the OTel test exporter.
+10. P25 uplift asserted from CI itself — temporarily
+    introduce a `<ConfirmModal>` in `AskGallery.tsx`,
+    confirm the gate fails, revert. The proof lives
+    in the PR description.
+11. Cost cap enforcement: a synthetic burst of 51
+    compose calls from one userId triggers the A23
+    cap at the 51st call; span
+    `correspondence.compose.failed { reason:
+    "cost-cap-exceeded" }`.
+
+**Pre-existing work this depends on:**
+
+- Iter #1's Intake record — `galleryOfOrigin` shape
+  is the source of the Correspondence Agent's
+  gallery hint.
+- Iter #3's chapter primitive — arrival-on-confirm
+  is a pure composition, no new chapter code.
+- Iter #4's verification outbox + verification store
+  + push subscription — the outbox entry grows a
+  `dispatched` state; the subscription receives its
+  first delivery; the reconciler extends the existing
+  file.
+- Iter #4's `<AskGallery>` component — the dispatch
+  button is a second primary state; no new component.
+- Iter #5's Enrichment Agent module shape — the
+  Correspondence Agent is a literal copy of the
+  skeleton, different schema + prompt.
+- Iter #6's CSP + nonce proxy — the gallery confirm
+  page is same-origin and inherits.
+- Iter #9's passkey module + `requireSession` + signed-
+  link primitive — the gallery-side auth reuses
+  every byte. `src/auth/server/invite.ts` →
+  `signed-link.ts` is the one structural refactor.
+- The `__PANG` E2E seam — extended with
+  `authSeedGallery({ gid, operatorId })` for the
+  gallery-side spec setup.
+
+**Open questions (answered before execution):**
+
+1. **Correspondence Agent: one structured-output
+   call or a two-step compose (draft → voice-check →
+   revise)?** Single call with structured output.
+   The voice check runs on the output in
+   `check:strings` at the runtime boundary; an A5
+   regression triggers one retry with a reinforced
+   prompt (A21), not a second agent turn. Two-step
+   would double cost + latency for a check that's
+   deterministic at the string level.
+2. **Dispatch handoff: `window.location.href` vs
+   `<a href target="_self">` vs `navigator.share`?**
+   `<a>` click — most compatible with the
+   `visibilitychange` observability on return, and
+   iOS Safari's `mailto:` handling is most reliable
+   via an `<a>` the user "clicks" programmatically
+   (`.click()` on a synthetic anchor). `navigator.share`
+   is an escape hatch for the dispatch-channel-picker
+   future iteration — not this one.
+3. **Gallery-side confirm page: React server
+   component or client component?** Server component
+   for the initial render (faster first paint, the
+   signed-link verify is server-side anyway); one
+   `"use client"` island for the passkey ceremony on
+   first visit. The primary buttons are form actions
+   that POST to `/api/verification/confirm|decline`
+   with the token as a hidden field — no JS required
+   for the commit path; the page works with JS
+   disabled, for what it's worth.
+4. **Does the collector see the outcome in real-time
+   on the same device, or only via push?** Both.
+   Push is the primary (the collector is out of
+   the app most of the time); if the tab is open
+   when the gallery confirms, the service worker
+   relays via `BroadcastChannel` to the open tab
+   and the store flips directly. The reconciler is
+   the safety net for offline / TTL-expired cases.
+5. **Does the gallery operator see a list of other
+   requests from the same collector?** No. Each
+   signed link is scoped to one request; the gallery
+   confirm page shows one work, one collector
+   (first-name + last-initial), one message. Any
+   "gallery dashboard" composition is out of spine
+   (§ 7 cannot-do: "no gallery management dashboard").
+6. **Does the Correspondence Agent have access to
+   the collector's full collection for context?**
+   No. One work, one gallery, one message. The
+   spine's "provenance as structural data"
+   principle: the agent composes from the
+   catalogued record, not from inferred context.
+   A collection-aware composition would be a
+   different agent (and a different privacy
+   discussion — the gallery doesn't need to know
+   what else the collector owns).
+7. **What happens when the gallery in the hint
+   doesn't exist (no `gid` mapping)?** The
+   dispatch route falls back to the collector's
+   free-text override (iter #4 field); if both
+   are missing, the dispatch path fails closed
+   with a voice-authored "we couldn't resolve a
+   gallery" note, the store state stays
+   `requested`, and the affordance re-surfaces
+   once the collector edits the hint. No silent
+   send to a made-up address.
+8. **Signed-link audience added to the count of
+   gates or absorbed into P10?** Absorbed. P10's
+   scope is passkey + session + requireSession;
+   signed-link is the JWT family that gates
+   *access* to a specific one-shot surface, not
+   the ongoing session. The mechanical check lives
+   in the audience-cross-rejection unit tests, not
+   a new gate.
+9. **Gate count: 48 or 49?** 48. P25 uplifts in
+   place. No new gate number. Iter #9 set the
+   precedent.
+10. **Web Push dep: `web-push` or hand-rolled VAPID
+    signing?** `web-push`. Hand-rolling VAPID
+    signatures is within reach (ECDSA P-256 + JWT)
+    but the edge cases around Firefox's Mozilla
+    AutoPush specifics and Safari's APNs relay
+    make the library the conservative choice for a
+    single iteration.
+11. **Do we ship a staging environment with real
+    Anthropic + real web-push?** No. Dev uses mock
+    mode (eval corpus fixtures, stubbed push
+    delivery). The production environment is the
+    first live run; the next iteration after
+    Laura's hands is the first "real traffic"
+    proof. This is the ceiling-for-the-loop
+    iteration, not the ceiling-for-the-deployment
+    iteration.
+12. **Does decline have a free-text reason from
+    the gallery?** Not in this iteration. Decline
+    is a state, not a conversation. A "tell the
+    collector why" surface would re-open the
+    channel the collector voluntarily closed by
+    accepting the decline. The gallery has the
+    collector's original email thread / WhatsApp
+    thread if they want to explain — PANG is not
+    the messaging surface.
+
+**Out of scope (explicit):**
+
+- **Server-side provider dispatch** (Resend, Twilio,
+  Slack Connect, SMTP). Principle-deferred (see
+  Scope). Rails in place.
+- **SMS channel.** Principle-deferred (see Scope).
+- **Gallery dashboard / inbox / list-of-requests
+  surface.** Cannot-do (§ 7). Every gallery confirm
+  is one link, one work, one commit.
+- **Gallery-side analytics.** Same.
+- **Multi-operator coordination UI** (show that
+  another operator is looking at the same request).
+  The race is resolved by the server write; the
+  losing tap gets a voice note. No pre-emptive
+  coordination surface.
+- **Free-text "why can't we confirm?" from the
+  gallery.** Open question #12.
+- **Push payload richness** (images, actions, rich
+  formatting). The notification is title + body +
+  a single `click → open PANG on the confirmed
+  work`. Rich push is a future iteration if the
+  telemetry says anything at all.
+- **Email receipts / CC to the collector's own
+  inbox.** The `mailto:` handoff already creates a
+  record in the collector's Sent folder; a
+  PANG-composed receipt would be chatter.
+- **Rate-limit tuning beyond the iter #9 in-memory
+  bucket.** Production load floor is single-digit
+  concurrent requests; edge-KV bucket is a next-
+  iteration concern.
+- **Collector-to-collector anything.** Cannot-do.
+  The decline path does not suggest "try asking
+  another collector who owns the same artist."
+- **Artist-to-collector anything.** Cannot-do.
+- **Verification revocation / appeal.** Iter #4
+  scope. Same stance here.
+
+**Outcome gate:** codify or iterate once. Codify
+targets if the loop lands cleanly:
+
+- **Signed-link-by-audience is the sanctioned pattern
+  for one-shot cross-role surfaces.** Add to
+  `PANG_Primitives_2026.md` as a new primitive
+  (audience-discriminated JWT + consumed-marker +
+  single-shot + audience-cross-rejection verified in
+  a matrix test). Names HS256 + `jose` + per-audience
+  TTL + per-audience consumed-marker directory as
+  the shape. Replaces the temptation to hand-roll a
+  per-surface token scheme every time a new cross-
+  role flow ships.
+- **Zero-tap commit is the invariant across every
+  surface, not just scanner → arrival.** Uplift the
+  P25 description in `PANG_Gates.md`; cross-reference
+  in `PANG_Primitives_2026.md` § *Chrome*.
+- **URL-handoff (`mailto:` / `wa.me`) is the
+  sanctioned collector-to-external-party dispatch
+  until observability says otherwise.** Add to
+  `PANG_Architecture_2026.md` § 8 (or wherever
+  dispatch lands) as a clarifying clause.
+  Server-side provider dispatch is named as the
+  deferred pivot with its observability trigger
+  (the `handoff_returned { success: false }`
+  fraction).
+- **Outbox-as-truth with server-outcome reconciliation
+  is the sanctioned push-delivery pattern.** Add to
+  `PANG_Architecture_2026.md` § *Data primitives* as
+  a clarifying clause on iter #4's outbox primitive.
+  Push is a notification channel; the server record
+  is the truth.
+- **Correspondence Agent ships at ceiling with voice-
+  check at the boundary, not a second agent turn.**
+  Add to `PANG_AI_Era_2026.md` § *Agent pattern* as
+  a clarifying clause on the existing "structured
+  output + schema" line. The voice layer is a
+  deterministic runtime check, not a separate LLM
+  call.
+- **CaMeL's XML-delimited untrusted string rendering
+  is the sanctioned pattern for user-editable data
+  entering a privileged prompt.** Add to
+  `PANG_AI_Era_2026.md` § *CaMeL discipline* as a
+  literal code-shape example (currently referenced
+  abstractly under A9). The gallery-name
+  quarantined-string pattern is the reference.
+
+Laura's hands: **after merge.** Walks the full
+round-trip on a real phone pair — her iPhone as
+collector, a second phone as the gallery operator's
+device. Ask a gallery on an unverified work. Open the
+dispatch. Watch the composed message in her Mail app.
+Send. Grab the second phone. Receive the confirm
+email (or WhatsApp). Tap the link. Enroll the gallery
+passkey. Tap confirm. Watch her first phone receive
+the push. Return to the Room. Watch arrival play. The
+work verifies. Pass = "I asked and she answered and
+the work came alive." Fail = a named regression in the
+observability proofs above (iterate once or drop the
+failing sub-flow).
+
+---
+
 ## Known debts
 
 Named so they're not invisible. Not iterations in themselves —

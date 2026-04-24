@@ -3,15 +3,21 @@
 /**
  * PANG — the ask-gallery affordance.
  *
- * The "one-tap ask my gallery" from the iteration #4 brief. Renders as
- * a small DOM panel that attaches to the focused work. Six lifecycle
- * states, one surface:
+ * The "one-tap ask my gallery" from the iteration #4 brief, extended
+ * in iter #10 with the send-now chooser. Renders as a small DOM panel
+ * that attaches to the focused work. Eight lifecycle states, one
+ * surface:
  *
  *   none        → "ask my gallery" button. The primary affordance.
  *   requesting  → "sending the ask." — compact chip; no spinner.
- *   requested   → "the gallery has been asked." — ambient, persistent.
+ *   requested   → "the gallery has been asked." + send-now chooser.
+ *                 Collector types the channel contact + taps email or
+ *                 whatsapp. The server composes the message; the
+ *                 collector's own mail/whatsapp client sends it.
+ *   dispatched  → "the message is with the gallery." — ambient.
  *   confirmed   → "the gallery confirmed." — soft, warm tick.
  *   declined    → "the gallery did not confirm." — no apology.
+ *   expired     → "the ask went quiet." — the 30d TTL elapsed.
  *   failed      → "the ask did not land." + "try again" — retry is a
  *                 fresh tap, not an automatic background nag.
  *
@@ -19,6 +25,12 @@
  * every label on this surface comes from there. Museumsschild test:
  * each string could hang on a gallery wall without looking like an
  * app shouting at the user.
+ *
+ * Send-now is URL-handoff — PANG does not dispatch on the gallery's
+ * behalf. The collector's mailto: / whatsapp: URL opens *their* client
+ * and the message sends from their address. This keeps PANG off
+ * inbox-provider deny lists and preserves the gallery's existing
+ * relationship with the collector.
  *
  * The chip's action is idempotent — tapping twice during
  * `"requesting"` or `"requested"` does nothing (the store guards).
@@ -69,8 +81,20 @@ export function AskGallery(props: AskGalleryProps): ReactElement | null {
   if (state.kind === "declined") {
     return <Chip label={ASK_GALLERY.declined} tone="ai" />;
   }
+  if (state.kind === "expired") {
+    return <Chip label={ASK_GALLERY.expired} tone="ai" />;
+  }
+  if (state.kind === "dispatched") {
+    return <Chip label={ASK_GALLERY.dispatched} tone="ink" />;
+  }
   if (state.kind === "requested") {
-    return <RequestedSurface entry={entry} hint={hint} />;
+    return (
+      <RequestedSurface
+        entry={entry}
+        hint={hint}
+        requestId={state.requestId}
+      />
+    );
   }
   if (state.kind === "requesting") {
     return <Chip label={ASK_GALLERY.pending} tone="ai" />;
@@ -139,6 +163,7 @@ function IdleAffordance(props: {
 function RequestedSurface(props: {
   readonly entry: CollectionEntry;
   readonly hint: VerificationHint;
+  readonly requestId: string;
 }): ReactElement {
   const pushDecision = useVerification((s) => s.pushOf(props.entry.id));
   const setPushDecision = useVerification((s) => s.setPushDecision);
@@ -167,6 +192,10 @@ function RequestedSurface(props: {
   return (
     <div className="flex flex-col items-start gap-2">
       <Chip label={ASK_GALLERY.requested} tone="ai" />
+      <SendNowChooser
+        entry={props.entry}
+        requestId={props.requestId}
+      />
       {canOffer && (
         <PushOffer
           entry={props.entry}
@@ -190,6 +219,130 @@ function RequestedSurface(props: {
           {ASK_GALLERY.pushDeclined}
         </span>
       )}
+    </div>
+  );
+}
+
+/**
+ * The send-now chooser (iter #10). Rendered inside the `requested`
+ * surface, lets the collector type the gallery's contact and tap
+ * either "send by email" or "send by whatsapp". On tap the chooser
+ * POSTs `/api/verification/dispatch`, receives a `channelUrl` (a
+ * `mailto:` or `https://wa.me/...` URL), opens it so the collector's
+ * own client takes over, and flips the verification store into
+ * `"dispatched"` so the surface transitions to the ambient
+ * "the message is with the gallery" chip.
+ *
+ * Contact input is a single free-text field because email and
+ * WhatsApp share one affordance from the collector's point of view
+ * ("this is how I reach my gallery") and the server branches on the
+ * tap, not on a parsed channel. Validation is the server's job; the
+ * `mailto:` / `wa.me` URL absorbs whatever the server returns.
+ *
+ * Zero-tap review (P25): if the server fails, the chooser stays on
+ * screen with the typed contact preserved. No modal, no toast, no
+ * apology — the ask affordance remains the next tap.
+ */
+function SendNowChooser(props: {
+  readonly entry: CollectionEntry;
+  readonly requestId: string;
+}): ReactElement {
+  const [contact, setContact] = useState("");
+  const [busy, setBusy] = useState(false);
+  const markDispatched = useVerification((s) => s.markDispatched);
+
+  const submit = async (channel: "email" | "whatsapp"): Promise<void> => {
+    const trimmed = contact.trim();
+    if (trimmed.length === 0) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/verification/dispatch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          version: "v1",
+          requestId: props.requestId,
+          channel,
+          galleryContact: trimmed,
+        }),
+      });
+      if (!res.ok) {
+        setBusy(false);
+        return;
+      }
+      const payload = (await res.json()) as {
+        readonly channelUrl: string;
+        readonly dispatchedAt: string;
+      };
+      // URL-handoff: open the collector's client. `<a>.click()` with
+      // `target="_blank"` is the reliable path on iOS + Android PWAs;
+      // `window.open` is pop-up-blocked after an async boundary in
+      // some browsers, but an anchor element's click keeps the
+      // user-gesture context through the await via the sync click.
+      const a = document.createElement("a");
+      a.href = payload.channelUrl;
+      a.rel = "noopener";
+      a.target = "_blank";
+      // Safari-on-iOS treats `mailto:` / `wa.me` navigations as
+      // cross-origin; opening in a new tab and letting the scheme
+      // handler close it is the most reliable path. The anchor is
+      // appended, clicked, and removed in one tick so the DOM stays
+      // clean for assistive tech.
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      markDispatched({
+        workId: props.entry.id,
+        dispatchedAt: payload.dispatchedAt,
+        channel,
+      });
+    } catch {
+      // Network error — stay on the chooser. The ask affordance
+      // remains; the collector can tap again.
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-start gap-2">
+      <span className="text-xs text-ink-ai" data-pang-source="voice-corpus">
+        {ASK_GALLERY.sendPrompt}
+      </span>
+      <input
+        type="text"
+        value={contact}
+        maxLength={120}
+        placeholder={ASK_GALLERY.editPlaceholder}
+        className="border border-ink-ai bg-paper px-2 py-1 text-sm text-ink"
+        style={{ borderRadius: "var(--r-chrome)" }}
+        onChange={(e) => setContact(e.target.value)}
+      />
+      <div className="flex gap-2">
+        <button
+          type="button"
+          disabled={busy || contact.trim().length === 0}
+          className="border border-ink bg-ink px-3 py-1 text-sm text-paper disabled:opacity-50"
+          style={{ borderRadius: "var(--r-chrome)" }}
+          onClick={() => {
+            void submit("email");
+          }}
+        >
+          {ASK_GALLERY.sendEmail}
+        </button>
+        <button
+          type="button"
+          disabled={busy || contact.trim().length === 0}
+          className="border border-ink-ai px-3 py-1 text-sm text-ink-ai disabled:opacity-50"
+          style={{ borderRadius: "var(--r-chrome)" }}
+          onClick={() => {
+            void submit("whatsapp");
+          }}
+        >
+          {ASK_GALLERY.sendWhatsApp}
+        </button>
+      </div>
     </div>
   );
 }

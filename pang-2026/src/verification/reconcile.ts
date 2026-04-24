@@ -109,6 +109,7 @@ export function planReconcile(
       }
       case "confirmed":
       case "declined":
+      case "expired":
       case "failed": {
         recordsToRemove.push(requestId);
         orphanOutboxEntries += 1;
@@ -116,6 +117,10 @@ export function planReconcile(
       }
       case "requesting":
       case "requested":
+      case "dispatched":
+        // In-flight or awaiting gallery action. Leave the outbox
+        // entry in place; the dispatched-state walker polls
+        // /api/verification/outcome in `reconcileVerification()`.
         break;
       default: {
         const _never: never = current;
@@ -199,4 +204,200 @@ export function installOnlineDrain(): () => void {
   };
   window.addEventListener("online", handler);
   return () => window.removeEventListener("online", handler);
+}
+
+// ---------- Dispatched-state walker (iter #10) -------------------
+
+/**
+ * Poll `/api/verification/outcome/<requestId>` for a single dispatched
+ * entry. Returns the outcome if the gallery has acted, else `null`.
+ *
+ * The endpoint returns:
+ *   - 204 No Content — no outcome yet; keep polling.
+ *   - 200 + VerificationOutcome — gallery acted; flip the store.
+ *   - 401 — the collector session evaporated; give up.
+ *   - 5xx / network — transient; the walker's caller will retry with
+ *     backoff.
+ *
+ * Separated from the store flip so tests can assert on the wire-level
+ * classification without DOM / store plumbing.
+ */
+export async function pollOutcomeOnce(
+  requestId: string,
+): Promise<
+  | { readonly kind: "pending" }
+  | { readonly kind: "outcome"; readonly outcome: "confirmed" | "declined" | "expired"; readonly decidedAt: string }
+  | { readonly kind: "unauth" }
+  | { readonly kind: "error"; readonly reason: string }
+> {
+  let res: Response;
+  try {
+    res = await fetch(`/api/verification/outcome/${requestId}`, {
+      method: "GET",
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+  } catch (err) {
+    return { kind: "error", reason: err instanceof Error ? err.message : "network" };
+  }
+  if (res.status === 204) return { kind: "pending" };
+  if (res.status === 401) return { kind: "unauth" };
+  if (!res.ok) {
+    return { kind: "error", reason: `http/${res.status}` };
+  }
+  let json: unknown;
+  try {
+    json = await res.json();
+  } catch {
+    return { kind: "error", reason: "bad_json" };
+  }
+  const { VerificationOutcomeSchema } = await import("./schema");
+  const parsed = VerificationOutcomeSchema.safeParse(json);
+  if (!parsed.success) return { kind: "error", reason: "schema" };
+  return {
+    kind: "outcome",
+    outcome: parsed.data.outcome,
+    decidedAt: parsed.data.decidedAt,
+  };
+}
+
+/**
+ * Install a `document.visibilitychange` listener that runs
+ * `walkDispatchedOnce` when the collector's tab becomes visible again.
+ * The collector who sent an email on Monday comes back on Wednesday;
+ * this is the moment to fold any confirmed / declined outcomes that
+ * landed in the meantime. Push is the primary rail, but push isn't
+ * guaranteed (denied permission, expired subscription, browser
+ * silencing); the visibility walker is the always-available
+ * reconciliation path.
+ *
+ * Returns an unsubscribe function so tests and hot-reload can clean
+ * up. Safe to call more than once.
+ */
+export function installDispatchedVisibilityWalker(): () => void {
+  if (typeof document === "undefined") return () => {};
+  const handler = (): void => {
+    if (document.visibilityState !== "visible") return;
+    void walkDispatchedOnce().catch(() => {});
+  };
+  document.addEventListener("visibilitychange", handler);
+  return () => document.removeEventListener("visibilitychange", handler);
+}
+
+/**
+ * Walk the store's dispatched entries and fold any landed outcomes
+ * into the store. Idempotent: calling twice with no new outcomes is
+ * a no-op. Safe to call on a timer or in response to a
+ * `visibilitychange`.
+ *
+ * Returns a count of outcomes applied so the caller can log telemetry
+ * and tests can assert.
+ */
+export async function walkDispatchedOnce(): Promise<number> {
+  if (typeof fetch === "undefined") return 0;
+  const store = useVerification.getState();
+  const dispatched = Object.entries(store.byWorkId).filter(
+    ([, state]) => state.kind === "dispatched",
+  );
+  if (dispatched.length === 0) return 0;
+
+  let applied = 0;
+  for (const [workId, state] of dispatched) {
+    if (state.kind !== "dispatched") continue;
+    const result = await pollOutcomeOnce(state.requestId);
+    if (result.kind === "outcome") {
+      if (result.outcome === "confirmed") {
+        store.markConfirmed(workId, result.decidedAt);
+      } else if (result.outcome === "declined") {
+        store.markDeclined(workId, result.decidedAt);
+      } else {
+        // expired
+        store.markExpired(workId, result.decidedAt);
+      }
+      applied += 1;
+    }
+    // pending / unauth / error — leave the dispatched state alone.
+  }
+  return applied;
+}
+
+// ---------- Push BroadcastChannel relay (iter #10) ---------------
+
+/**
+ * Install a listener on the `pang-verification` BroadcastChannel. The
+ * service worker posts `{ kind: "verification.outcome", ... }` events
+ * on this channel when a push arrives; we flip the store on the same
+ * tick so an open tab sees the outcome without waiting for visibility
+ * to change.
+ *
+ * The SW is the primary receiver (the notification renders regardless
+ * of whether any tab is open); the BroadcastChannel is the zero-tap
+ * path for the tab that *is* open. Without it, a collector looking at
+ * their collection when the gallery confirms would see the
+ * notification appear and the Room stay dormant — the visibility
+ * walker fires only on `visibilitychange`, not on the already-visible
+ * tick.
+ *
+ * Defence in depth: we re-fetch the outcome through `pollOutcomeOnce`
+ * before flipping the store. The BroadcastChannel payload is NOT
+ * authenticated (any script on the same origin could post to it);
+ * the server's outcome GET is the source of truth. The channel is an
+ * optimisation: it tells us *when* to poll, not *what* the outcome is.
+ */
+export function installOutcomeBroadcastListener(): () => void {
+  if (typeof window === "undefined") return () => {};
+  if (typeof BroadcastChannel === "undefined") return () => {};
+
+  const bc = new BroadcastChannel("pang-verification");
+  const handler = (ev: MessageEvent<unknown>): void => {
+    const data = ev.data;
+    if (
+      data === null ||
+      typeof data !== "object" ||
+      (data as { kind?: unknown }).kind !== "verification.outcome"
+    ) {
+      return;
+    }
+    const requestId = (data as { requestId?: unknown }).requestId;
+    const workId = (data as { workId?: unknown }).workId;
+    if (typeof requestId !== "string" || typeof workId !== "string") return;
+
+    void (async () => {
+      // Re-fetch the outcome authoritatively — the BC payload is a
+      // trigger, not a statement. `pollOutcomeOnce` applies the
+      // schema and the server auth gate, so a spoofed BC message
+      // cannot poison the store.
+      const result = await pollOutcomeOnce(requestId);
+      if (result.kind !== "outcome") return;
+      const store = useVerification.getState();
+      const current = store.byWorkId[workId];
+      if (current === undefined) return;
+      // Only flip if the store is still in a pre-terminal state —
+      // a duplicate push after the walker already folded the
+      // outcome should be a no-op.
+      if (
+        current.kind === "confirmed" ||
+        current.kind === "declined" ||
+        current.kind === "expired"
+      ) {
+        return;
+      }
+      if (result.outcome === "confirmed") {
+        store.markConfirmed(workId, result.decidedAt);
+      } else if (result.outcome === "declined") {
+        store.markDeclined(workId, result.decidedAt);
+      } else {
+        store.markExpired(workId, result.decidedAt);
+      }
+    })().catch(() => {
+      // Network errors are swallowed — the walker will pick up the
+      // outcome on the next visibility transition.
+    });
+  };
+
+  bc.addEventListener("message", handler);
+  return () => {
+    bc.removeEventListener("message", handler);
+    bc.close();
+  };
 }

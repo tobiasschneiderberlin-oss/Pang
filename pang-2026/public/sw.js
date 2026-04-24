@@ -150,19 +150,87 @@ self.addEventListener("fetch", (event) => {
 
 // Declarative Web Push — subscribed only for gallery-originated
 // verification outcomes. The payload schema is enforced at send time
-// server-side; here we simply trust it and render.
+// server-side; here we trust the wire shape and render.
+//
+// Iter #10: the payload kind is always `"outcome"` carrying
+// (requestId, workId, outcome, decidedAt). The SW:
+//
+//   1. Renders a museumsschild notification (title + body live in the
+//      SW so the wire shape stays small — primitive 53).
+//   2. Broadcasts an `{ kind: "verification.outcome", ... }` event on
+//      the `pang-verification` BroadcastChannel so any open tab
+//      running the reconciler flips its store immediately, without a
+//      reload.
+//   3. Binds `notificationData.url` to `/?work=<workId>` so a tap
+//      opens the Room focused on the work.
+//
+// Museumsschild voice: the notification title is the state that just
+// became true ("a gallery has confirmed a work"), not an alert. The
+// body names the work if we had the title on the wire, but we do not
+// — the payload is three fields. A later iter may add a short subject
+// line from the agent once the injection-hardened path is verified.
 self.addEventListener("push", (event) => {
   if (!event.data) return;
-  const data = event.data.json();
+  let data;
+  try {
+    data = event.data.json();
+  } catch {
+    return;
+  }
+  if (!data || data.kind !== "outcome") return;
+
+  const outcome = data.outcome;
+  const workId = typeof data.workId === "string" ? data.workId : "";
+  let title;
+  let body;
+  if (outcome === "confirmed") {
+    title = "a gallery has confirmed a work.";
+    body = "the work is now verified on the wall.";
+  } else if (outcome === "declined") {
+    title = "a gallery has answered.";
+    body = "the work remains as it is.";
+  } else if (outcome === "expired") {
+    title = "the ask went quiet.";
+    body = "the signed link elapsed without an answer.";
+  } else {
+    return;
+  }
+
+  const url = workId ? `/?work=${encodeURIComponent(workId)}` : "/";
+
   event.waitUntil(
-    self.registration.showNotification(data.title ?? "PANG", {
-      body: data.body ?? "",
-      tag: data.tag ?? "pang",
-      badge: "/icons/icon-192.png",
-      icon: "/icons/icon-192.png",
-      silent: false,
-      requireInteraction: false,
-    }),
+    (async () => {
+      try {
+        await self.registration.showNotification(title, {
+          body,
+          tag: `pang/verification/${workId || "default"}`,
+          badge: "/icons/icon-192.png",
+          icon: "/icons/icon-192.png",
+          silent: false,
+          requireInteraction: false,
+          data: { url, requestId: data.requestId, workId, outcome },
+        });
+      } catch {
+        // A showNotification failure should not swallow the
+        // BroadcastChannel relay — any open tab is still our best
+        // correctness path.
+      }
+      // Relay to any open tab. BroadcastChannel is fire-and-forget;
+      // a missing listener drops the event silently.
+      try {
+        const bc = new BroadcastChannel("pang-verification");
+        bc.postMessage({
+          kind: "verification.outcome",
+          requestId: data.requestId,
+          workId,
+          outcome,
+          decidedAt: data.decidedAt,
+        });
+        bc.close();
+      } catch {
+        // Ignore — some embedded runtimes drop BroadcastChannel.
+      }
+    })(),
   );
 });
 

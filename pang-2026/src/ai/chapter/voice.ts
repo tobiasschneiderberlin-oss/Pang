@@ -97,6 +97,16 @@ export const ASK_GALLERY = Object.freeze({
   pushGranted: "the notification is on.",
   /** Chip after the subscription was refused (permission or error). */
   pushDeclined: "the notification stays off.",
+  /** Prompt above the send-now chooser. Iter #10. */
+  sendPrompt: "choose the channel the gallery prefers.",
+  /** Send-now email button. */
+  sendEmail: "send by email",
+  /** Send-now WhatsApp button. */
+  sendWhatsApp: "send by whatsapp",
+  /** Chip after the collector has handed off the message. */
+  dispatched: "the message is with the gallery.",
+  /** Chip after the signed-link TTL elapsed without action. */
+  expired: "the ask went quiet.",
 }) satisfies Readonly<Record<string, string>>;
 
 /**

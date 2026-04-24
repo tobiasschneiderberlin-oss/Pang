@@ -381,6 +381,133 @@ describe("markDeclined", () => {
   });
 });
 
+describe("markDispatched", () => {
+  beforeEach(reset);
+
+  it("transitions 'requested' → 'dispatched' with dispatchedAt + channel", () => {
+    const store = useVerification.getState();
+    store.replaceState(workA, {
+      kind: "requested",
+      requestId: "req-1",
+      submittedAt: "2026-04-23T10:00:00.000Z",
+    });
+    store.markDispatched({
+      workId: workA,
+      dispatchedAt: "2026-04-23T10:05:00.000Z",
+      channel: "email",
+    });
+    const s = store.stateOf(workA);
+    assert.equal(s.kind, "dispatched");
+    if (s.kind === "dispatched") {
+      assert.equal(s.channel, "email");
+      assert.equal(s.dispatchedAt, "2026-04-23T10:05:00.000Z");
+      assert.equal(s.requestId, "req-1");
+    }
+  });
+
+  it("does not fire from 'none' / 'requesting'", () => {
+    const store = useVerification.getState();
+    store.markDispatched({
+      workId: workA,
+      dispatchedAt: "2026-04-23T10:05:00.000Z",
+      channel: "email",
+    });
+    assert.equal(store.stateOf(workA).kind, "none");
+    store.beginRequest({
+      workId: workA,
+      requestId: "req-1",
+      submittedAt: "2026-04-23T10:00:00.000Z",
+    });
+    store.markDispatched({
+      workId: workA,
+      dispatchedAt: "2026-04-23T10:05:00.000Z",
+      channel: "email",
+    });
+    assert.equal(store.stateOf(workA).kind, "requesting");
+  });
+
+  it("channel switch (email → whatsapp) overrides the existing dispatch", () => {
+    const store = useVerification.getState();
+    store.replaceState(workA, {
+      kind: "requested",
+      requestId: "req-1",
+      submittedAt: "2026-04-23T10:00:00.000Z",
+    });
+    store.markDispatched({
+      workId: workA,
+      dispatchedAt: "2026-04-23T10:05:00.000Z",
+      channel: "email",
+    });
+    store.markDispatched({
+      workId: workA,
+      dispatchedAt: "2026-04-23T10:06:00.000Z",
+      channel: "whatsapp",
+    });
+    const s = store.stateOf(workA);
+    assert.equal(s.kind, "dispatched");
+    if (s.kind === "dispatched") {
+      assert.equal(s.channel, "whatsapp");
+      assert.equal(s.dispatchedAt, "2026-04-23T10:06:00.000Z");
+    }
+  });
+});
+
+describe("markExpired", () => {
+  beforeEach(reset);
+
+  it("transitions 'dispatched' → 'expired' with decidedAt", () => {
+    const store = useVerification.getState();
+    store.replaceState(workA, {
+      kind: "dispatched",
+      requestId: "req-1",
+      submittedAt: "2026-04-23T10:00:00.000Z",
+      dispatchedAt: "2026-04-23T10:05:00.000Z",
+      channel: "email",
+    });
+    store.markExpired(workA, "2026-05-23T10:05:00.000Z");
+    const s = store.stateOf(workA);
+    assert.equal(s.kind, "expired");
+    if (s.kind === "expired") {
+      assert.equal(s.decidedAt, "2026-05-23T10:05:00.000Z");
+    }
+  });
+
+  it("does not overwrite confirmed/declined/expired terminal states", () => {
+    const store = useVerification.getState();
+    store.replaceState(workA, {
+      kind: "confirmed",
+      requestId: "req-1",
+      submittedAt: "2026-04-23T10:00:00.000Z",
+      decidedAt: "2026-04-24T10:00:00.000Z",
+    });
+    store.markExpired(workA, "2026-05-23T10:05:00.000Z");
+    assert.equal(store.stateOf(workA).kind, "confirmed");
+  });
+});
+
+describe("expired allows retry via beginRequest", () => {
+  beforeEach(reset);
+
+  it("a retry from 'expired' transitions back to 'requesting'", () => {
+    const store = useVerification.getState();
+    store.replaceState(workA, {
+      kind: "expired",
+      requestId: "req-1",
+      submittedAt: "2026-04-23T10:00:00.000Z",
+      decidedAt: "2026-05-23T10:05:00.000Z",
+    });
+    const next = store.beginRequest({
+      workId: workA,
+      requestId: "req-2",
+      submittedAt: "2026-05-24T10:00:00.000Z",
+    });
+    assert.equal(next.kind, "requesting");
+    if (next.kind === "requesting") {
+      assert.equal(next.requestId, "req-2");
+    }
+  });
+});
+
 describe("replaceState", () => {
   beforeEach(reset);
 

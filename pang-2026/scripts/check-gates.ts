@@ -408,6 +408,19 @@ async function p10(): Promise<GateResult> {
     "app/api/auth/session/route.ts",
     "app/api/auth/logout/route.ts",
     "app/api/auth/e2e-seam/route.ts",
+    // Gallery-facing verification routes (iter #10). The gallery is
+    // anonymous; the signed link (audience=gallery-confirm /
+    // gallery-decline) IS the auth and the routes verify it via
+    // `verifySignedLink` before any state mutation. A collector
+    // session is not applicable — the registrar clicking from an
+    // email has no PANG account.
+    "app/api/verification/confirm/route.ts",
+    "app/api/verification/decline/route.ts",
+    // Dev-only E2E harness — gated on NEXT_PUBLIC_PANG_E2E=1 plus the
+    // x-pang-e2e bearer. Same discipline as the invite mint-dev route:
+    // production bundles return 404 because the env flag is unset, so
+    // a missing session gate is not a session-gate regression.
+    "app/api/verification/mint-dev/route.ts",
   ];
   const allowSet = new Set(ALLOWLIST);
   const apiFiles = await walkRepoFiles(["app/api"], ["ts", "tsx"]);
@@ -800,38 +813,61 @@ async function p20(): Promise<GateResult> {
 }
 
 /**
- * P25 — Zero-tap review. Between capture and arrival, no *required*
- * text input / textarea / select may render, and no `<select>` at all
- * (every select in this surface family has historically meant a
- * required choice). Edits are opt-in: the collector can tap a field
- * to open a free-text editor, but the "add to wall" path is always
- * available unconditionally.
+ * P25 — Zero-tap review. Between a collector's intent and the action
+ * that realises it, no *required* text input / textarea / select may
+ * render, and no `<select>` at all (every select in these surface
+ * families has historically meant a required choice). Edits are
+ * opt-in: the collector can tap a field to open a free-text editor,
+ * but the gateway path is always available unconditionally.
  *
- * Mechanical check: scan `app/scan/**` and `src/components/intake/**`:
+ * Surfaces in scope:
  *
- *   1. No `<select>` element anywhere.
- *   2. No `required` attribute on any `<input>` / `<textarea>`.
- *   3. `IntakeReview.tsx` exports a button with `aria-label="add to
- *      wall"` (the arrival gateway) and does not declare `disabled=`
- *      on it anywhere.
+ *   1. Scan → arrival (original iter #1 scope).
+ *        Gateway: `IntakeReview.tsx` — `aria-label="add to wall"`.
+ *   2. Verification-request panel (iter #10 extension).
+ *        `src/components/verification/**` — the AskGallery panel that
+ *        drives `/api/verification/dispatch`.
+ *   3. Gallery-side confirm + decline (iter #10 extension).
+ *        `app/g/**` — a registrar lands here from their inbox; the
+ *        flow is a single confirm/decline button.
+ *
+ * Mechanical check per surface: walk the folder, reject any `<select>`
+ * and reject any `required` attribute on an `<input>` / `<textarea>`
+ * / `<select>` element. JS-gated button `disabled=` is fine (the
+ * collector can type one character to unblock); HTML-required inputs
+ * are not (the browser's constraint-validation UI is the denial).
+ *
+ * Gateway-button checks (the ones with historical arrival gates):
+ *
+ *   - `IntakeReview.tsx` exports `aria-label="add to wall"` with no
+ *     `disabled=` within 5 lines of the marker.
  */
 async function p25(): Promise<GateResult> {
   const id = "P25";
-  const title = "Zero-tap review between capture and arrival";
-  const files = await walkRepoFiles(
-    ["app/scan", "src/components/intake"],
-    ["ts", "tsx"],
-  );
-  for (const f of files) {
-    const src = await read(f);
-    if (/<select\b/.test(src))
-      return fail(id, title, `${f} renders <select> in the scan surface`);
-    if (/\brequired\b\s*(=|\/>|>)/.test(src)) {
-      // Narrow: only flag if it's on an input/textarea/select element.
-      // Tolerate code that mentions "required" in a prop-type comment.
-      const re = /<(?:input|textarea|select)\b[^>]*\brequired\b[^>]*>/;
-      if (re.test(src))
-        return fail(id, title, `${f} has a required input in scan surface`);
+  const title = "Zero-tap review across capture + dispatch surfaces";
+  const surfaces: ReadonlyArray<{ label: string; root: string }> = [
+    { label: "scan surface", root: "app/scan" },
+    { label: "intake surface", root: "src/components/intake" },
+    { label: "verification panel", root: "src/components/verification" },
+    { label: "gallery surface", root: "app/g" },
+  ];
+  for (const surface of surfaces) {
+    const files = await walkRepoFiles([surface.root], ["ts", "tsx"]);
+    for (const f of files) {
+      const src = await read(f);
+      if (/<select\b/.test(src))
+        return fail(id, title, `${f} renders <select> in ${surface.label}`);
+      if (/\brequired\b\s*(=|\/>|>)/.test(src)) {
+        // Narrow: only flag if it's on an input/textarea/select element.
+        // Tolerate code that mentions "required" in a prop-type comment.
+        const re = /<(?:input|textarea|select)\b[^>]*\brequired\b[^>]*>/;
+        if (re.test(src))
+          return fail(
+            id,
+            title,
+            `${f} has a required input in ${surface.label}`,
+          );
+      }
     }
   }
   // "Add to wall" entry point must be present and unconditional.

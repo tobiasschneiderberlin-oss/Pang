@@ -67,5 +67,9 @@ export {
   planReconcile,
   reconcileVerification,
   installOnlineDrain,
+  installDispatchedVisibilityWalker,
+  installOutcomeBroadcastListener,
+  pollOutcomeOnce,
+  walkDispatchedOnce,
   type ReconcilePlan,
 } from "./reconcile";

@@ -238,24 +238,24 @@ export async function deleteBindSession(bindSessionToken: string): Promise<void>
 /**
  * Mark an invite's jti consumed. Replaying the JWT on the `bind`
  * route reads this marker and fails closed.
+ *
+ * As of iter #10 this forwards to the signed-link consumed-marker
+ * under the `collector-invite` audience. The old `.pang/server-invites/`
+ * directory is left in place (empty on fresh installs) for now; the
+ * module keeps the iter #9 function names so call sites don't churn.
  */
 export async function markInviteConsumed(jti: string): Promise<void> {
   if (!/^[A-Za-z0-9_-]+$/.test(jti)) {
     throw new Error("unsafe invite jti");
   }
-  await ensureDir(DIRS.invites);
-  await writeAtomic(path.join(DIRS.invites, `${sanitise(jti)}.consumed`), {
-    jti,
-    consumedAt: new Date().toISOString(),
-  });
+  const { markSignedLinkConsumed } = await import("./signed-link");
+  await markSignedLinkConsumed("collector-invite", jti);
 }
 
 export async function isInviteConsumed(jti: string): Promise<boolean> {
   if (!/^[A-Za-z0-9_-]+$/.test(jti)) return true;
-  const raw = await readIfExists(
-    path.join(DIRS.invites, `${sanitise(jti)}.consumed`),
-  );
-  return raw !== null;
+  const { isSignedLinkConsumed } = await import("./signed-link");
+  return isSignedLinkConsumed("collector-invite", jti);
 }
 
 // ---------- Challenges ---------------------------------------------
@@ -303,4 +303,7 @@ export async function __resetAuthStoresForTests(): Promise<void> {
       throw err;
     }
   }
+  // Signed-link consumed-markers live under their own root (iter #10).
+  const { __resetSignedLinksForTests } = await import("./signed-link");
+  await __resetSignedLinksForTests();
 }
