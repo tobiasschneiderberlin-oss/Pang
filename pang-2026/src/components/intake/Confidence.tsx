@@ -21,6 +21,7 @@
  */
 
 import type { ReactElement, ReactNode } from "react";
+import { BULLET_SEPARATOR } from "@/ai/chapter/voice";
 
 export interface ConfidenceProps {
   readonly source: "ai" | "gallery";
@@ -51,7 +52,7 @@ export function Confidence(props: ConfidenceProps): ReactElement {
       >
         {props.source === "gallery" && (
           <span aria-hidden="true" className="mr-2">
-            ·
+            {BULLET_SEPARATOR}
           </span>
         )}
         {props.children}

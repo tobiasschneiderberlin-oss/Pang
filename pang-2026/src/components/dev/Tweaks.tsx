@@ -37,6 +37,7 @@
 import { useState } from "react";
 import type { ReactElement } from "react";
 import { usePreferences } from "@design/preferences";
+import { TWEAKS } from "@/ai/dev/voice";
 
 const IS_DEV = process.env.NODE_ENV === "development";
 
@@ -60,7 +61,7 @@ export function Tweaks(): ReactElement | null {
         right: "max(env(safe-area-inset-right), var(--s-4))",
         bottom: "max(env(safe-area-inset-bottom), var(--s-4))",
       }}
-      aria-label="Developer tweaks"
+      aria-label={TWEAKS.panel_label}
     >
       {expanded ? (
         <div
@@ -72,11 +73,11 @@ export function Tweaks(): ReactElement | null {
           }}
         >
           <div className="flex items-center justify-between">
-            <span className="text-ink-muted">Tweaks</span>
+            <span className="text-ink-muted">{TWEAKS.header}</span>
             <button
               type="button"
               onClick={toggle}
-              aria-label="Collapse tweaks"
+              aria-label={TWEAKS.collapse_label}
               className="text-ink-muted hover:text-ink"
               style={{
                 // Close affordance: 32×32 target (well above the 24×24
@@ -86,7 +87,7 @@ export function Tweaks(): ReactElement | null {
                 borderRadius: "var(--r-chrome)",
               }}
             >
-              ×
+              {TWEAKS.close_glyph}
             </button>
           </div>
 
@@ -96,7 +97,7 @@ export function Tweaks(): ReactElement | null {
               className="text-ink-muted"
               style={{ fontSize: "10px" }}
             >
-              Time warmth
+              {TWEAKS.time_warmth_label}
             </label>
             <input
               id="tweak-time-warmth"
@@ -119,14 +120,14 @@ export function Tweaks(): ReactElement | null {
               }}
             />
             <div className="flex justify-between text-ink-muted normal-case">
-              <span style={{ fontSize: "10px" }}>cool</span>
+              <span style={{ fontSize: "10px" }}>{TWEAKS.cool}</span>
               <span
                 className="font-mono tabular-nums"
                 style={{ fontSize: "10px" }}
               >
                 {timeWarmth.toFixed(2)}
               </span>
-              <span style={{ fontSize: "10px" }}>warm</span>
+              <span style={{ fontSize: "10px" }}>{TWEAKS.warm}</span>
             </div>
           </div>
         </div>
@@ -134,7 +135,7 @@ export function Tweaks(): ReactElement | null {
         <button
           type="button"
           onClick={toggle}
-          aria-label="Open tweaks"
+          aria-label={TWEAKS.open_label}
           className="bg-paper-5 text-ink-muted hover:text-ink font-mono tracking-wider uppercase"
           style={{
             // Collapsed trigger: 32×32 (P23 comfortable above 24×24).
@@ -147,7 +148,7 @@ export function Tweaks(): ReactElement | null {
             letterSpacing: "0.08em",
           }}
         >
-          T
+          {TWEAKS.trigger_glyph}
         </button>
       )}
     </aside>

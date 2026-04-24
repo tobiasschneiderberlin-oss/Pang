@@ -7725,6 +7725,265 @@ surface without the voice layer." That promise holds.
 
 ---
 
+## Iteration #13 — Voice audit sweep (opened 2026-04-24)
+
+### Why this, why now
+
+Iter #12 landed the two voice-discipline gates (A24, A25), the
+single-sourced banned list, and the seed-as-artifact rebuild. A24
+runs on the full repo and is green. **A25 runs on fixtures only** —
+its production-surface smoke is gated behind `A25_FULL_SMOKE=1`
+because 58 inline-string violations across 19 files ship today. That
+is the deferred debt iter #12 explicitly flagged.
+
+The next spine pin is #10 — the **Narrative Agent v1**, which writes
+a monthly reading of the collection's provenance into the arrival
+chapter. Narrative is the first agent that produces *long-form* prose
+back into the UI, not short chips. Landing it before the audit sweep
+would bake voice-regressions into monthly-reading strings at exactly
+the moment the language surface is largest. The audit sweep is the
+last barrier between the current partial-enforcement state and a
+mechanically-clean voice layer that every future agent consumes.
+
+Iter #13 is a **cleanup iteration**. It produces no new surface. It
+lands no new gate. It flips A25 from "fixture-tested" to
+"production-surface enforced" by moving every inline string to a
+corpus and turning on the full smoke by default.
+
+### Scope
+
+**CEILING — full audit, no partial sweeps.**
+
+- Every one of the 58 A25 violations across 19 files moves into a
+  corpus module. Surfaces covered: intake chrome, arrival chapter,
+  ask-gallery affordance, dispatch screens, push banners, outcome
+  narration, auth forms, documents viewer, scan/deep-zoom/room smoke
+  clients, any remaining app/** routes.
+- A25 full smoke runs in the default `npm run check` pipeline. The
+  `A25_FULL_SMOKE=1` env-var escape hatch is removed from `check` but
+  preserved as an opt-out in the gate source so developers can run
+  fixture-only during exploratory surgery.
+- Every new corpus entry re-exports through `PANG_VOICE_STRINGS`
+  (the bundle introduced in iter #12). Call sites may continue to
+  import from either the domain corpus or the bundle; the bundle is
+  the single canonical surface.
+- No new strings. This is a **move-only** sweep. If an inline string
+  reads wrong in Museumsschild register during the move, flag it in
+  findings — do not rewrite it inside this iteration. Voice
+  corrections get their own iteration (iter #14 if needed, else
+  deferred).
+- `rebuild-voice-prompt.ts` rebuild is re-run at the end; if new
+  canonical slots got populated, the seed's examples section updates.
+
+### Stack
+
+- **No new runtime deps.** All additions are TypeScript inside
+  existing source trees.
+- **No changes to A24 or A25 gate code.** The gate logic lands
+  correctly in iter #12; iter #13 exercises it.
+- **Tests:** no new unit tests beyond what the corpus additions pull
+  in via existing fixture patterns. The win condition is A25 green
+  across the repo in the default `check` pipeline.
+- **Bundle impact:** zero net change expected — strings already ship
+  in the JS bundle; the move from JSX-inline to corpus-imported is
+  byte-neutral after deduplication. If the bundle grows more than
+  +2KB on the main chunk the sweep is wrong (e.g., accidental
+  per-surface corpus duplication).
+
+### Reference
+
+`PANG_Voice.md` § *Failure prose* + § *Museumsschild test*. Every
+string moved into a corpus must still pass the test — if moving a
+string surfaces that the original was off-register, flag in findings.
+
+### Canvas
+
+**No new visual canvas.** The canvas is the audit log. The
+iteration's artefact is the commit-message series:
+
+```
+refactor(voice): audit sweep — chapter + ask-gallery strings
+refactor(voice): audit sweep — intake + enrichment strings
+refactor(voice): audit sweep — auth + outcome + documents strings
+refactor(voice): audit sweep — scan + deep-zoom + room smoke strings
+```
+
+Each commit message lists every file + every literal moved. The
+commit log is the audit.
+
+### Failure mode
+
+Three regression classes this sweep closes:
+
+1. **A25 silently disabled.** If A25 full smoke is not in `check`,
+   a new inline string slips into the repo and no CI signal fires.
+   Fix: `check` runs the full smoke by default after this iteration.
+2. **Corpus fragmentation.** If every domain invents its own corpus
+   naming convention, the bundle cannot assemble cleanly. Fix: every
+   domain's corpus follows the `*/voice.ts` or `*/strings.ts` shape,
+   and `PANG_VOICE_STRINGS` re-exports it under a stable namespace.
+3. **String drift during move.** If a literal changes shape during
+   the move ("sign in" → "Sign in") the surface silently regresses.
+   Fix: commit messages quote the literal verbatim; a review cycle
+   catches any punctuation/case drift.
+
+### Gates
+
+**50 → 50.** No new gates. A25 already exists; this iteration turns
+on its full smoke in `check`. The `.pang/gates.yaml` A25 line gains
+a `fullSmoke: true` field (purely informational — the gate is
+green-or-red the same way).
+
+### Build order
+
+Five commits.
+
+1. **Audit sweep — chapter + ask-gallery** — `src/components/chapter/**`
+   + `src/components/ask-gallery/**`. Move every inline literal into
+   the existing `src/ai/chapter/voice.ts` or a new
+   `src/ai/ask-gallery/voice.ts`; re-export through `PANG_VOICE_STRINGS`.
+2. **Audit sweep — intake + enrichment** —
+   `src/components/intake/**` + `src/components/enrichment/**`.
+3. **Audit sweep — auth + outcome + documents** —
+   `src/components/auth/**` + `src/components/outcome/**` +
+   `src/components/documents/**`.
+4. **Audit sweep — smoke clients** — `app/deep-zoom-smoke/**`,
+   `app/room-smoke/**`, `app/scan/**`, any remaining `app/**`.
+   Smoke-client labels are developer chrome but A25 catches them
+   because they render in the DOM; move them to a small
+   `src/smoke/voice.ts` corpus.
+5. **Turn on A25 full smoke in `check`** — edit `package.json`:
+   `"check:gates": "tsx scripts/check-gates.ts && A25_FULL_SMOKE=1 vitest run scripts/gates/a25.test.ts"` (or equivalent). Verify
+   `npm run verify` green. Run `bun run rebuild:voice-prompt`; if
+   output differs from committed `voice.ts` commit the reconciliation.
+6. **Findings + primitive note** — append iter #13 findings to
+   `PANG_Aha_Sprint.md` following iter #10/#11/#12 pattern. Extend
+   primitive 64 (Corpus-every-user-facing-string) in
+   `PANG_Primitives_2026.md` with the "full-smoke in default check"
+   enforcement addendum. Commit: `docs(voice): iter #13 findings +
+   A25 full-smoke enforcement note`.
+
+### Test criteria
+
+- `npm run verify` green with A25 full smoke **in the default
+  pipeline**. Zero violations in `src/components/**` or `app/**`.
+- Unit count ≥ 821 (iter #12 baseline).
+- 10 Playwright specs green.
+- `bun run build` green; main-chunk bundle delta ≤ +2KB.
+- `diff <(bun run rebuild:voice-prompt --stdout) src/ai/prompts/voice.ts`
+  empty (or committed reconciliation).
+- Each audit-sweep commit message lists every file + every literal
+  moved. The commit log is auditable.
+
+### Out of scope
+
+- **String rewrites.** Moving only; no rewording. Rewording is a
+  separate iteration.
+- **New corpus domains beyond what the 58 violations require.**
+- **i18n.** English-only; the corpus shape is locale-ready for later.
+- **ESLint companion rule.** Iter #12 brief marked optional; still
+  deferred. A25 is the authoritative gate.
+- **Production `voice-prompt-hash` capture.** Waits for next deploy
+  to Laura's device.
+- **Any Narrative Agent scaffolding.** Holds for iter #14.
+
+### Outcome gate (what codifies)
+
+Iter #13 succeeds when:
+
+1. A25 is green across `src/components/**` + `app/**` with zero
+   inline user-facing literals.
+2. `A25_FULL_SMOKE=1` is no longer required — `npm run check` runs
+   the full smoke by default.
+3. Every moved literal is traceable to a corpus module via a single
+   commit in the audit-sweep series.
+4. `PANG_Primitives_2026.md` primitive 64 gains the "default-pipeline
+   enforcement" addendum.
+5. Laura's next install surface shows no string regression vs the
+   iter #12 commit — every moved string reads identically on screen.
+
+### Findings (closed 2026-04-24)
+
+**Outcome.** All five outcome-gate criteria landed. A25 green in
+the default `npm run test`, 58 → 0 inline violations across 19
+files, no seed diff on rebuild. Test count 821 → 822 (the formerly
+skipped production-surface smoke runs unconditionally). Zero
+Playwright spec churn.
+
+**What the sweep actually looked like.** Four move-only commits,
+each covering a surface cluster, each listing every literal
+verbatim in the commit body (the audit log). The brief predicted
+four sweeps along `chapter+ask-gallery / intake+enrichment /
+auth+outcome+documents / smoke` lines; the real filesystem aligned
+differently (no `src/components/auth/**`, no `src/components/chapter/**`)
+so the sweeps realigned to `chapter+outcome+documents+deep-zoom /
+intake+enrichment+scanner / verification+dev+invite+gallery /
+pages+smoke`. The byte-count prediction held: zero net bundle
+delta after deduplication.
+
+**New corpus domains.** Eight new `voice.ts` files shipped —
+`intake`, `enrichment`, `scanner`, `verification`, `dev`, `invite`,
+`gallery`, `smoke`, plus a new `room`. All eight follow the
+`chapter/voice.ts` pattern (frozen `satisfies Readonly<...>`) and
+re-export through `PANG_VOICE_STRINGS` (the bundle gained nine new
+top-level namespaces: `outcome_chapter`, `chapter_chrome`,
+`intake`, `enrichment`, `scanner`, `verification`, `dev_tweaks`,
+`invite_landing`, `gallery_outcome`, `room`, `smoke`).
+
+**Off-register flag (deferred to a voice iteration).** The
+`src/components/dev/Tweaks.tsx` panel ships a cluster of title-case
+dev chrome ("Developer tweaks", "Tweaks", "Time warmth", "Open
+tweaks", "Collapse tweaks") that violates PANG_Voice.md's
+sentence-case rule. Preserved verbatim per the move-only discipline
+and flagged in `src/ai/dev/voice.ts` JSDoc; a voice-correction
+iteration owns the rewrite. Tweaks is dev-only (dead-code-eliminated
+in production bundles) so collector-facing register is unaffected
+either way. The `/room-smoke` and `/deep-zoom-smoke` surfaces ship
+similarly terse dev labels (`tier:`, `open`, `close`, `cycles:`);
+`src/ai/smoke/voice.ts` documents the register exemption — smoke
+routes are infrastructure chrome, not museumsschild.
+
+**One shape refactor worth noting.** `IntakeReview`'s `<FieldRow>`
+had a `label: string` prop passed inline (`<FieldRow label="artist"
+…>`). Because `label=` isn't in A25's four user-facing attribute
+set, the call-site literal wasn't flagged — but the component's
+internal `aria-label={\`edit ${props.label}\`}` template was,
+because `props.label` doesn't resolve to a corpus. The fix: rename
+the prop to `field: FieldKind` and index into `FIELD_LABELS` from
+the intake corpus. ElementAccessExpression's root identifier
+(`FIELD_LABELS`) is corpus-sourced, so the template passes. The
+pattern generalises to any component whose `aria-label` composes a
+user-facing string from a prop — the prop must either be a
+corpus-resolvable type or a discriminated enum the corpus indexes.
+Worth a primitive note if the pattern recurs.
+
+**Codify / iterate-once / drop.**
+
+- **Codify:** primitive 64 gains the default-pipeline enforcement
+  addendum (done this iteration).
+- **Codify:** the eight new domain corpora are now the template —
+  any new agent-adjacent surface gets a `voice.ts` from day one,
+  re-exports through `PANG_VOICE_STRINGS`.
+- **Iterate once:** the Tweaks title-case rewrite + any other
+  off-register literal surfaced during the sweep. A follow-up
+  voice-only iteration owns those rewrites (no code changes, only
+  string replacements inside corpora).
+- **Drop:** the ESLint companion rule mentioned as optional in iter
+  #12. A25's ts-morph walker is authoritative; adding a parallel
+  ESLint rule would double-maintain. Confirmed dropped.
+
+**Cadence gain.** The regression cadence moved from "quarterly
+cleanup iteration" to "within one commit": a new inline literal in
+any component or route now fails `npm run test` at the commit that
+introduces it. The audit-sweep iteration pattern is a one-time
+cost, not a recurring one — future voice discipline lands as
+commit-level enforcement.
+
+**Merge.** Squashed to commit `<filled after merge>` on main,
+PR `#<filled after merge>`.
+
+---
+
 ## Archived iterations
 
 The pre-reset sprint family (A1–A11, iterations #1–#13 of the old

@@ -45,7 +45,7 @@ import {
 } from "react";
 import { useWorks } from "@/stores/works";
 import { useSurfaceClaim } from "@/stores/use-surface-claim";
-import { DOCUMENTS_VIEWER } from "@/ai/chapter";
+import { DOCUMENTS_VIEWER, DOCUMENT_VIEWER_LABEL } from "@/ai/chapter/voice";
 import { readDocumentBytes } from "@/documents/bytes";
 import {
   documentsViewerCloseEvent,
@@ -422,7 +422,7 @@ function DocumentViewer(props: DocumentViewerProps): ReactElement {
       style={{ borderRadius: 0 }}
       role="dialog"
       aria-modal="true"
-      aria-label="document"
+      aria-label={DOCUMENT_VIEWER_LABEL}
       data-pang-surface="document-viewer"
     >
       <canvas

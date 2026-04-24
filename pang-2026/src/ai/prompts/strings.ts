@@ -35,19 +35,48 @@
 
 import {
   ARIA_ANNOUNCE,
+  ARRIVAL_IMAGE_ALT,
   ARTIFACT_LABELS,
   ASK_GALLERY,
   ATTRIBUTION_LABEL,
+  BULLET_SEPARATOR,
   CONTEXT_LABEL,
+  DEEP_ZOOM_CLOSE,
   DEEP_ZOOM_LABEL,
   DISMISS_AFFORDANCE,
   DOCUMENTS_CONTEXT_LINE,
   DOCUMENTS_LABEL,
+  DOCUMENT_VIEWER_LABEL,
   DOCUMENTS_VIEWER,
   NULL_REFLECTION,
   OUTCOME_NARRATION,
+  OUTCOME_SURFACE_LABEL,
   SURFACE_LABEL,
 } from "@/ai/chapter/voice";
+import {
+  DIFF_LABELS,
+  FIELD_LABELS,
+  INTAKE_ADD_TO_WALL,
+  INTAKE_EDIT_YEAR_LABEL,
+  INTAKE_HEADER_SUBTITLE,
+  INTAKE_RESHOOT,
+  INTAKE_REVIEW_LABEL,
+  INTAKE_YEAR_LABEL,
+  SCAN_STAGE,
+  editLabelFor,
+} from "@/ai/intake/voice";
+import { ENRICHMENT_PANEL_LABEL } from "@/ai/enrichment/voice";
+import {
+  CAPTURE_LABEL,
+  TORCH_TOGGLE,
+  VIEWFINDER_LABEL,
+} from "@/ai/scanner/voice";
+import { FOCUSED_WORK_LABEL } from "@/ai/verification/voice";
+import { TWEAKS } from "@/ai/dev/voice";
+import { INVITE_LANDING_LABEL } from "@/ai/invite/voice";
+import { GALLERY_OUTCOME_PROSE } from "@/ai/gallery/voice";
+import { ROOM_MAIN_LABEL } from "@/ai/room/voice";
+import { DEEP_ZOOM_SMOKE, ROOM_SMOKE } from "@/ai/smoke/voice";
 
 // ---------- Namespaces ---------------------------------------------
 //
@@ -128,7 +157,14 @@ export const ARRIVAL = Object.freeze({
   dismiss: DISMISS_AFFORDANCE,
   /** Surface-level screen-reader label. */
   surface_label: SURFACE_LABEL,
+  /** Empty-alt for the captured-still overlay. Decorative image. */
+  image_alt: ARRIVAL_IMAGE_ALT,
 }) satisfies Readonly<Record<string, string>>;
+
+export const OUTCOME_CHAPTER = Object.freeze({
+  /** Surface-level screen-reader label for the outcome chapter. */
+  surface_label: OUTCOME_SURFACE_LABEL,
+}) satisfies Readonly<Record<"surface_label", string>>;
 
 export const ARTIFACTS = Object.freeze({
   coa: ARTIFACT_LABELS.coa,
@@ -141,6 +177,8 @@ export const DOCUMENTS = Object.freeze({
   context_line: DOCUMENTS_CONTEXT_LINE,
   /** Landmark label on the documents chapter. */
   label: DOCUMENTS_LABEL,
+  /** Dialog label for the document-viewer overlay. */
+  viewer_label: DOCUMENT_VIEWER_LABEL,
   /** Muji fallback when an opened document's OPFS bytes are gone. */
   missing_bytes: DOCUMENTS_VIEWER.missingBytes,
   /** Muji footer when a multi-page document is truncated. */
@@ -148,13 +186,101 @@ export const DOCUMENTS = Object.freeze({
 }) satisfies Readonly<{
   context_line: string;
   label: string;
+  viewer_label: string;
   missing_bytes: string;
   more_pages: (count: number) => string;
 }>;
 
 export const DEEP_ZOOM = Object.freeze({
   label: DEEP_ZOOM_LABEL,
+  /** Close button's `aria-label`. */
+  close_label: DEEP_ZOOM_CLOSE.label,
+  /** Close button's visible text. */
+  close_action: DEEP_ZOOM_CLOSE.action,
+}) satisfies Readonly<Record<string, string>>;
+
+export const CHAPTER_CHROME = Object.freeze({
+  /** Typographic middot used between fields; always aria-hidden. */
+  bullet: BULLET_SEPARATOR,
+}) satisfies Readonly<Record<"bullet", string>>;
+
+export const INTAKE = Object.freeze({
+  /** Landmark label for the intake review `<main>`. */
+  review_label: INTAKE_REVIEW_LABEL,
+  /** Subtitle above the P-LLM arrival line. */
+  header_subtitle: INTAKE_HEADER_SUBTITLE,
+  /** Reshoot button — same text / aria-label pair. */
+  reshoot_label: INTAKE_RESHOOT.label,
+  reshoot_action: INTAKE_RESHOOT.action,
+  /** Add-to-wall button — same text / aria-label pair. */
+  add_to_wall_label: INTAKE_ADD_TO_WALL.label,
+  add_to_wall_action: INTAKE_ADD_TO_WALL.action,
+  /** Year-row slots. */
+  year_label: INTAKE_YEAR_LABEL,
+  edit_year_label: INTAKE_EDIT_YEAR_LABEL,
+  /** `edit ${label}` helper. */
+  edit_label_for: editLabelFor,
+  /** Artwork field labels. */
+  field_artist: FIELD_LABELS.artist,
+  field_title: FIELD_LABELS.title,
+  field_medium: FIELD_LABELS.medium,
+  field_year: FIELD_LABELS.year,
+  /** `<Diff>` a11y labels. */
+  diff_previous: DIFF_LABELS.previous,
+  diff_current: DIFF_LABELS.current,
+  /** `/scan` stage chrome. */
+  scan_reading_label: SCAN_STAGE.reading_label,
+  scan_reading_text: SCAN_STAGE.reading_text,
+  scan_failed_label: SCAN_STAGE.failed_label,
+  scan_failed_reshoot: SCAN_STAGE.failed_reshoot,
+}) satisfies Readonly<Record<string, string | ((label: string) => string)>>;
+
+export const ENRICHMENT = Object.freeze({
+  /** Landmark label for the enrichment panel. */
+  panel_label: ENRICHMENT_PANEL_LABEL,
+}) satisfies Readonly<Record<"panel_label", string>>;
+
+export const SCANNER = Object.freeze({
+  /** Viewfinder canvas landmark. */
+  viewfinder_label: VIEWFINDER_LABEL,
+  /** Manual-capture button. */
+  capture_label: CAPTURE_LABEL,
+  /** Torch toggle (text + aria-label shared). */
+  torch_on: TORCH_TOGGLE.on,
+  torch_off: TORCH_TOGGLE.off,
+}) satisfies Readonly<Record<string, string>>;
+
+export const VERIFICATION = Object.freeze({
+  /** Landmark label on the focused-work panel. */
+  focused_work_label: FOCUSED_WORK_LABEL,
+}) satisfies Readonly<Record<"focused_work_label", string>>;
+
+export const DEV_TWEAKS = TWEAKS;
+
+export const INVITE_LANDING = Object.freeze({
+  /** Landmark label on the invite `<main>`. */
+  label: INVITE_LANDING_LABEL,
 }) satisfies Readonly<Record<"label", string>>;
+
+export const GALLERY_OUTCOME = GALLERY_OUTCOME_PROSE;
+
+export const ROOM = Object.freeze({
+  /** Landmark label on The Room `<main>`. */
+  main_label: ROOM_MAIN_LABEL,
+}) satisfies Readonly<Record<"main_label", string>>;
+
+export const SMOKE = Object.freeze({
+  /** /deep-zoom-smoke surface. */
+  deep_zoom_header: DEEP_ZOOM_SMOKE.header,
+  deep_zoom_open: DEEP_ZOOM_SMOKE.open,
+  deep_zoom_close: DEEP_ZOOM_SMOKE.close,
+  deep_zoom_cycles_label: DEEP_ZOOM_SMOKE.cycles_label,
+  /** /room-smoke HUD. */
+  room_tier_label: ROOM_SMOKE.tier_label,
+  room_ready_label: ROOM_SMOKE.ready_label,
+  room_works_label: ROOM_SMOKE.works_label,
+  room_focus_label: ROOM_SMOKE.focus_label,
+}) satisfies Readonly<Record<string, string>>;
 
 export const ARIA = ARIA_ANNOUNCE;
 
@@ -169,12 +295,23 @@ export const PANG_VOICE_STRINGS = Object.freeze({
   invite: INVITE,
   ask_gallery: ASK_GALLERY_NS,
   outcome: OUTCOME,
+  outcome_chapter: OUTCOME_CHAPTER,
   push: PUSH,
   dispatch: DISPATCH,
   arrival: ARRIVAL,
   artifacts: ARTIFACTS,
   documents: DOCUMENTS,
   deep_zoom: DEEP_ZOOM,
+  chapter_chrome: CHAPTER_CHROME,
+  intake: INTAKE,
+  enrichment: ENRICHMENT,
+  scanner: SCANNER,
+  verification: VERIFICATION,
+  dev_tweaks: DEV_TWEAKS,
+  invite_landing: INVITE_LANDING,
+  gallery_outcome: GALLERY_OUTCOME,
+  room: ROOM,
+  smoke: SMOKE,
   aria: ARIA,
 }) satisfies PangVoiceStringsShape;
 
@@ -198,12 +335,23 @@ type PangVoiceStringsShape = Readonly<{
   invite: Namespace;
   ask_gallery: Namespace;
   outcome: Namespace;
+  outcome_chapter: Namespace;
   push: Namespace;
   dispatch: Namespace;
   arrival: Namespace;
   artifacts: Namespace;
   documents: Namespace;
   deep_zoom: Namespace;
+  chapter_chrome: Namespace;
+  intake: Namespace;
+  enrichment: Namespace;
+  scanner: Namespace;
+  verification: Namespace;
+  dev_tweaks: Namespace;
+  invite_landing: Namespace;
+  gallery_outcome: Namespace;
+  room: Namespace;
+  smoke: Namespace;
   aria: Namespace;
 }>;
 

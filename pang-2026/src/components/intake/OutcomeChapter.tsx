@@ -72,11 +72,14 @@ import {
   diffActiveBeats,
   findBeatByKind,
   isReady,
-  DISMISS_AFFORDANCE,
   type ActiveBeat,
   type Beat,
   type OutcomeChapterPlan,
 } from "@/ai/chapter";
+import {
+  DISMISS_AFFORDANCE,
+  OUTCOME_SURFACE_LABEL,
+} from "@/ai/chapter/voice";
 import type { TheRoomClientHandle } from "@/room/dom/TheRoomClient";
 import { useVerification } from "@/stores/verification";
 
@@ -95,13 +98,6 @@ export interface OutcomeChapterProps {
    */
   readonly forceReducedMotion?: boolean;
 }
-
-/**
- * Surface-level a11y label for the outcome chapter. Sentence case, no
- * marketing. Matches the arrival surface's `aria-label` pattern so
- * screen-reader landmarks read consistently across chapters.
- */
-const OUTCOME_SURFACE_LABEL = "outcome";
 
 export function OutcomeChapter(props: OutcomeChapterProps): ReactElement {
   const { plan, roomRef, onDone } = props;

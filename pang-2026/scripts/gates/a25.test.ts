@@ -93,15 +93,18 @@ test("A25 — local (non-corpus) identifier fails", () => {
 });
 
 // The production-surface smoke is the authoritative outcome check for
-// iter #12's audit sweeps (steps 8–10 of the build order): it turns
-// green once every inline literal under `src/components/**` and
-// `app/**` has migrated to a corpus module.
+// iter #13's audit sweeps: it asserts every JsxText and user-facing
+// JSX attribute under `src/components/**` and `app/**` resolves to a
+// corpus module. Iter #13 closed every known inline literal; this
+// smoke test now runs unconditionally in `npm run test` so a new
+// literal anywhere in the agent-adjacent surface fails CI at the
+// commit that introduces it, not at the next audit sweep.
 //
-// Until those sweeps land, the smoke test runs only when invoked
-// explicitly — set `A25_FULL_SMOKE=1` to exercise it locally. The
-// fixture tests above cover the gate mechanics unconditionally; the
-// smoke is a second-layer check the audit commits flip green.
-test("A25 — production surface passes (smoke test, audit-sweep gate)", { skip: process.env["A25_FULL_SMOKE"] !== "1" }, () => {
+// Opt-out: an emergency escape hatch (`A25_FULL_SMOKE_SKIP=1`) exists
+// for local bisects where the surface is intentionally dirty. CI must
+// never set it — the gate's whole value is that it fires loudly the
+// moment a regression lands.
+test("A25 — production surface passes (smoke test, audit-sweep gate)", { skip: process.env["A25_FULL_SMOKE_SKIP"] === "1" }, () => {
   const result = scanForCorpusDiscipline({
     repoRoot: REPO,
     roots: ["src/components", "app"],

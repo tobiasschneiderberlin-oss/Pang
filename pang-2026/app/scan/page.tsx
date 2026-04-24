@@ -32,6 +32,7 @@ import {
 } from "@/ai/prompts/failure";
 import { reportFailure } from "@/lib/telemetry/beacon";
 import { useSurfaceClaim } from "@/stores/use-surface-claim";
+import { SCAN_STAGE } from "@/ai/intake/voice";
 
 type Stage =
   | { kind: "viewfinder" }
@@ -244,12 +245,12 @@ export default function ScanPage(): ReactElement {
       return (
         <div
           className="relative grid min-h-dvh place-items-center bg-ink text-paper"
-          aria-label="reading"
+          aria-label={SCAN_STAGE.reading_label}
         >
           {/* No spinner. The ink *reads* the image. The line is
               rendered in AI-ink to signal an AI-authored moment. */}
           <p className="text-sm uppercase tracking-wide text-ink-ai">
-            reading
+            {SCAN_STAGE.reading_text}
           </p>
         </div>
       );
@@ -273,7 +274,7 @@ export default function ScanPage(): ReactElement {
       return (
         <div
           className="grid min-h-dvh place-items-center gap-4 bg-paper p-8 text-center"
-          aria-label="failed"
+          aria-label={SCAN_STAGE.failed_label}
         >
           <p className="text-ink-ai">{failureLine(stage.failureKey)}</p>
           <button
@@ -281,7 +282,7 @@ export default function ScanPage(): ReactElement {
             onClick={onReshoot}
             className="border border-ink px-6 py-3 text-ink"
           >
-            reshoot
+            {SCAN_STAGE.failed_reshoot}
           </button>
         </div>
       );

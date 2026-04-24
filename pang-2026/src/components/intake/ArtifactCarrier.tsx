@@ -30,6 +30,7 @@
 
 import type { ReactElement } from "react";
 import type { ChapterArtifact } from "@/ai/chapter";
+import { BULLET_SEPARATOR } from "@/ai/chapter/voice";
 
 export interface ArtifactCarrierProps {
   readonly artifact: ChapterArtifact;
@@ -78,7 +79,7 @@ export function ArtifactCarrier(props: ArtifactCarrierProps): ReactElement {
           <li key={key} className="flex gap-2">
             <span className="text-ink-ai">{key}</span>
             <span aria-hidden="true" className="text-ink-ai">
-              ·
+              {BULLET_SEPARATOR}
             </span>
             <span>{value}</span>
           </li>

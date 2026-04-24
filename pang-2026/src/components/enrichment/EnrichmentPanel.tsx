@@ -62,6 +62,8 @@ import type {
   TimelineEntry,
 } from "@/enrichment/schema";
 import { enrichmentPanelRenderEvent } from "@/documents/otel";
+import { ENRICHMENT_PANEL_LABEL } from "@/ai/enrichment/voice";
+import { BULLET_SEPARATOR } from "@/ai/chapter/voice";
 
 export function EnrichmentPanel(): ReactElement | null {
   const focusedId = useWorks((s) => s.focusedId);
@@ -154,7 +156,7 @@ function Panel(props: {
     <aside
       className="pointer-events-auto absolute bottom-8 right-8 flex max-w-sm flex-col gap-4 bg-paper p-4"
       style={{ borderRadius: 0 }}
-      aria-label="provenance and context"
+      aria-label={ENRICHMENT_PANEL_LABEL}
       data-pang-work-id={props.workId}
     >
       {timeline.length > 0 && (
@@ -192,7 +194,7 @@ function TimelineRow(props: { readonly entry: TimelineEntry }): ReactElement {
         </span>
         <span>{entry.location}</span>
         <span aria-hidden="true" className="text-ink-muted">
-          ·
+          {BULLET_SEPARATOR}
         </span>
         <span className="text-ink-muted">
           {contextLabel(entry.context)}

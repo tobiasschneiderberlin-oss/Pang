@@ -52,7 +52,7 @@ import {
 } from "react";
 import OpenSeadragon from "openseadragon";
 import { useWorks } from "@/stores/works";
-import { DEEP_ZOOM_LABEL } from "@/ai/chapter";
+import { DEEP_ZOOM_LABEL, DEEP_ZOOM_CLOSE } from "@/ai/chapter/voice";
 import {
   deepZoomOpenEvent,
   deepZoomCloseEvent,
@@ -353,10 +353,10 @@ export function DeepZoom(props: DeepZoomProps): ReactElement {
         type="button"
         onClick={() => close.current("pointer")}
         className="absolute right-4 top-4 px-3 py-2 text-xs uppercase tracking-wide text-ink-ai"
-        aria-label="close deep zoom"
+        aria-label={DEEP_ZOOM_CLOSE.label}
         data-pang-source="voice-corpus"
       >
-        close
+        {DEEP_ZOOM_CLOSE.action}
       </button>
     </div>
   );

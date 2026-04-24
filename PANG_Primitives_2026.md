@@ -1676,13 +1676,22 @@ chunks
   convention and the accepted module-suffix list. The pair A24+A25
   closes the voice loop at both ends: A24 at the LLM call, A25 at
   the JSX render.
-- **Enforcement:** mechanical, audit-driven rollout. The gate runs
-  on every CI; the audit sweeps (iter #12 steps 8-10) migrate the
-  existing inline strings to domain corpora one surface at a time.
-  A new component that lands with an inline string fails the gate;
-  a migration that moves a string from component to corpus passes
-  both A5 (banned vocabulary) and A25 (corpus discipline) by
-  construction. Codified 2026-04-24 from iter #12.
+- **Enforcement:** mechanical, default-pipeline. The gate runs
+  unconditionally in `npm run test` across `src/components/**` and
+  `app/**` — iter #13 closed the 58 known inline literals and
+  removed the `A25_FULL_SMOKE=1` escape hatch from the default
+  path. A narrow opt-out (`A25_FULL_SMOKE_SKIP=1`) survives for
+  local bisects; CI never sets it. A new component that lands with
+  an inline string fails the gate at the introducing commit, not at
+  the next audit sweep. A migration that moves a string from
+  component to corpus passes both A5 (banned vocabulary) and A25
+  (corpus discipline) by construction. **Enforcement addendum
+  (iter #13):** audit-sweep rollout proved to be a one-time cost —
+  58 violations → 0 in four move-only commits, byte-neutral on the
+  main chunk, zero test breakage. The cadence moves from "quarterly
+  audit iteration" to "within one commit". Codified 2026-04-24 from
+  iter #12; default-pipeline enforcement codified 2026-04-24 from
+  iter #13.
 
 ### 65. Seed-as-artifact — the voice prompt is regenerated, never hand-edited
 

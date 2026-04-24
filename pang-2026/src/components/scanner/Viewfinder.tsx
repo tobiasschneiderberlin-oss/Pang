@@ -49,6 +49,11 @@ import {
   type FailureKey,
 } from "@/ai/prompts/failure";
 import { reportFailure } from "@/lib/telemetry/beacon";
+import {
+  CAPTURE_LABEL,
+  TORCH_TOGGLE,
+  VIEWFINDER_LABEL,
+} from "@/ai/scanner/voice";
 
 export interface ViewfinderProps {
   onCapture: (bytes: Uint8Array, sha256: string) => void;
@@ -297,7 +302,7 @@ export function Viewfinder(props: ViewfinderProps): React.ReactElement {
         ref={canvasRef}
         className="absolute inset-0 h-full w-full touch-none"
         onPointerDown={onTap}
-        aria-label="viewfinder"
+        aria-label={VIEWFINDER_LABEL}
       />
 
       {/* Torch — top-right, out of the thumb zone. 44×44 minimum
@@ -309,9 +314,9 @@ export function Viewfinder(props: ViewfinderProps): React.ReactElement {
           onClick={onTorchToggle}
           className="absolute right-4 top-[max(env(safe-area-inset-top),1rem)] grid h-11 min-w-11 place-items-center border border-paper/60 bg-ink/40 px-3 text-xs uppercase tracking-wide text-paper"
           aria-pressed={torchOn}
-          aria-label={torchOn ? "torch off" : "torch on"}
+          aria-label={torchOn ? TORCH_TOGGLE.off : TORCH_TOGGLE.on}
         >
-          {torchOn ? "torch off" : "torch on"}
+          {torchOn ? TORCH_TOGGLE.off : TORCH_TOGGLE.on}
         </button>
       )}
 
@@ -325,7 +330,7 @@ export function Viewfinder(props: ViewfinderProps): React.ReactElement {
         type="button"
         onClick={onManualCapture}
         className="absolute bottom-[max(env(safe-area-inset-bottom),1.5rem)] left-1/2 grid h-16 w-16 -translate-x-1/2 place-items-center border-2 border-paper bg-transparent active:bg-paper/20"
-        aria-label="capture"
+        aria-label={CAPTURE_LABEL}
       >
         <span className="block h-12 w-12 bg-paper transition-[background-color] active:bg-[var(--warm-deep)]" />
       </button>

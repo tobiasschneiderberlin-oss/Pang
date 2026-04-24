@@ -24,6 +24,7 @@
 
 import { useCallback, useState, type ReactElement } from "react";
 import { useSurfaceClaim } from "@/stores/use-surface-claim";
+import { GALLERY_OUTCOME_PROSE } from "@/ai/gallery/voice";
 
 type Phase =
   | "ready"
@@ -103,25 +104,13 @@ function Body({
   onSubmit: () => void;
 }): ReactElement {
   if (phase === "malformed") {
-    return (
-      <p>This link is not valid. It may have been mis-typed or cut short.</p>
-    );
+    return <p>{GALLERY_OUTCOME_PROSE.malformed}</p>;
   }
   if (phase === "expired") {
-    return (
-      <p>
-        This link has expired. The collector will need to send a fresh
-        request.
-      </p>
-    );
+    return <p>{GALLERY_OUTCOME_PROSE.expired}</p>;
   }
   if (phase === "invalid") {
-    return (
-      <p>
-        This link did not verify. It may be for the other answer, or it
-        may have been tampered with.
-      </p>
-    );
+    return <p>{GALLERY_OUTCOME_PROSE.invalid}</p>;
   }
   if (phase === "done") {
     return (
@@ -135,13 +124,14 @@ function Body({
   if (phase === "already") {
     return (
       <p>
-        This was already {action === "confirm" ? "confirmed" : "declined"}.
-        Nothing more to do.
+        {GALLERY_OUTCOME_PROSE.already_prefix}{" "}
+        {action === "confirm" ? "confirmed" : "declined"}
+        {GALLERY_OUTCOME_PROSE.already_suffix}
       </p>
     );
   }
   if (phase === "posting") {
-    return <p>One moment.</p>;
+    return <p>{GALLERY_OUTCOME_PROSE.posting}</p>;
   }
   // Ready.
   return (

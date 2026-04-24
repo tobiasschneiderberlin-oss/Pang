@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useState, type ReactElement } from "react";
 import { useRouter } from "next/navigation";
 import { usePasskey } from "@/hooks/usePasskey";
+import { INVITE_LANDING_LABEL } from "@/ai/invite/voice";
 
 type Phase =
   | "checking"
@@ -138,7 +139,7 @@ export function InviteLandingClient({
 
   return (
     <main
-      aria-label="invite"
+      aria-label={INVITE_LANDING_LABEL}
       style={{
         minHeight: "100svh",
         display: "grid",

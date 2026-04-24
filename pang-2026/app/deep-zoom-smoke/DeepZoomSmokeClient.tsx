@@ -27,6 +27,7 @@ import {
   type DeepZoomSource,
 } from "@/components/deep-zoom/DeepZoom";
 import { useWorks } from "@/stores/works";
+import { DEEP_ZOOM_SMOKE } from "@/ai/smoke/voice";
 
 const SAMPLE_WORK_ID = "smoke-sample";
 const SAMPLE_FILE_REF = "vendor/deepzoom/sample.png";
@@ -44,7 +45,7 @@ export function DeepZoomSmokeClient(): ReactElement {
     <div className="relative h-full w-full">
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6">
         <p className="text-xs uppercase tracking-wide text-ink-ai">
-          deep-zoom smoke
+          {DEEP_ZOOM_SMOKE.header}
         </p>
         <div className="flex gap-3">
           <button
@@ -56,7 +57,7 @@ export function DeepZoomSmokeClient(): ReactElement {
             }}
             className="px-3 py-2 text-xs uppercase tracking-wide text-ink-ai"
           >
-            open
+            {DEEP_ZOOM_SMOKE.open}
           </button>
           <button
             type="button"
@@ -64,14 +65,14 @@ export function DeepZoomSmokeClient(): ReactElement {
             onClick={() => useWorks.getState().setActiveDeepZoom(null)}
             className="px-3 py-2 text-xs uppercase tracking-wide text-ink-ai"
           >
-            close
+            {DEEP_ZOOM_SMOKE.close}
           </button>
         </div>
         <p
           className="text-xs text-ink-ai"
           data-testid="deep-zoom-cycles"
         >
-          cycles: {cycles}
+          {DEEP_ZOOM_SMOKE.cycles_label} {cycles}
         </p>
       </div>
       <DeepZoomConnector resolve={resolve} />

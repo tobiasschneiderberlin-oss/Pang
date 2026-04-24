@@ -14,6 +14,7 @@
  */
 
 import type { ReactElement } from "react";
+import { DIFF_LABELS } from "@/ai/intake/voice";
 
 export interface DiffProps {
   readonly previous: string | null;
@@ -33,11 +34,11 @@ export function Diff(props: DiffProps): ReactElement {
       )}
       <span className="flex flex-wrap items-baseline gap-2 text-ink">
         {!same && previous !== null && (
-          <span className="line-through text-ink-ai" aria-label="previous value">
+          <span className="line-through text-ink-ai" aria-label={DIFF_LABELS.previous}>
             {previous}
           </span>
         )}
-        <span aria-label="current value">{next ?? ""}</span>
+        <span aria-label={DIFF_LABELS.current}>{next ?? ""}</span>
       </span>
     </div>
   );
