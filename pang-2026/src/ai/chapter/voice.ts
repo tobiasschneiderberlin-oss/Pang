@@ -173,6 +173,13 @@ export const DOCUMENTS_VIEWER = Object.freeze({
 export const DOCUMENTS_LABEL = "documents";
 
 /**
+ * Screen-reader label for the document viewer dialog (iteration #6).
+ * Sentence case, singular — the viewer is one-document-at-a-time; the
+ * chapter above it is the plural landmark.
+ */
+export const DOCUMENT_VIEWER_LABEL = "document";
+
+/**
  * Screen-reader label for the deep-zoom overlay (iteration #7).
  * The surface is a magnifier for the work itself — paint, canvas
  * weave, restoration marks — not a separate artefact. One word,
@@ -181,10 +188,45 @@ export const DOCUMENTS_LABEL = "documents";
 export const DEEP_ZOOM_LABEL = "deep zoom";
 
 /**
+ * Close-affordance labels for the deep-zoom overlay. `label` is the
+ * `aria-label` on the close button; `action` is the visible text.
+ * Both sentence case; both museumsschild register.
+ */
+export const DEEP_ZOOM_CLOSE = Object.freeze({
+  label: "close deep zoom",
+  action: "close",
+}) satisfies Readonly<Record<"label" | "action", string>>;
+
+/**
  * The screen-reader label for the arrival surface. Landmarks that
  * name the place, not the action. `aria-label` on the `<main>`.
  */
 export const SURFACE_LABEL = "arrival";
+
+/**
+ * The screen-reader label for the outcome chapter surface
+ * (iteration #11). Matches the arrival surface's landmark pattern so
+ * screen readers read chapters consistently.
+ */
+export const OUTCOME_SURFACE_LABEL = "outcome";
+
+/**
+ * Empty-string alt for the captured-still overlay image in the
+ * arrival chapter. The image is decorative — the still is the same
+ * pixels the viewfinder just sent; an alt repeating the work's title
+ * would double-announce. Empty alt is the museum-card-backside
+ * equivalent: present, silent, not hiding anything.
+ */
+export const ARRIVAL_IMAGE_ALT = "";
+
+/**
+ * Typographic middot separator used in the chapter family's DOM —
+ * between fields on artifact cards, between role and context in
+ * provenance timelines, etc. Decorative; always paired with
+ * `aria-hidden="true"` at the call site. A25 catches any inline glyph
+ * regardless of accessibility wrapping, so the separator lives here.
+ */
+export const BULLET_SEPARATOR = "·";
 
 /**
  * Narrate a chapter transition for the ARIA live region. The live

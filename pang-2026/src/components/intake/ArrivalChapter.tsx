@@ -71,13 +71,16 @@ import {
   isReady,
   overlayOpacity,
   planChapter,
+  type ActiveBeat,
+} from "@/ai/chapter";
+import {
   NULL_REFLECTION,
   CONTEXT_LABEL,
   ATTRIBUTION_LABEL,
   DISMISS_AFFORDANCE,
   SURFACE_LABEL,
-  type ActiveBeat,
-} from "@/ai/chapter";
+  ARRIVAL_IMAGE_ALT,
+} from "@/ai/chapter/voice";
 import { ArtifactCarrier } from "./ArtifactCarrier";
 
 export interface ArrivalChapterProps {
@@ -283,7 +286,7 @@ export function ArrivalChapter(props: ArrivalChapterProps): ReactElement {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={props.imageBlobUrl}
-          alt=""
+          alt={ARRIVAL_IMAGE_ALT}
           className="max-h-[70vh] max-w-[90vw] object-contain"
           style={{ viewTransitionName: "add-to-wall" }}
         />

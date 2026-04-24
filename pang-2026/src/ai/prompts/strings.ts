@@ -35,17 +35,22 @@
 
 import {
   ARIA_ANNOUNCE,
+  ARRIVAL_IMAGE_ALT,
   ARTIFACT_LABELS,
   ASK_GALLERY,
   ATTRIBUTION_LABEL,
+  BULLET_SEPARATOR,
   CONTEXT_LABEL,
+  DEEP_ZOOM_CLOSE,
   DEEP_ZOOM_LABEL,
   DISMISS_AFFORDANCE,
   DOCUMENTS_CONTEXT_LINE,
   DOCUMENTS_LABEL,
+  DOCUMENT_VIEWER_LABEL,
   DOCUMENTS_VIEWER,
   NULL_REFLECTION,
   OUTCOME_NARRATION,
+  OUTCOME_SURFACE_LABEL,
   SURFACE_LABEL,
 } from "@/ai/chapter/voice";
 
@@ -128,7 +133,14 @@ export const ARRIVAL = Object.freeze({
   dismiss: DISMISS_AFFORDANCE,
   /** Surface-level screen-reader label. */
   surface_label: SURFACE_LABEL,
+  /** Empty-alt for the captured-still overlay. Decorative image. */
+  image_alt: ARRIVAL_IMAGE_ALT,
 }) satisfies Readonly<Record<string, string>>;
+
+export const OUTCOME_CHAPTER = Object.freeze({
+  /** Surface-level screen-reader label for the outcome chapter. */
+  surface_label: OUTCOME_SURFACE_LABEL,
+}) satisfies Readonly<Record<"surface_label", string>>;
 
 export const ARTIFACTS = Object.freeze({
   coa: ARTIFACT_LABELS.coa,
@@ -141,6 +153,8 @@ export const DOCUMENTS = Object.freeze({
   context_line: DOCUMENTS_CONTEXT_LINE,
   /** Landmark label on the documents chapter. */
   label: DOCUMENTS_LABEL,
+  /** Dialog label for the document-viewer overlay. */
+  viewer_label: DOCUMENT_VIEWER_LABEL,
   /** Muji fallback when an opened document's OPFS bytes are gone. */
   missing_bytes: DOCUMENTS_VIEWER.missingBytes,
   /** Muji footer when a multi-page document is truncated. */
@@ -148,13 +162,23 @@ export const DOCUMENTS = Object.freeze({
 }) satisfies Readonly<{
   context_line: string;
   label: string;
+  viewer_label: string;
   missing_bytes: string;
   more_pages: (count: number) => string;
 }>;
 
 export const DEEP_ZOOM = Object.freeze({
   label: DEEP_ZOOM_LABEL,
-}) satisfies Readonly<Record<"label", string>>;
+  /** Close button's `aria-label`. */
+  close_label: DEEP_ZOOM_CLOSE.label,
+  /** Close button's visible text. */
+  close_action: DEEP_ZOOM_CLOSE.action,
+}) satisfies Readonly<Record<string, string>>;
+
+export const CHAPTER_CHROME = Object.freeze({
+  /** Typographic middot used between fields; always aria-hidden. */
+  bullet: BULLET_SEPARATOR,
+}) satisfies Readonly<Record<"bullet", string>>;
 
 export const ARIA = ARIA_ANNOUNCE;
 
@@ -169,12 +193,14 @@ export const PANG_VOICE_STRINGS = Object.freeze({
   invite: INVITE,
   ask_gallery: ASK_GALLERY_NS,
   outcome: OUTCOME,
+  outcome_chapter: OUTCOME_CHAPTER,
   push: PUSH,
   dispatch: DISPATCH,
   arrival: ARRIVAL,
   artifacts: ARTIFACTS,
   documents: DOCUMENTS,
   deep_zoom: DEEP_ZOOM,
+  chapter_chrome: CHAPTER_CHROME,
   aria: ARIA,
 }) satisfies PangVoiceStringsShape;
 
@@ -198,12 +224,14 @@ type PangVoiceStringsShape = Readonly<{
   invite: Namespace;
   ask_gallery: Namespace;
   outcome: Namespace;
+  outcome_chapter: Namespace;
   push: Namespace;
   dispatch: Namespace;
   arrival: Namespace;
   artifacts: Namespace;
   documents: Namespace;
   deep_zoom: Namespace;
+  chapter_chrome: Namespace;
   aria: Namespace;
 }>;
 

@@ -52,11 +52,14 @@ import {
   isReady,
   persistentArtifactSlots,
   planDocumentsChapter,
-  DOCUMENTS_LABEL,
   type ActiveBeat,
   type DocumentsChapterPlan,
 } from "@/ai/chapter";
 import type { ChapterArtifact } from "@/ai/chapter";
+import {
+  BULLET_SEPARATOR,
+  DOCUMENTS_LABEL,
+} from "@/ai/chapter/voice";
 import { useWorks, type DocumentRecord } from "@/stores/works";
 import {
   documentsChapterAbortEvent,
@@ -367,7 +370,7 @@ function CardInner(props: { readonly artifact: ChapterArtifact }): ReactNode {
           <li key={key} className="flex gap-2">
             <span className="text-ink-ai">{key}</span>
             <span aria-hidden="true" className="text-ink-ai">
-              ·
+              {BULLET_SEPARATOR}
             </span>
             <span>{value}</span>
           </li>
