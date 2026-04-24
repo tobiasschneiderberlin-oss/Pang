@@ -39,6 +39,34 @@ async function waitForPangWindow(page: Page): Promise<void> {
   );
 }
 
+/**
+ * Await AppBoot's OPFS hydration + persistence-subscription install.
+ *
+ * `waitForPangWindow` returns as soon as `__PANG` is bound, which
+ * AppBoot does synchronously before kicking off the async OPFS
+ * bootstrap. A toggle click that lands between those two moments
+ * gets clobbered when `hydrate(DEFAULT_PREFERENCES)` arrives a few
+ * ms later, so the debounced write never fires with the user's
+ * choice. `__PANG.hydrationReady` is the seam AppBoot exposes
+ * behind `NEXT_PUBLIC_PANG_E2E=1` — a Promise that resolves once
+ * hydration has absorbed and the subscription is live. Awaiting it
+ * here is the honest fix.
+ */
+async function waitForHydration(page: Page): Promise<void> {
+  await page.waitForFunction(() => {
+    const w = window as unknown as {
+      __PANG?: { hydrationReady: Promise<void> | null };
+    };
+    return w.__PANG?.hydrationReady !== undefined;
+  });
+  await page.evaluate(async () => {
+    const w = window as unknown as {
+      __PANG: { hydrationReady: Promise<void> | null };
+    };
+    if (w.__PANG.hydrationReady) await w.__PANG.hydrationReady;
+  });
+}
+
 async function installVibrateSpy(page: Page): Promise<void> {
   // Installed via an init script so it lands before any React mount;
   // vibrate() records the most recent pattern onto window.__vibrate.
@@ -71,6 +99,7 @@ test.describe("settings-overlay-defaults — cold install stays silent", () => {
     const main = page.getByRole("main");
     await expect(main).toBeVisible();
     await waitForPangWindow(page);
+    await waitForHydration(page);
 
     const trigger = page.locator('[data-testid="pang-settings-trigger"]');
     await expect(trigger).toBeVisible();
@@ -99,6 +128,7 @@ test.describe("settings-overlay-open-close — trigger toggles the panel", () =>
     await authSeed(page);
     await page.goto("/");
     await waitForPangWindow(page);
+    await waitForHydration(page);
 
     const trigger = page.locator('[data-testid="pang-settings-trigger"]');
     const panel = page.locator('[data-testid="pang-settings-panel"]');
@@ -125,6 +155,7 @@ test.describe("settings-overlay-audio-toggle — flipping writes preferences", (
     await authSeed(page);
     await page.goto("/");
     await waitForPangWindow(page);
+    await waitForHydration(page);
 
     const trigger = page.locator('[data-testid="pang-settings-trigger"]');
     await trigger.click();
@@ -161,6 +192,7 @@ test.describe("settings-overlay-haptics-toggle — routed through dispatcher", (
     await authSeed(page);
     await page.goto("/");
     await waitForPangWindow(page);
+    await waitForHydration(page);
 
     const trigger = page.locator('[data-testid="pang-settings-trigger"]');
     await trigger.click();
@@ -202,6 +234,7 @@ test.describe("settings-overlay-escape — closes and returns focus", () => {
     await authSeed(page);
     await page.goto("/");
     await waitForPangWindow(page);
+    await waitForHydration(page);
 
     const trigger = page.locator('[data-testid="pang-settings-trigger"]');
     const panel = page.locator('[data-testid="pang-settings-panel"]');
@@ -237,6 +270,7 @@ test.describe("settings-overlay-persistence — audioSpatial rehydrates", () => 
     await authSeed(page);
     await page.goto("/");
     await waitForPangWindow(page);
+    await waitForHydration(page);
 
     // Flip audio on.
     const trigger = page.locator('[data-testid="pang-settings-trigger"]');
@@ -253,6 +287,7 @@ test.describe("settings-overlay-persistence — audioSpatial rehydrates", () => 
     // Reload.
     await page.reload();
     await waitForPangWindow(page);
+    await waitForHydration(page);
 
     // Preference rehydrates. OPFS hydration lands after AppBoot binds
     // `__PANG` to the window, so `waitForPangWindow` returns before

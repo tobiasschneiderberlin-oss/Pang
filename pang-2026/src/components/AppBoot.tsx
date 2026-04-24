@@ -64,6 +64,27 @@ export function AppBoot(): null {
     // full-stack intake in CI). Exposure is the minimal API — the
     // store instance itself, no setters — because Zustand stores
     // carry their own `.getState()` / `.setState()` already.
+    // Iter #15: expose a hydration-ready promise the E2E spec awaits
+    // before interacting. Declared here so the closure over
+    // `resolveHydrationReady` lives through the async chain below.
+    // The Deferred pattern avoids TypeScript narrowing the setter
+    // through flow analysis of the Promise constructor.
+    interface Deferred {
+      promise: Promise<void>;
+      resolve: () => void;
+    }
+    function makeDeferred(): Deferred {
+      let res: () => void = () => {};
+      const promise = new Promise<void>((r) => {
+        res = r;
+      });
+      return { promise, resolve: res };
+    }
+    const hydrationDeferred =
+      process.env["NEXT_PUBLIC_PANG_E2E"] === "1" ? makeDeferred() : null;
+    const hydrationReady: Promise<void> | null =
+      hydrationDeferred?.promise ?? null;
+
     if (process.env["NEXT_PUBLIC_PANG_E2E"] === "1") {
       const token = process.env["NEXT_PUBLIC_PANG_E2E_TOKEN"] ?? "";
       type E2ESeed =
@@ -92,6 +113,7 @@ export function AppBoot(): null {
             useNarrative: typeof useNarrative;
             usePreferences: typeof usePreferences;
             authSeed: typeof authSeed;
+            hydrationReady: Promise<void> | null;
           };
         }
       ).__PANG = {
@@ -100,6 +122,7 @@ export function AppBoot(): null {
         useNarrative,
         usePreferences,
         authSeed,
+        hydrationReady,
       };
     }
 
@@ -134,6 +157,12 @@ export function AppBoot(): null {
         if (cancelled) return;
         usePreferences.getState().hydrate(persistedPrefs);
         unsubscribePreferences = installPreferencesPersistence();
+        // Hydration-ready signal for the E2E spec. Resolves after
+        // the OPFS snapshot has been absorbed AND the persistence
+        // subscription is live — so a test click after this fires
+        // a durable write to OPFS, not a value clobbered by a late
+        // hydrate().
+        hydrationDeferred?.resolve();
         // Works + verification hydrate in parallel — the two stores
         // are independent slices of OPFS.
         const [hydratedWorks, hydratedVerification] = await Promise.all([
