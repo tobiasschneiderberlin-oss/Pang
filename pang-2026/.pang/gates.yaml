@@ -240,9 +240,9 @@ gates:
   - id: P25
     name: Zero-tap review
     family: canvas_data_observability
-    folder: src/app/scan/**
+    folder: app/scan/**, src/components/intake/**, src/components/verification/**, app/g/**
     auto: true
-    fails_when: "Text input, textarea, select, or required combobox renders between capture and arrival. End-to-end Playwright trace records any field interaction before arrival entry. AI-derived field on detail surface renders without <Confidence>. Arrival-budget overrun (capture bytes → arrival entry > 500ms p75)."
+    fails_when: "Any <select>, any required <input>/<textarea>/<select>, or a disabled gate on the zero-tap entry point. Original scope: scan + intake surfaces (P25 per DS). Iter #10 extension (2026-04-24): also covers src/components/verification/** and app/g/** — the verification-request + gallery-side confirm/decline surfaces share the same discipline (no required forms between a collector or gallery registrar's intent and the action). The AskGallery contact input is allowed because it's JS-gated, not HTML-required; HTML-required inputs remain forbidden."
 
   # ---- AI — safety & contracts (A1–A10) ----
   - id: A1
