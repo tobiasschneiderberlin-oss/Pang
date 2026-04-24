@@ -301,18 +301,40 @@ encounters them.**
    chooses); one tap to send. Gallery's side is a two-tap confirm
    surface. Correspondence Agent owns the prose.
 
-9. **PANG Voice v1.** Tone reference (already in `PANG_Voice.md`) +
+9. **PANG Voice v1.** *Landed 2026-04-24, iter #12 + audit sweep
+   iter #13.* Tone reference (already in `PANG_Voice.md`) +
    `PANG_VOICE_SYSTEM_PROMPT` wired into every Claude call + audit
    of every hand-authored string. The voice layer every other moment
-   consumes.
+   consumes. A24 (seed on every privileged P-LLM call) + A25 (every
+   user-facing string resolves through `PANG_VOICE_STRINGS` under
+   the default-pipeline smoke) land as mechanical gates. Iter #13's
+   audit sweep closed 58 → 0 A25 violations; the commit log is the
+   audit log.
 
-10. **Narrative Agent — monthly reading v1.** One paragraph,
-    observational, never evaluative. Delivered in the Room as a quiet
-    overlay.
+10. **Narrative Agent — monthly reading v1.** *Landed 2026-04-24,
+    iter #14.* One paragraph, observational, never evaluative.
+    Monthly cadence enforced by a filesystem-backed idempotency
+    marker (`primitive 68`); unchanged-collection branch short-
+    circuits the P-LLM round-trip via a SHA-256 shape-hash gate
+    (`primitive 70`). Delivered in the Room as a quiet overlay with
+    passive-surface semantics (`primitive 69`) — visible because
+    the collector arrived and hasn't dismissed this month, not
+    because a "show" event fired. Closes the four-agent
+    architecture (Intake, Enrichment, Correspondence, Narrative).
 
-11. **Spatial audio + haptics (opt-in).** The Room acquires an
-    acoustic body; arrival acquires a physical one. Silence is the
-    default; sound happens only when Laura turns it on.
+11. **Spatial audio + haptics (opt-in).** *Landed 2026-04-24, iter
+    #15.* The Room acquires an acoustic body; arrival acquires a
+    physical one. Silence is the default; sound happens only when
+    Laura turns it on. Web Audio graph (brown noise → 400 Hz low-
+    pass → HRTF `PannerNode` → master `GainNode`) tracks focused-
+    work position; a guarded `AudioContext` factory
+    (`primitive 71`) is the only door. `navigator.vibrate` flows
+    through a four-kind dispatcher (`primitive 72`) at four call
+    sites: scanner rectangle-lock, capture shutter, Room focus,
+    ArrivalChapter settle. Both opt-ins default `"off"`
+    (`primitive 73`) and persist through OPFS. Shipping chrome
+    affordance: `SettingsOverlay` via Popover API + CSS Anchor
+    Positioning.
 
 12. **Verify-for-club (conditional).** Only if post-Laura signal
     supports it. Otherwise dropped.

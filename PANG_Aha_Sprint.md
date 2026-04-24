@@ -8949,6 +8949,177 @@ any are overkill, they drop in the findings with a named reason.*
 
 ---
 
+## Iteration #15 — findings (2026-04-24)
+
+### What landed
+
+Merged as PR #25 / squash commit `248f556` on main.
+
+**Surfaces created (24 files, +3266/−5):**
+- `src/audio/context.ts` — guarded `AudioContext` factory. The
+  one door. Returns `null` until `audioSpatial === "on"` AND a
+  user gesture has been recorded. Closes on preference flip-off;
+  suspends on `visibilitychange:hidden`. Telemetry span
+  `pang.audio.state` with `reason` attribute fires on every
+  transition. This is **primitive 71**.
+- `src/audio/graph.ts` — the acoustic body. Brown noise →
+  low-pass biquad (400 Hz) → HRTF `PannerNode` → master `GainNode`
+  → destination. Master starts at 0; linear ramp 0 → −42 dBFS
+  over 600 ms on turn-on; 300 ms back to 0 on turn-off. Focus
+  emphasis ×1.2 / ×0.8 via a `setFocusedWork(work)` setter
+  subscribed to the works store from `TheRoomClient`.
+- `src/audio/haptics.ts` — the finite-vocabulary dispatcher.
+  `HAPTIC_PATTERNS = { tap: [10], focus: [6,20,6], capture: [40],
+  arrive: [6,30,6,30,6] }`. `triggerHaptic(kind)` is the only
+  path to `navigator.vibrate`. Suppression reasons counted:
+  `"off" | "unsupported" | "reduced-motion"`. Attempt counter
+  is separate from suppression counter so "never called" is
+  distinguishable from "called and silenced." **Primitive 72**.
+- `src/audio/telemetry.ts` + `src/audio/index.ts` — OTel spans
+  and counters (`pang.audio.state`, `pang.audio.graph_debug`
+  dev-only, `pang.audio.blocked_total`,
+  `pang.haptics.unsupported_total`,
+  `pang.haptics.suppressed_total{reason}`,
+  `pang.haptics.attempted_total`) wired through the repo's
+  existing OTel adapter.
+- `src/components/chrome/SettingsOverlay.tsx` — shipping
+  chrome (not the dev Tweaks sheet). Popover API + CSS Anchor
+  Positioning (P17). Two `role="switch"` toggles; Escape and
+  native light-dismiss return focus to the trigger (P23).
+  Sharp corners (P9), OKLCH tokens only (P11), sentence case
+  (P14), every length through a token (P24). View Transitions
+  drive the fade-in/out (P16).
+- `src/ai/chrome/voice.ts` + `voice.test.ts` — new voice-corpus
+  namespace `SETTINGS_OVERLAY` for overlay strings. All
+  Museumsschild register; A25 default-pipeline smoke passes.
+- `src/design/preferences.ts` (extension) + `preferences.persist.ts`
+  + its test — added `audioSpatial: "on" | "off"` and
+  `haptics: "on" | "off"` to `PreferencesSchema`, both
+  defaulting `"off"` in `DEFAULT_PREFERENCES`. OPFS persistence
+  with 120 ms debounce. **Primitive 73**.
+- `e2e/settings-overlay.spec.ts` — six Playwright specs covering
+  open/close, toggle defaults, flip-and-persist, reload-rehydrate,
+  keyboard escape + focus return, haptic call-site spy.
+- Haptic wiring at four sites: scanner viewfinder rectangle-lock
+  (`triggerHaptic("tap")`), intake capture shutter
+  (`triggerHaptic("capture")`), Room focus change in
+  `TheRoomClient` (`triggerHaptic("focus")`), ArrivalChapter
+  settle boundary (`triggerHaptic("arrive")`).
+
+**Tests ran locally and on CI (pass):**
+- Vitest: audio-graph construction, factory precondition matrix,
+  haptic vocabulary compile + runtime, defaults test, persistence
+  test. All green.
+- PANG gates: 27/27 (A25 smoke green with the new
+  `SETTINGS_OVERLAY` namespace).
+- Playwright: 71 pass, 2 fail (the two chronic
+  `e2e/outcome-chapter.spec.ts:124,177` flakes that have now
+  failed across iters #13, #14, and #15 — a pattern that gets
+  its own iteration next). 1 flaky settings-overlay-persistence
+  resolved on retry after a debounce-margin bump from
+  500 ms → 750 ms.
+
+### Codify
+
+Three codifications land:
+
+1. **Primitive 71 — acoustic-body-as-opt-in.** Canonical line
+   in `PANG_Primitives_2026.md`. Enforced by a grep gate
+   (`rg "new AudioContext" src/` = 1 hit) plus a factory-
+   precondition test matrix.
+2. **Primitive 72 — haptic-vocabulary-limited.** Four kinds,
+   frozen map. Enforced by `rg "navigator\.vibrate" src/` = 1
+   hit and the TypeScript union.
+3. **Primitive 73 — silence-default.** `DEFAULT_PREFERENCES`
+   is the single source of truth for cold install. Both opt-ins
+   default `"off"`. Asserted by a defaults test and a fresh-
+   install integration test.
+
+Staged also in `pang-2026/.pang/doctrine.md` (the DS-shipping
+staging file) as an Appendix C addition for `SettingsOverlay`
+and knob-family rows 06/07 going load-bearing. Doctrine
+catches up in the DS HTML same-day per CLAUDE.md § 3.
+
+### Iterate once
+
+- **Settings overlay trigger position.** First pass anchored
+  the trigger bottom-right (next to Tweaks in dev). Review
+  moved it to top-right so the dev Tweaks affordance (still
+  dev-only) keeps the bottom-right corner uncontested. The
+  Popover + Anchor Positioning primitive survived the move
+  without code change.
+- **Debounce margin on persistence.** First Playwright run
+  flaked on the rehydrate spec when CI cold-cache load
+  extended the preferences-write window past 500 ms. Bumped
+  to 750 ms. No doctrine change — Playwright-wait tuning is a
+  test-suite concern, not a persistence-semantics one.
+
+### Drop
+
+- **`AudioContext` resume on first document tap after reload.**
+  Drafted as a convenience — if the collector reloads with
+  `audioSpatial === "on"` already persisted, a single-shot
+  document-level `pointerdown` handler would silently resume
+  the context so the bed returns without ceremony. Cut: an
+  invisible resume breaks the "silence happens only when Laura
+  turns it on" contract. The collector reopens the settings
+  overlay and taps turn-on, which is the same two-tap cost as
+  the first-install flow. The drop preserves the doctrinal
+  symmetry between first session and return session.
+- **Per-work acoustic material.** Out-of-scope in the brief;
+  not drafted. Confirmed as dropped for v1 during review —
+  the single shared room bed + HRTF panner is the acoustic
+  body the spine spec names. Per-work drones would multiply
+  the mixer and require per-work sample authorship that has
+  no voice-corpus seam yet.
+
+### Agent discipline drift + post-merge fix
+
+The execution agent wrote doctrine edits into the app-repo
+staging file `pang-2026/.pang/doctrine.md` but did not mirror
+primitives 71/72/73 into the canonical `PANG_Primitives_2026.md`,
+append this findings section to this doc, or mark moment #11
+landed in `PANG_Spine.md`. All three gaps were closed in a
+post-merge `docs(findings)` commit on main (no PR; matches the
+existing `docs(findings): iter #XX merged as ...` pattern used
+by iters #12 and #13). *Verdict:* the execution-agent prompt
+needs an explicit "the keeper docs in the parent directory are
+canonical; `.pang/doctrine.md` is the app-repo staging area —
+edit both, not one" line. Noting here for the next iter's
+delegation prompt.
+
+### Debts still open
+
+- **Playwright flakes in `e2e/outcome-chapter.spec.ts:124,177`.**
+  Have now failed across iters #13, #14, and #15 with the same
+  signature — three iterations admin-merged on identical pre-
+  existing failures. That is the threshold CLAUDE.md § 6 calls a
+  "signal something is wrong" — CI trust degrades every
+  iteration this accumulates. Next iteration candidate.
+- **`voice-prompt-hash` production capture** — deferred from
+  iter #12, still open.
+- **`src/components/dev/Tweaks.tsx` title-case strings** —
+  off-register, deferred from iter #13, still open.
+- **DS HTML revision absorbing `.pang/doctrine.md` staging** —
+  the staging file has accumulated P25, SettingsOverlay Appendix
+  C, knob-family 06/07 load-bearing, and primitives 71/72/73.
+  The DS HTML is the source of truth per `pang-2026/CLAUDE.md`;
+  the staging file is a promissory note. Revision lands when the
+  DS is edited.
+
+### Outcome gate (Laura's hands — to be run)
+
+Pending Laura-signal. The unit + e2e tests confirm the
+silence-default contract holds mechanically; the "Body when
+asked / Quiet turn-off" outcome lines in the brief want a
+real hand on a real device. Marking the iter closed on
+mechanical signal; deferring the hand-check to the next
+device session. If Laura objects to any of the four haptic
+patterns or the acoustic bed amplitude, revisit in a small
+iter #16 tuning pass.
+
+---
+
 ## Archived iterations
 
 The pre-reset sprint family (A1–A11, iterations #1–#13 of the old

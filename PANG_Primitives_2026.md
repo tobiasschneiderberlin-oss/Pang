@@ -1982,6 +1982,128 @@ chunks
   eval corpus that drives the unchanged-collection branch.
   Codified 2026-04-24 from iter #14.
 
+### 71. Acoustic-body-as-opt-in — the factory is the only door
+
+- **Forbidden default:** `new AudioContext()` anywhere in
+  the tree at module load, or inside a React effect, or
+  on any code path the user hasn't authorised. The default
+  fails three ways. The browser refuses to start the
+  context (autoplay policy) and the code silently no-ops,
+  hiding the failure from telemetry. The collector's
+  "silence is the default" contract is broken by a boot-
+  time context that the developer assumed was harmless.
+  Every future audio surface inherits the habit of
+  constructing first and asking forgiveness, and doctrine
+  has to police every call site instead of one seam.
+- **Required primitive:** one factory module
+  (`src/audio/context.ts`, iter #15) is the only export of
+  `AudioContext` in the repo. The factory refuses until
+  *both* `usePreferences.getState().audioSpatial === "on"`
+  and a user gesture has been recorded via
+  `recordUserGesture()`. The preference flip to off closes
+  the context and nulls the module state. Visibility-hidden
+  suspends; visibility-shown does nothing (a new gesture is
+  required to resume). No `new AudioContext` lives outside
+  that one file. Consumers receive `null` when the
+  preconditions are unmet — the null is the discipline,
+  not a bug to paper over.
+- **Adapter path:** a module-local singleton + a
+  `getAudioContext(): AudioContext | null` export.
+  `recordUserGesture()` is called from a single
+  `pointerdown` or `click` handler anchored on the
+  settings overlay's "turn on" toggle; no other call
+  site is authorised to record the gesture. Every
+  state transition emits `pang.audio.state` with
+  `reason ∈ {"opt-in", "visibility", "unmount", "blocked"}`.
+- **Enforcement:** grep gate plus structural test.
+  `rg "new AudioContext" src/` must show exactly one hit
+  (`src/audio/context.ts`). A Vitest suite asserts the
+  factory returns `null` under each unmet precondition
+  matrix (off + gesture; on + no gesture; off + gesture
+  after-flip). Codified 2026-04-24 from iter #15.
+
+### 72. Haptic-vocabulary-limited — four kinds, not instincts
+
+- **Forbidden default:** `navigator.vibrate(50)` sprinkled
+  across components as-needed. The default fails because
+  a haptic vocabulary without a seam becomes an anti-
+  pattern generator — every new surface invents its own
+  pattern, the collector's hand stops being able to
+  distinguish "rectangle locked" from "capture confirmed"
+  from "an error happened," and the Museumsschild test
+  (tactile seams match the choreography, not the
+  developer's mood) fails through accretion.
+- **Required primitive:** one dispatcher
+  (`src/audio/haptics.ts`, iter #15) owns the only call to
+  `navigator.vibrate`. It takes a `HapticKind` union —
+  `"tap" | "focus" | "capture" | "arrive"` — and consults
+  a frozen pattern map. A fifth kind is a compile error;
+  a new kind requires a doctrine edit and a codification
+  line in this document. Reduced motion suppresses by
+  default unless the collector has set the explicit
+  motion override (`data-motion-explicit="full"`).
+  Unsupported platforms (iOS Safari without WKWebView
+  haptics) increment `pang.haptics.unsupported_total`
+  exactly once per session and return false silently.
+- **Adapter path:** `triggerHaptic(kind: HapticKind):
+  boolean` returns the "did we vibrate" truth. The
+  boolean lets call sites chain a visible confirmation
+  when haptics didn't fire without re-implementing the
+  suppression reasons. Counters expose
+  `pang.haptics.suppressed_total{reason}` with
+  `reason ∈ {"off", "unsupported", "reduced-motion"}` —
+  "never called" is a different signal from "called but
+  suppressed" and gets its own counter
+  (`pang.haptics.attempted_total`).
+- **Enforcement:** grep gate. `rg "navigator\.vibrate"
+  src/` must show exactly one hit. The HapticKind union
+  is a TypeScript `keyof typeof HAPTIC_PATTERNS` so a
+  fifth kind fails compilation; the Vitest suite asserts
+  the map is `Object.freeze`'d and that
+  `triggerHaptic("bogus" as HapticKind)` is a compile
+  error. Codified 2026-04-24 from iter #15.
+
+### 73. Silence-default — the cold install is quiet
+
+- **Forbidden default:** "onboarding" audio that plays a
+  welcome tone, a haptic pulse on first arrival, or a
+  "here's what turning the room on sounds like" preview
+  that bypasses the opt-in. Every one of them breaks the
+  spine's silence-default line (`PANG_Spine.md` § *What
+  the spine ate*: "Audio on by default (cut). Spatial
+  audio in iteration #11 is opt-in. Silence is the
+  default."). The temptation is strong because "let them
+  hear it once" feels generous; it is the exact
+  marketing-onboarding move the Museumsschild test was
+  written to forbid.
+- **Required primitive:** `DEFAULT_PREFERENCES` is the
+  single source of truth for cold install state
+  (`src/design/preferences.ts`, iter #15 extension of the
+  iter-#1 preferences module). Both opt-ins default
+  `"off"`. The Zod schema rejects any value outside
+  `"on" | "off"`. Hydration from OPFS can flip the
+  collector's persisted choice back to `"on"` on return;
+  the fresh install cannot. The cold-install path is
+  asserted by a test that mounts the app against an empty
+  OPFS adapter and reads the resulting preferences.
+- **Adapter path:** no cookie, no localStorage, no server
+  round-trip for first-install state. OPFS with a short
+  debounce is the persistence seam; the schema defines
+  the cold boot. The preferences store is the
+  synchronous read for the audio factory + haptic
+  dispatcher — both guards call
+  `usePreferences.getState()`, never read a separate
+  feature flag.
+- **Enforcement:** schema (Zod) + Vitest defaults test +
+  A22-style reproducibility. The defaults test asserts
+  `DEFAULT_PREFERENCES.audioSpatial === "off"` and
+  `DEFAULT_PREFERENCES.haptics === "off"`; a fresh-install
+  integration test drives the AppBoot path with a
+  simulated empty OPFS and asserts no
+  `pang.audio.state { state: "running" }` span fires
+  before a manual gesture on the settings overlay.
+  Codified 2026-04-24 from iter #15.
+
 ---
 
 ## Active references
