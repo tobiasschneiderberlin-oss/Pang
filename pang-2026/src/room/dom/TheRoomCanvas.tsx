@@ -39,6 +39,7 @@ import type { RoomRenderer, Tier, Work } from "../types";
 import { createFrameBudget } from "../perf";
 import { usePreferences } from "@design/preferences";
 import { useWorks } from "@/stores/works";
+import { openDeepZoomForWork } from "@/deep-zoom/resolve";
 
 /**
  * Field-wise equality for a `Work`. Used by the diff effect to skip
@@ -349,6 +350,14 @@ export function TheRoomCanvas({
             roomScene.camera,
             roomScene.getWorkMeshes(),
           );
+        },
+        // Second tap on the focused work — iter #8 contract.
+        // Resolver reads the live works store, looks up the entry,
+        // and writes `activeDeepZoom`. A work without a tileSource
+        // is a silent no-op — the focused pose survives and the
+        // next tap on empty space clears focus as usual.
+        onSecondTap(workId) {
+          openDeepZoomForWork(workId);
         },
       });
       gestureDispose = gesture.dispose;

@@ -29,6 +29,7 @@ import { FocusedWorkPanel } from "@/components/verification/FocusedWorkPanel";
 import { DocumentsChapterConnector } from "@/components/documents/DocumentsChapter";
 import { DocumentViewerConnector } from "@/components/documents/DocumentViewer";
 import { EnrichmentPanel } from "@/components/enrichment/EnrichmentPanel";
+import { DeepZoomOverlay } from "@/components/deep-zoom/DeepZoomOverlay";
 
 export default function TheRoom(): ReactElement {
   return (
@@ -50,6 +51,12 @@ export default function TheRoom(): ReactElement {
       <DocumentsChapterConnector />
       <EnrichmentPanel />
       <DocumentViewerConnector />
+      {/* Iteration #8 — Deep zoom overlay. Mounts when
+       *  `activeDeepZoom` is non-null. The resolver reads the live
+       *  works store for the matching entry's tileSource; a work
+       *  with no tile source never lands here because the second-
+       *  tap binding is a no-op for those entries. */}
+      <DeepZoomOverlay />
     </main>
   );
 }

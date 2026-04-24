@@ -28,7 +28,11 @@
  *     is tuning; this is the reference number.
  */
 
-import { ROOM } from "./scene";
+// Import from `./constants` (not `./scene`) — `scene.ts` pulls in
+// `three/webgpu`, which touches `self` and is fatal under Node.
+// Keeping this import at the leaf constants module lets the test
+// runner exercise the gesture controller without a GL stack.
+import { ROOM } from "./constants";
 
 /** Pixels of movement between down/up below which a gesture is a tap. */
 const TAP_THRESHOLD_PX = 8;
@@ -61,6 +65,20 @@ export interface GestureBindings {
    * to clear focus.
    */
   hitTest(clientX: number, clientY: number): string | null;
+  /**
+   * Called when a tap lands on the work that's already focused — the
+   * "dive deeper" signal. The gesture controller itself makes no
+   * decision about what to do: the caller decides whether to open
+   * the deep-zoom overlay, hand off to some other surface, or
+   * ignore it. Focus is *not* cleared on a second tap; the caller
+   * typically routes to a modal that owns the screen while
+   * `focusedId` survives, so Escape returns to the same focused
+   * pose (iter #7 contract).
+   *
+   * Optional: smoke harnesses and tests that only exercise focus
+   * mechanics pass `hitTest` alone and leave this unbound.
+   */
+  onSecondTap?(workId: string): void;
 }
 
 /**
@@ -140,6 +158,14 @@ export function attachGestureController(
 
     if (wasTap) {
       const hit = bindings.hitTest(e.clientX, e.clientY);
+      // Second-tap: the tapped work matches the currently-focused
+      // work. Fire `onSecondTap` and keep focus — the caller routes
+      // to a modal that owns the screen, and we want `focusedId` to
+      // survive so Escape lands back on the same pose.
+      if (hit !== null && hit === state.focusWorkId) {
+        bindings.onSecondTap?.(hit);
+        return;
+      }
       state.focusWorkId = hit; // null clears focus (empty-space tap)
     }
   }
