@@ -100,10 +100,10 @@ export function installPreferencesPersistence(): () => void {
 
   // Prime OPFS with the current snapshot on install — covers the
   // case where a hydration-before-install race left a pending write.
-  scheduleWrite(projectPersistable(usePreferences.getState()));
+  scheduleWrite(projectPersistable(usePreferences.getState() as Preferences));
 
   const unsubscribe = usePreferences.subscribe(
-    (state) => projectPersistable(state),
+    (state) => projectPersistable(state as Preferences),
     (next) => scheduleWrite(next),
     // `equalityFn` → shallow compare so an unrelated setter that
     // returns the same object identity doesn't re-fire. Zustand's
@@ -124,9 +124,7 @@ export function installPreferencesPersistence(): () => void {
  * Pick only the schema-shaped fields from the store (the store also
  * carries the setters). Pure; testable.
  */
-export function projectPersistable(
-  state: Preferences & Record<string, unknown>,
-): Preferences {
+export function projectPersistable(state: Preferences): Preferences {
   return {
     timeWarmth: state.timeWarmth,
     warmthMultiplier: state.warmthMultiplier,

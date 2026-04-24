@@ -183,13 +183,22 @@ export function setFocusedWork(work: Work | null): void {
 
   rampMasterTo(ctx, MASTER_TARGET_LINEAR * focusFactor, RAMP_FOCUS_S);
 
-  emitAudioGraphDebugSpan({
-    chain: ["source", "filter", "panner", "master", "destination"],
-    masterGain: nodes.master.gain.value,
-    panner: work
-      ? { x: work.position[0], y: work.position[1], z: work.position[2] }
-      : undefined,
-  });
+  emitAudioGraphDebugSpan(
+    work
+      ? {
+          chain: ["source", "filter", "panner", "master", "destination"],
+          masterGain: nodes.master.gain.value,
+          panner: {
+            x: work.position[0],
+            y: work.position[1],
+            z: work.position[2],
+          },
+        }
+      : {
+          chain: ["source", "filter", "panner", "master", "destination"],
+          masterGain: nodes.master.gain.value,
+        },
+  );
 }
 
 // ---------- Test hooks -----------------------------------------------
