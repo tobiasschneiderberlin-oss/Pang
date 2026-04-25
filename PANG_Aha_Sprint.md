@@ -36,12 +36,20 @@
 | 4 | Verification request | Ceiling | **Landed (2026-04-23)** | Optimistic flip + OPFS outbox + planReconcile pure core; outcome chapters reuse chapter primitive |
 | 5 | Enrichment Agent v1 | Ceiling | **Landed (2026-04-23)** | P-LLMs author prose, never structure; cache+status two-file rule; pure-core + procedural-wrapper for OPFS; Q-LLM per untrusted field |
 | 6 | Documents as evidence v1 | Ceiling | **Landed (2026-04-23)** | Chapter = reveal + rest; discriminated-union stores export a NONE singleton; `NEXT_PUBLIC_*` is build-time inline; `window.__PANG` seed seam |
-| 7 | Deep Zoom collection-wide | Principle | Brief | — |
-| 8 | Passkeys auth | Ceiling | Queued | — |
-| 9 | PANG Voice v1 wire-up | Principle | Queued | — |
-| 10 | Narrative Agent — monthly reading v1 | Ceiling | Queued | — |
-| 11 | Spatial audio + haptics (opt-in) | Principle | Queued | — |
-| 12 | Verify-for-club (conditional) | Principle | Queued, may drop | — |
+| 7 | Deep Zoom collection-wide | Ceiling | **Landed (2026-04-23 + 2026-04-24)** | iter #7 (`<DeepZoom>` primitive + CSS-scale gate) + iter #8 (data phase, three seeded works ≥4000px, OPFS tile-cache cold/warm attribution, Room second-tap escalation) |
+| 8 | Passkeys auth | Ceiling | **Landed (2026-04-24)** | iter #9; WebAuthn primary via @simplewebauthn@11; invite JWT trades for short-TTL bind cookie; opaque bearer cookie + counter-rollback clone detection; P10 mechanical |
+| 9 | PANG Voice v1 wire-up | Ceiling | **Landed (2026-04-24)** | iter #12 (seed + corpus + single-sourced ban list) + iter #13 (audit sweep — 58 → 0 A25 violations); A24/A25 mechanical gates |
+| 10 | Narrative Agent — monthly reading v1 | Ceiling | **Landed (2026-04-24)** | iter #14; one paragraph, observational; monthly idempotency marker (P68); SHA-256 shape-hash short-circuit (P70); passive-surface delivery (P69) |
+| 11 | Spatial audio + haptics (opt-in) | Ceiling | **Landed (2026-04-24)** | iter #15; guarded AudioContext factory (P71); finite-union haptic dispatcher (P72); silence-default contract (P73); `SettingsOverlay` via Popover + Anchor Positioning |
+| 12 | Verify-for-club (conditional) | Principle | **Conditional / drop default** | Out of v1; reopens only if post-Laura signal supports it (per `PANG_Spine.md` § Build order) |
+
+**v1 build pipeline closed (2026-04-25).** Spine items 0–11 are
+all in `main`. Item 12 is conditional and not blocking. The
+project enters operate mode: Laura's hands are now the authority
+on what (if anything) reopens the build pipeline; iterations
+that follow are bug-driven, not feature-driven. Maintenance
+debts (test infrastructure, dependency hygiene, doctrine
+staging absorption) continue under the same gate discipline.
 
 The old iteration numbering (A1–A11, iterations #1–#13 of the previous
 family) is archived. See `_archive/legacy_docs/PANG_Aha_Sprint.md` for

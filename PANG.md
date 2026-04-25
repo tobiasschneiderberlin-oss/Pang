@@ -5,7 +5,9 @@
 > strategic contract (Laura's journey through the app), read
 > `PANG_Spine.md`.
 >
-> Last updated: 2026-04-21
+> Last updated: 2026-04-25 — v1 build pipeline closed; spine items
+> 0–11 in `main`. See `PANG_Spine.md` for the contract and
+> `PANG_Aha_Sprint.md` § Status for the iteration map.
 
 ---
 

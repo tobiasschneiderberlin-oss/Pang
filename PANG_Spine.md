@@ -7,15 +7,22 @@
 > Sits above `CLAUDE.md` in priority. `CLAUDE.md` is *how* we build.
 > `PANG_Spine.md` is *what* we build.
 >
-> Last updated: 2026-04-24 — iteration #9 landed: spine moment #7
-> (Passkeys auth) is wired end-to-end. The collector's invite link
-> binds to a passkey on their device; `requireSession` gates every
-> non-public API route; the session rides an opaque bearer cookie
-> backed by server-side state. "Laura is the baseline" now means
-> session identity, not seed data. Earlier 2026-04-22 — iteration
-> #1 findings codified: the scanner review form is dropped (intake
-> is zero-tap from capture to arrival; fields are editable later on
-> the detail surface). See gate P25.
+> Last updated: 2026-04-25 — **v1 build pipeline closed.** Spine
+> items 0–11 are all in `main` (see `PANG_Aha_Sprint.md` § Status).
+> Item 12 (Verify-for-club) is conditional and not blocking. The
+> project enters operate mode: Laura's hands are now the authority
+> on what (if anything) reopens the build pipeline; iterations
+> that follow are bug-driven, not feature-driven. The cannot-do
+> list (`CLAUDE.md` § 7) holds. Earlier 2026-04-24 — iteration
+> #9 landed: spine moment #7 (Passkeys auth) wired end-to-end;
+> the collector's invite link binds to a passkey on their device,
+> `requireSession` gates every non-public API route, the session
+> rides an opaque bearer cookie backed by server-side state.
+> "Laura is the baseline" now means session identity, not seed
+> data. Earlier 2026-04-22 — iteration #1 findings codified: the
+> scanner review form is dropped (intake is zero-tap from capture
+> to arrival; fields are editable later on the detail surface).
+> See gate P25.
 
 ---
 
