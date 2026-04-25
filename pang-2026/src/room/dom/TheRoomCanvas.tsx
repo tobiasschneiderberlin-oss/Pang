@@ -454,10 +454,21 @@ export function TheRoomCanvas({
       cancelled = true;
       if (rafId) cancelAnimationFrame(rafId);
       resizeObserver?.disconnect();
-      gestureDispose?.();
-      prefsUnsubscribe?.();
-      renderer?.dispose();
-      sceneDispose?.();
+      // iter #20: guard every disposer. Three.js r170's WebGPU
+      // backend has internal resource pools (`Pools` map, `usedTimes`
+      // refcounts) that can throw `TypeError: Cannot read properties
+      // of undefined (reading 'usedTimes')` during dispose under
+      // React 19 StrictMode + soft navigation. The error bubbles out
+      // of the effect cleanup and surfaces as the global error
+      // boundary's "This page couldn't load" — exactly the breakage
+      // Laura saw on `/scan` after iter-18 wired the soft-nav out of
+      // the Room. GPU resources are reclaimed by the browser when
+      // the canvas is GC'd regardless; swallowing the disposal error
+      // costs nothing and unblocks the navigation.
+      try { gestureDispose?.(); } catch (e) { console.warn("[room] gesture dispose:", e); }
+      try { prefsUnsubscribe?.(); } catch (e) { console.warn("[room] prefs unsub:", e); }
+      try { renderer?.dispose(); } catch (e) { console.warn("[room] renderer dispose:", e); }
+      try { sceneDispose?.(); } catch (e) { console.warn("[room] scene dispose:", e); }
       sceneRef.current = null;
       worksSnapshotRef.current = new Map();
       gestureStateRef.current = null;
