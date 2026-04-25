@@ -235,7 +235,14 @@ async function main(): Promise<void> {
         f.endsWith("fonts.tsx") ||
         f.endsWith("locked.ts") ||
         f.endsWith(".test.ts") ||
-        f.endsWith(".test.tsx");
+        f.endsWith(".test.tsx") ||
+        // iter #22: demo seed data carries real-world artist + gallery
+        // names (proper nouns) as the literal value of the affordance
+        // — the demo's whole point is to surface real names. The
+        // strings are not UI labels in the editorial sense the rule
+        // protects against. REMOVE WITH `src/demo/` per
+        // `src/demo/REMOVAL.md`.
+        f.includes("src/demo/");
       if (
         !isValueContextFile &&
         value.length < 40 &&
