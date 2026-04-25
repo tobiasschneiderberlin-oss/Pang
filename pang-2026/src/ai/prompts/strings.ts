@@ -81,7 +81,7 @@ import { FOCUSED_WORK_LABEL } from "@/ai/verification/voice";
 import { TWEAKS } from "@/ai/dev/voice";
 import { INVITE_LANDING_LABEL } from "@/ai/invite/voice";
 import { GALLERY_OUTCOME_PROSE } from "@/ai/gallery/voice";
-import { ROOM_MAIN_LABEL } from "@/ai/room/voice";
+import { ROOM_MAIN_LABEL, ROOM_SCAN_TRIGGER_LABEL } from "@/ai/room/voice";
 import { DEEP_ZOOM_SMOKE, ROOM_SMOKE } from "@/ai/smoke/voice";
 import { SETTINGS_OVERLAY } from "@/ai/chrome/voice";
 
@@ -274,7 +274,9 @@ export const GALLERY_OUTCOME = GALLERY_OUTCOME_PROSE;
 export const ROOM = Object.freeze({
   /** Landmark label on The Room `<main>`. */
   main_label: ROOM_MAIN_LABEL,
-}) satisfies Readonly<Record<"main_label", string>>;
+  /** Aria-label on the scan-trigger affordance (iter #18). */
+  scan_trigger_label: ROOM_SCAN_TRIGGER_LABEL,
+}) satisfies Readonly<Record<string, string>>;
 
 export const NARRATIVE = Object.freeze({
   /** `<dialog popover>` landmark label. */

@@ -21,3 +21,13 @@
  * PANG_Voice.md sanctions).
  */
 export const ROOM_MAIN_LABEL = "Your collection";
+
+/**
+ * Aria-label on the scan-trigger affordance — the small chrome icon
+ * (a thin plus) anchored to the Room's top-left that opens `/scan`.
+ * Iter #18 added it after Laura's first session showed the empty
+ * Room had no discoverable path to intake. Museumsschild register:
+ * "the next work" reads as a wall label, not an app button.
+ * "Add picture" / "Scan now" would fail (imperative + verb-heavy).
+ */
+export const ROOM_SCAN_TRIGGER_LABEL = "the next work";

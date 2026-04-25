@@ -403,6 +403,14 @@ async function p10(): Promise<GateResult> {
   const ALLOWLIST = [
     "app/api/telemetry/route.ts",
     "app/api/enrichment/submit/route.ts",
+    // Intake (iter #18). Discovery moment — Laura must be able to
+    // scan her first work without already holding a session. The
+    // route still calls `readCurrentSession()` to annotate the OTel
+    // span (`pang.auth.user_id` vs `pang.auth.anonymous=true`), so
+    // observability distinguishes the two paths. The verification
+    // line (asking the gallery) keeps `requireSession()` — that's
+    // where identity actually matters.
+    "app/api/intake/route.ts",
     // The auth surface itself — these routes are the auth gate.
     "app/api/auth/invite/bind/route.ts",
     "app/api/auth/invite/mint-dev/route.ts",
