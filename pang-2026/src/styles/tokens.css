@@ -36,9 +36,23 @@
   --s-8:  32px; --s-10: 40px; --s-12: 48px;
   --s-16: 64px; --s-20: 80px; --s-24: 96px; --s-32: 128px;
 
-  /* ── Corners — two tiers, gate P9 ── */
+  /* ── Corners ── */
   --r-chrome: 2px;
-  /* all containers, art surfaces, wall labels: radius 0, no variable */
+  /* iter #23: art-directed visual layer adds soft container radii.
+     The earlier "containers radius 0" rule was too austere for the
+     2026 register; rounded image cards read as premium product
+     (Pinterest / Hinge / Glass). Two new tiers: --r-tile for grid
+     items, --r-hero for the full-screen detail image. */
+  --r-tile: 16px;
+  --r-hero: 24px;
+
+  /* ── iter #23 — supporting tokens for art-directed layer ── */
+  --surface-elevated:    oklch(0.97 0 0);
+  --text-tertiary:       oklch(0.60 0 0);
+  --hairline-verified:   oklch(0.55 0.15 155);
+  --hairline-pending:    oklch(0.55 0.12 45);
+  --action-primary:      oklch(0.62 0.21 15);   /* the one CTA accent */
+  --action-primary-on:   oklch(0.99 0 0);
 
   /* ── Typography stacks — P13 size-adjust tuned ── */
   --serif: "Instrument Serif", ui-serif, Georgia, serif;

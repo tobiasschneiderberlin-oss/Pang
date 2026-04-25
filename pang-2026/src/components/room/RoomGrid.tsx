@@ -1,174 +1,185 @@
 "use client";
 
 /**
- * PANG — The Room, grid view (iter #21).
+ * PANG — collection grid (iter #23 art-directed visual layer).
  *
- * Default home view. A scrollable CSS-grid of work tiles, the
- * familiar conventional pattern (Apple Photos / Google Photos) that
- * gives Laura an instant overview of every work in the collection.
- * The chrome (scan trigger top-left, view toggle + settings
- * top-right) is shared with the space view; only this body changes.
+ * Pinterest-style masonry. Each tile is a real image at the work's
+ * actual aspect ratio; status reads as a hairline rule at the
+ * bottom (verified vs pending). No text overlays on tiles — the
+ * detail view (iter #23 `<FocusedWorkPanel>`) carries the metadata.
  *
- * The space view (`<TheRoomClientDynamic />`) remains one tap away
- * via the chrome view-toggle for collectors who want the immersive
- * WebGPU experience. Iter #21's pivot is that the grid is the
- * default, not the Room — the Room becomes the addition, not the
- * gating affordance.
+ * Replaces iter #21's pastel SVG-text grid. The visual register is
+ * Pinterest / Hinge / Glass — image-first, premium, considered.
  *
- * Visual contract:
- *   - CSS grid, `auto-fit minmax(140px, 1fr)`. On a phone (390 px
- *     viewport with 2 × 16 px gutter), that yields 2 columns with
- *     room to breathe; on a tablet (768 px) it lays out at 4–5
- *     columns automatically.
- *   - Sharp corners (P9) — containers are square; tiles inherit.
- *   - OKLCH only (P11) — all colour through tokens.
- *   - Sentence case labels (P14) — A25 corpus discipline.
- *   - No emoji, no marketing copy. Empty state is the same "an
- *     empty wall" sr-only landmark from `RoomDOMTwin`; the visible
- *     empty state is just a quiet line.
- *
- * Tap on a tile sets `focusedId` on the works store. The
- * `<FocusedWorkPanel>` (already mounted by `app/page.tsx`) reads
- * that and renders the focused chrome — same surface the Room
- * canvas focus uses, so grid and space views share a single focus
- * model.
+ * Tap a tile → `setFocusedId` on the works store. The detail view
+ * mounts on the same focus model the canvas uses, so grid + space
+ * + detail share a single focused-work surface.
  */
 
-import type { ReactElement } from "react";
-import {
-  useWorks,
-  type CollectionEntry,
-} from "@/stores/works";
+import { useMemo, type ReactElement } from "react";
+import { useWorks, type CollectionEntry } from "@/stores/works";
 
-const EMPTY_LINE = "an empty wall";
+const COLUMNS = 3;
 
 export function RoomGrid(): ReactElement {
   const entries = useWorks((s) => s.entries);
   const focusedId = useWorks((s) => s.focusedId);
   const setFocusedId = useWorks((s) => s.setFocusedId);
 
+  const columnArrays = useMemo(() => {
+    const cols: CollectionEntry[][] = Array.from({ length: COLUMNS }, () => []);
+    const heights = Array(COLUMNS).fill(0);
+    for (const entry of entries) {
+      const shortest = heights.indexOf(Math.min(...heights));
+      cols[shortest]!.push(entry);
+      // size = [width-m, height-m] → relative tile height contribution
+      const aspect = entry.size[0] / entry.size[1];
+      heights[shortest] += 1 / Math.max(aspect, 0.1);
+    }
+    return cols;
+  }, [entries]);
+
   if (entries.length === 0) {
-    return (
-      <div className="absolute inset-0 grid place-items-center px-6 text-center">
-        <p className="text-sm text-ink-muted" data-testid="pang-grid-empty">
-          {EMPTY_LINE}
-        </p>
-      </div>
-    );
+    // Empty state lives in its own component (`RoomEmpty`); the
+    // page composes them. Returning null here keeps `<RoomGrid>`
+    // single-purpose.
+    return <RoomEmptyInline />;
   }
 
   return (
     <div
       className="absolute inset-0 overflow-y-auto"
       style={{
-        // Safe-area-aware padding so tiles don't slide under the
-        // chrome row at the top or the home indicator at the bottom.
         paddingTop: "calc(env(safe-area-inset-top) + 4rem)",
-        paddingBottom: "calc(env(safe-area-inset-bottom) + 1.5rem)",
-        paddingLeft: "max(env(safe-area-inset-left), 1rem)",
-        paddingRight: "max(env(safe-area-inset-right), 1rem)",
+        paddingBottom: "calc(env(safe-area-inset-bottom) + 6rem)",
+        paddingLeft: "max(env(safe-area-inset-left), 0.25rem)",
+        paddingRight: "max(env(safe-area-inset-right), 0.25rem)",
       }}
       data-testid="pang-grid"
     >
-      <ul
-        className="grid gap-3"
-        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}
+      <div
+        className="grid gap-1"
+        style={{ gridTemplateColumns: `repeat(${COLUMNS}, minmax(0, 1fr))` }}
       >
-        {entries.map((e) => (
-          <li key={e.id}>
-            <button
-              type="button"
-              onClick={() =>
-                setFocusedId(focusedId === e.id ? null : e.id)
-              }
-              aria-pressed={focusedId === e.id}
-              aria-label={ariaLabelFor(e)}
-              data-testid="pang-grid-tile"
-              data-status={e.status}
-              className="group relative block w-full overflow-hidden bg-paper-5"
-              style={{
-                borderRadius: 0,
-                aspectRatio: `${e.size[0]} / ${e.size[1]}`,
-                outline:
-                  focusedId === e.id ? "2px solid var(--ink)" : "none",
-                outlineOffset: focusedId === e.id ? "-2px" : "0",
-              }}
-            >
-              {/* Image fills the tile; object-cover so the work's
-               *  aspect ratio dominates the framing. iter #21:
-               *  bare `<img>` is intentional — works are
-               *  user-captured blob URLs whose lifetime is owned by
-               *  the works store; routing them through `<Image>` /
-               *  the optimizer would either fail (blob URLs aren't
-               *  remote images) or break the blob's reference
-               *  semantics. The same source already feeds the
-               *  Three.js texture path on the canvas; that path
-               *  doesn't go through Next/Image either. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={e.imageUrl}
-                alt=""
-                className="block h-full w-full object-cover"
-                loading="lazy"
-                decoding="async"
+        {columnArrays.map((column, ci) => (
+          <div key={ci} className="flex flex-col gap-1">
+            {column.map((entry) => (
+              <Tile
+                key={entry.id}
+                entry={entry}
+                isFocused={focusedId === entry.id}
+                onSelect={() => setFocusedId(entry.id)}
               />
-              {/* Status mark — a small dot bottom-right. Verified
-               *  works carry a warm-emissive dot; unverified are
-               *  outlined-empty. Same semantic as the canvas
-               *  alive-vs-dormant rendering, in 2D. */}
-              <span
-                aria-hidden="true"
-                className="absolute bottom-2 right-2 block h-2 w-2"
-                style={{
-                  borderRadius: "9999px",
-                  background:
-                    e.status === "verified" ? "var(--warmth)" : "transparent",
-                  border: "1px solid var(--hairline)",
-                }}
-              />
-            </button>
-            {/* Visible label below the tile. Sentence case; voice
-             *  register matches the canvas DOM twin. */}
-            <p
-              className="mt-2 truncate text-xs text-ink-muted"
-              style={{ textAlign: "left" }}
-            >
-              {visibleLabelFor(e)}
-            </p>
-          </li>
+            ))}
+          </div>
         ))}
-      </ul>
+      </div>
     </div>
   );
 }
 
-/**
- * Aria-label for screen readers. Matches the `RoomDOMTwin` register —
- * status-first, observational, no marketing.
- */
+function Tile(props: {
+  readonly entry: CollectionEntry;
+  readonly isFocused: boolean;
+  readonly onSelect: () => void;
+}): ReactElement {
+  const { entry, isFocused, onSelect } = props;
+  const aspectRatio = entry.size[0] / entry.size[1];
+  const verified = entry.status === "verified";
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={isFocused}
+      aria-label={ariaLabelFor(entry)}
+      data-testid="pang-grid-tile"
+      data-status={entry.status}
+      className="group relative w-full overflow-hidden bg-paper-5 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink/40 focus-visible:ring-offset-2"
+      style={{
+        borderRadius: "var(--r-tile)",
+        aspectRatio: `${aspectRatio}`,
+      }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={entry.imageUrl}
+        alt=""
+        className="block h-full w-full object-cover"
+        loading="lazy"
+        decoding="async"
+      />
+      {/* Status hairline at bottom — verified (warm sage) vs
+       *  pending (warm amber). 1px, full-width, museum-precise. */}
+      <span
+        aria-hidden="true"
+        className="absolute bottom-0 left-0 right-0"
+        style={{
+          height: "1px",
+          background: verified
+            ? "var(--hairline-verified)"
+            : "var(--hairline-pending)",
+        }}
+      />
+    </button>
+  );
+}
+
 function ariaLabelFor(e: CollectionEntry): string {
+  const snap = e.verificationHint?.artworkSnapshot;
+  const name = snap?.title || `work ${e.id.slice(-6)}`;
   return e.status === "verified"
-    ? `work ${shortId(e.id)}`
-    : `work ${shortId(e.id)}, awaiting verification`;
+    ? `${name}, verified`
+    : `${name}, awaiting verification`;
 }
 
 /**
- * Visible label below the tile. Prefers artist + title if the
- * verification hint snapshot carries them; falls back to a short
- * id-suffix line. Always sentence case.
+ * Inline empty state — kept here to keep the grid file self-contained
+ * for now. The page composes `<RoomGrid>` and gets either tiles or
+ * this depending on entries.length.
  */
-function visibleLabelFor(e: CollectionEntry): string {
-  const snap = e.verificationHint?.artworkSnapshot;
-  if (snap?.artist && snap.title) {
-    return `${snap.artist.toLowerCase()} · ${snap.title.toLowerCase()}`;
-  }
-  if (snap?.artist) return snap.artist.toLowerCase();
-  if (snap?.title) return snap.title.toLowerCase();
-  return e.status === "verified"
-    ? `work ${shortId(e.id)}`
-    : "awaiting verification";
-}
-
-function shortId(id: string): string {
-  return id.length > 6 ? id.slice(-6) : id;
+function RoomEmptyInline(): ReactElement {
+  return (
+    <div
+      className="absolute inset-0 flex flex-col items-center justify-center px-8 text-center"
+      data-testid="pang-grid-empty"
+    >
+      <div className="relative mb-8 h-72 w-60">
+        {/* Three blurred placeholder cards — the "your collection is
+         *  about to begin" gesture. No marketing line, just the
+         *  visual cue that something belongs here. */}
+        <div
+          className="absolute left-0 top-8 h-56 w-44 -rotate-6 origin-bottom opacity-50"
+          style={{
+            borderRadius: "var(--r-hero)",
+            background:
+              "linear-gradient(135deg, var(--paper-5) 0%, var(--paper-10) 100%)",
+            filter: "blur(4px)",
+          }}
+        />
+        <div
+          className="absolute right-0 top-8 h-56 w-44 rotate-6 origin-bottom opacity-50"
+          style={{
+            borderRadius: "var(--r-hero)",
+            background:
+              "linear-gradient(135deg, var(--paper-10) 0%, var(--paper-5) 100%)",
+            filter: "blur(4px)",
+          }}
+        />
+        <div
+          className="absolute left-1/2 top-0 z-10 h-64 w-48 -translate-x-1/2 shadow-2xl"
+          style={{
+            borderRadius: "var(--r-hero)",
+            background:
+              "linear-gradient(135deg, var(--paper-10) 0%, var(--paper-5) 100%)",
+          }}
+        />
+      </div>
+      <h1 className="mb-3 max-w-xs text-balance text-2xl font-bold text-ink">
+        your collection begins here
+      </h1>
+      <p className="mb-8 max-w-72 text-base leading-relaxed text-ink-muted">
+        scan the first work to add it to your wall.
+      </p>
+    </div>
+  );
 }
