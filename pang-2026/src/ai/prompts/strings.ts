@@ -81,7 +81,12 @@ import { FOCUSED_WORK_LABEL } from "@/ai/verification/voice";
 import { TWEAKS } from "@/ai/dev/voice";
 import { INVITE_LANDING_LABEL } from "@/ai/invite/voice";
 import { GALLERY_OUTCOME_PROSE } from "@/ai/gallery/voice";
-import { ROOM_MAIN_LABEL, ROOM_SCAN_TRIGGER_LABEL } from "@/ai/room/voice";
+import {
+  ROOM_MAIN_LABEL,
+  ROOM_SCAN_TRIGGER_LABEL,
+  ROOM_VIEW_TOGGLE_LABEL_TO_GRID,
+  ROOM_VIEW_TOGGLE_LABEL_TO_SPACE,
+} from "@/ai/room/voice";
 import { DEEP_ZOOM_SMOKE, ROOM_SMOKE } from "@/ai/smoke/voice";
 import { SETTINGS_OVERLAY } from "@/ai/chrome/voice";
 
@@ -276,6 +281,9 @@ export const ROOM = Object.freeze({
   main_label: ROOM_MAIN_LABEL,
   /** Aria-label on the scan-trigger affordance (iter #18). */
   scan_trigger_label: ROOM_SCAN_TRIGGER_LABEL,
+  /** View-mode toggle aria-labels (iter #21). */
+  view_toggle_label_to_space: ROOM_VIEW_TOGGLE_LABEL_TO_SPACE,
+  view_toggle_label_to_grid: ROOM_VIEW_TOGGLE_LABEL_TO_GRID,
 }) satisfies Readonly<Record<string, string>>;
 
 export const NARRATIVE = Object.freeze({

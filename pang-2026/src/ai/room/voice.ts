@@ -31,3 +31,20 @@ export const ROOM_MAIN_LABEL = "Your collection";
  * "Add picture" / "Scan now" would fail (imperative + verb-heavy).
  */
 export const ROOM_SCAN_TRIGGER_LABEL = "the next work";
+
+/**
+ * Aria-label on the view-mode toggle affordance — the small chrome
+ * icon that switches between the grid (default, conventional photo
+ * overview) and the space (the WebGPU Room canvas). Iter #21 added
+ * it after the operator call to keep the Room as an *addition* on
+ * top of a familiar grid baseline.
+ *
+ * The label resolves dynamically based on the current mode: it
+ * reads as the *target* of the next tap, not the current state, so
+ * a screen reader user hears "the room" when they're in grid mode
+ * (tap to enter the room) and "the grid" when they're in space
+ * mode (tap to return to the grid). Same museumsschild register as
+ * the other chrome affordances — no imperative, no marketing.
+ */
+export const ROOM_VIEW_TOGGLE_LABEL_TO_SPACE = "the room";
+export const ROOM_VIEW_TOGGLE_LABEL_TO_GRID = "the grid";
