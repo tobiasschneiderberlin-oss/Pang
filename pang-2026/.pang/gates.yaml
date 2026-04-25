@@ -138,7 +138,11 @@ gates:
            requireSession(). Allowlist for routes that are auth-free by
            design: /api/telemetry (beacon), /api/enrichment/submit
            (contributor auth via x-pang-gallery-token; OAuth lands iter #7),
-           /api/auth/** (the auth surface itself).
+           /api/intake (iter #18 — discovery moment; route still calls
+           readCurrentSession() to annotate the OTel span anonymous vs
+           authenticated, but does not require a session; the verification
+           line keeps requireSession() because that's where identity
+           actually matters), /api/auth/** (the auth surface itself).
         4. Invite landing mounts <InviteLandingClient> which uses the
            usePasskey hook — no in-page secret form.
       Magic Link OTP fallback is named principle-scope deferral in iter

@@ -34,6 +34,7 @@ import { RoomSurfaceClaim } from "@/components/room/RoomSurfaceClaim";
 import { NarrativeOverlayConnector } from "@/components/room/NarrativeOverlayConnector";
 import { OutcomeChapterMount } from "@/components/intake/OutcomeChapterMount";
 import { SettingsOverlay } from "@/components/chrome/SettingsOverlay";
+import { RoomScanTrigger } from "@/components/room/RoomScanTrigger";
 import { ROOM_MAIN_LABEL } from "@/ai/room/voice";
 
 export default function TheRoom(): ReactElement {
@@ -82,6 +83,10 @@ export default function TheRoom(): ReactElement {
        *  panel carrying the two silence-default opt-ins (spatial
        *  audio + haptics). Cold install: both off, panel closed. */}
       <SettingsOverlay />
+      {/* Iteration #18 — Scan trigger. Mirrors the settings opener
+       *  on the Room's top-left so the empty wall has a discoverable
+       *  path to intake. Tap → `/scan` → viewfinder → arrival. */}
+      <RoomScanTrigger />
     </main>
   );
 }

@@ -29,7 +29,7 @@ import {
   withOtelSpan,
 } from "@/ai/agents/_shared";
 import { brand } from "@/ai/camel/trust";
-import { requireSession, UnauthenticatedError } from "@/auth/server/session";
+import { readCurrentSession } from "@/auth/server/session";
 
 export const runtime = "nodejs";
 // Route-level headers — the route handler echoes POST-only with a
@@ -42,16 +42,18 @@ export async function POST(request: Request): Promise<Response> {
     span.setAttribute("http.method", "POST");
     span.setAttribute("http.route", "/api/intake");
 
-    // Auth gate (iter #9). 401 with zero body — no enumeration crumb.
-    try {
-      const session = await requireSession();
+    // Auth gate relaxed in iter #18 — intake is the discovery moment.
+    // Laura must be able to scan her first work without already
+    // holding a session (gallery invite-link flow is deferred). The
+    // verification line (asking the gallery) still requires a
+    // session — that's where identity actually matters. Annotate the
+    // span with whether a session was present so observability still
+    // distinguishes anonymous vs authenticated intake.
+    const session = await readCurrentSession();
+    if (session) {
       span.setAttribute("pang.auth.user_id", session.userId);
-    } catch (err) {
-      if (err instanceof UnauthenticatedError) {
-        span.setAttribute("pang.auth.fail_reason", err.reason);
-        return new Response(null, { status: 401 });
-      }
-      throw err;
+    } else {
+      span.setAttribute("pang.auth.anonymous", true);
     }
 
     if (!process.env["ANTHROPIC_API_KEY"]) {
