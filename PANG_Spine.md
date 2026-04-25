@@ -9,11 +9,21 @@
 >
 > Last updated: 2026-04-25 — **v1 build pipeline closed.** Spine
 > items 0–11 are all in `main` (see `PANG_Aha_Sprint.md` § Status).
-> Item 12 (Verify-for-club) is conditional and not blocking. The
-> project enters operate mode: Laura's hands are now the authority
+> Item 12 (Verify-for-club) is conditional and not blocking.
+>
+> Iter #21 (Laura's first session, same date) refactored the home:
+> a CSS-grid overview is now the default landing (familiar,
+> instantly discoverable), with the WebGPU Room as a one-tap
+> toggle for the immersive depth experience. The spine "your
+> collection as a space" still holds — the space is now an
+> opt-in moment rather than the gating affordance. The cannot-do
+> list (`CLAUDE.md` § 7) is intact: no marketing CTAs, no
+> gamification, no app-store distribution. The grid is a viewing
+> mode, not a marketing surface.
+>
+> The project is in operate mode: Laura's hands are the authority
 > on what (if anything) reopens the build pipeline; iterations
-> that follow are bug-driven, not feature-driven. The cannot-do
-> list (`CLAUDE.md` § 7) holds. Earlier 2026-04-24 — iteration
+> that follow are bug-driven, not feature-driven. Earlier 2026-04-24 — iteration
 > #9 landed: spine moment #7 (Passkeys auth) wired end-to-end;
 > the collector's invite link binds to a passkey on their device,
 > `requireSession` gates every non-public API route, the session

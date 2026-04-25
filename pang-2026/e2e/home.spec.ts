@@ -1,28 +1,44 @@
 /**
  * PANG — home smoke test.
  *
- * Tier 2 sentinel for the Room surface. Catches:
+ * Tier 2 sentinel for the home surface. Catches:
  *   - layout regressions (empty-room paper baseline vanished)
- *   - canvas not mounted (renderer init crashed)
+ *   - grid view not mounted on cold install (iter #21 default)
+ *   - canvas not mounted on toggle to space (iter #21 secondary)
  *   - banned voice vocab leaking into a rendered string (A5)
  *
- * Runs on chromium-desktop only — the Room is the same surface
- * everywhere; device-specific behaviours belong in their own spec.
+ * Iter #21: the home defaults to a grid view; the Room canvas is
+ * a one-tap toggle. The test below covers BOTH modes — grid first
+ * (cold-install assertion), then toggle to space and assert the
+ * canvas mounts.
  */
 
 import { expect, test } from "@playwright/test";
 
 test.use({ viewport: { width: 1280, height: 800 } });
 
-test.describe("home — The Room", () => {
-  test("renders the collection canvas", async ({ page }) => {
+test.describe("home — grid default + space toggle (iter #21)", () => {
+  test("cold install renders grid; toggle mounts the Room canvas", async ({
+    page,
+  }) => {
     await page.goto("/");
 
     const main = page.getByRole("main", { name: /your collection/i });
     await expect(main).toBeVisible();
 
-    // Canvas must exist — the Room is a <canvas> surface by
-    // doctrine (no DOM for primary art surfaces).
+    // Cold install: grid is the default. The empty grid renders
+    // the visible "an empty wall" line plus the chrome row.
+    const grid = page.locator('[data-testid="pang-grid"], [data-testid="pang-grid-empty"]');
+    await expect(grid.first()).toBeVisible({ timeout: 10_000 });
+
+    // The view-mode toggle is part of the chrome row top-right.
+    const toggle = page.locator('[data-testid="pang-room-view-toggle"]');
+    await expect(toggle).toBeVisible();
+    await expect(toggle).toHaveAttribute("data-mode", "grid");
+
+    // Tap the toggle → space mode → WebGPU canvas mounts.
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("data-mode", "space");
     const canvas = page.locator("canvas").first();
     await expect(canvas).toBeVisible({ timeout: 10_000 });
   });

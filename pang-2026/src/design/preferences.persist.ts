@@ -185,5 +185,6 @@ export function projectPersistable(state: Preferences): Preferences {
     displayName: state.displayName,
     audioSpatial: state.audioSpatial,
     haptics: state.haptics,
+    viewMode: state.viewMode,
   };
 }

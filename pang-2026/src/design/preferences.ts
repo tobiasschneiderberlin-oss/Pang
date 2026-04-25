@@ -72,6 +72,13 @@ export const PreferencesSchema = z.object({
   // SettingsOverlay is the only surface that flips them.
   audioSpatial: z.enum(["on", "off"]),
   haptics: z.enum(["on", "off"]),
+
+  // iter #21 — home view mode. "grid" is the default conventional
+  // overview (familiar, instantly discoverable, like Apple Photos /
+  // Google Photos). "space" is the immersive WebGPU Room — kept as
+  // a one-tap toggle for the depth experience. Persists via OPFS so
+  // a returning collector lands in their preferred mode.
+  viewMode: z.enum(["grid", "space"]),
 });
 
 export type Preferences = z.infer<typeof PreferencesSchema>;
@@ -93,6 +100,11 @@ export const DEFAULT_PREFERENCES: Preferences = {
   // can override; the default cannot drift without a failing test.
   audioSpatial: "off",
   haptics: "off",
+  // iter #21 — grid is the default home. Familiar, instantly
+  // discoverable, requires no learning curve. Room (the WebGPU
+  // canvas) is one tap away via the chrome toggle for collectors
+  // who want the immersive view.
+  viewMode: "grid",
 };
 
 // --- Named-preset → numeric mapper -------------------------------

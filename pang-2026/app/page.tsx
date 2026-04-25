@@ -17,14 +17,12 @@
  */
 
 import type { ReactElement } from "react";
-// `TheRoomClientDynamic` wraps `TheRoomClient` in
-// `next/dynamic({ ssr: false })`. The reason lives in that file's
-// header: `src/room/scene.ts` imports `three/webgpu` at module top
-// level, which touches `self` and is fatal in Node. `"use client"`
-// marks the hydration boundary but not the SSR boundary; `dynamic`
-// with `ssr: false` is the SSR boundary. This route is the only
-// place `TheRoomClient` is reached from a Server Component.
-import { TheRoomClientDynamic } from "@/room/dom/TheRoomClientDynamic";
+// iter #21: the body is a client switch (`<RoomBody>`) that reads
+// `usePreferences().viewMode` and renders either the grid (default)
+// or the WebGPU space. The space is loaded lazily by
+// `TheRoomClientDynamic` only when the collector toggles to it, so
+// a cold install in grid mode never pays the WebGPU chunk cost.
+import { RoomBody } from "@/components/room/RoomBody";
 import { FocusedWorkPanel } from "@/components/verification/FocusedWorkPanel";
 import { DocumentsChapterConnector } from "@/components/documents/DocumentsChapter";
 import { DocumentViewerConnector } from "@/components/documents/DocumentViewer";
@@ -35,6 +33,7 @@ import { NarrativeOverlayConnector } from "@/components/room/NarrativeOverlayCon
 import { OutcomeChapterMount } from "@/components/intake/OutcomeChapterMount";
 import { SettingsOverlay } from "@/components/chrome/SettingsOverlay";
 import { RoomScanTrigger } from "@/components/room/RoomScanTrigger";
+import { RoomViewToggle } from "@/components/room/RoomViewToggle";
 import { ROOM_MAIN_LABEL } from "@/ai/room/voice";
 
 export default function TheRoom(): ReactElement {
@@ -46,7 +45,7 @@ export default function TheRoom(): ReactElement {
       {/* Iteration #11 — Claim the active surface for chapter-mount
        *  gating. Renders nothing; subscribes to mount/unmount edges. */}
       <RoomSurfaceClaim />
-      <TheRoomClientDynamic />
+      <RoomBody />
       {/* Focused-work plaque + ask-gallery affordance. Self-guards
        *  on focusedId; renders nothing when no work is focused. Lives
        *  at the surface level (not inside TheRoomClient) so the
@@ -87,6 +86,10 @@ export default function TheRoom(): ReactElement {
        *  on the Room's top-left so the empty wall has a discoverable
        *  path to intake. Tap → `/scan` → viewfinder → arrival. */}
       <RoomScanTrigger />
+      {/* Iteration #21 — View-mode toggle. Switches between grid
+       *  (default, conventional photo overview) and space (the
+       *  WebGPU Room canvas). Persists via OPFS. */}
+      <RoomViewToggle />
     </main>
   );
 }

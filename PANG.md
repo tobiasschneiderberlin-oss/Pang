@@ -6,8 +6,11 @@
 > `PANG_Spine.md`.
 >
 > Last updated: 2026-04-25 — v1 build pipeline closed; spine items
-> 0–11 in `main`. See `PANG_Spine.md` for the contract and
-> `PANG_Aha_Sprint.md` § Status for the iteration map.
+> 0–11 in `main`. Iter #21 (post-Laura test) added a grid view as
+> the default home with the Room as a one-tap toggle: PANG opens
+> as a familiar overview, the Room is the depth on top. See
+> `PANG_Spine.md` for the contract and `PANG_Aha_Sprint.md` §
+> Status for the iteration map.
 
 ---
 
