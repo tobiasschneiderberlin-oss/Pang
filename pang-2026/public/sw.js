@@ -22,7 +22,15 @@
 
 /* eslint-disable no-restricted-globals */
 
-const VERSION = "v0.1.0-iteration-0";
+// Bump on any SW logic change so old caches are dropped on activate.
+// iter #19: bump from v0.1.0-iteration-0 → v0.2.0-iter-19. Older
+// versions cached every navigation under the literal key "/" and a
+// 2 s network timeout would serve that stale cached "/" for any
+// later route. Combined with iter #17's pre-fix 500 page being
+// cached, users got a stuck "This page couldn't load" served from
+// their own SW instead of the live page. The fixes below scope
+// caches per-URL and tighten the offline fallback.
+const VERSION = "v0.2.0-iter-19";
 const SHELL_CACHE = `pang-shell-${VERSION}`;
 const RUNTIME_CACHE = `pang-runtime-${VERSION}`;
 
@@ -71,8 +79,16 @@ async function handleNavigation(event) {
   try {
     const preload = await event.preloadResponse;
     if (preload) {
-      // Warm the shell cache in the background.
-      cache.put("/", preload.clone()).catch(() => {});
+      // Cache only successful HTML navigations. iter #19: never
+      // cache a non-OK response — a 500 from a bad deploy would
+      // otherwise stick in the shell cache and be served as the
+      // offline fallback for every subsequent route. Cache only
+      // the Room shell (the home navigation) so an offline reload
+      // returns the wall, not whatever route the user happened to
+      // be on when the network dropped.
+      if (preload.ok && new URL(event.request.url).pathname === "/") {
+        cache.put("/", preload.clone()).catch(() => {});
+      }
       return preload;
     }
 
@@ -84,13 +100,20 @@ async function handleNavigation(event) {
     ]);
 
     const response = await networkRace;
-    if (response && response.ok) {
+    if (response && response.ok && new URL(event.request.url).pathname === "/") {
       cache.put("/", response.clone()).catch(() => {});
     }
     return response;
   } catch {
-    const cached = await cache.match("/");
-    if (cached) return cached;
+    // Offline fallback only for the home route. iter #19: a 2 s
+    // timeout on a slow `/scan` should NOT serve a cached `/`; let
+    // the browser surface the actual network failure instead. The
+    // collector's own retry on a slow connection then hits the
+    // network freshly rather than getting stuck on a stale shell.
+    if (new URL(event.request.url).pathname === "/") {
+      const cached = await cache.match("/");
+      if (cached) return cached;
+    }
     // Last resort — a minimal offline page. No network, no cache,
     // no shell. The register script reports this to observability.
     return new Response(

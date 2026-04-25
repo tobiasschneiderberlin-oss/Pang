@@ -56,7 +56,7 @@ import {
   type VerificationDispatchRequest,
   type VerificationDispatchResult,
 } from "@/verification/schema";
-import { requireSession, UnauthenticatedError } from "@/auth/server/session";
+import { readCurrentSession } from "@/auth/server/session";
 import { runCorrespondenceAgent, substitutePlaceholders } from "@/ai/agents/correspondence";
 import { signSignedLink } from "@/auth/server/signed-link";
 import { acceptGallery } from "@/ai/camel/trust";
@@ -135,18 +135,16 @@ export async function POST(request: Request): Promise<Response> {
     span.setAttribute("http.method", "POST");
     span.setAttribute("http.route", "/api/verification/dispatch");
 
-    // Auth gate.
-    let userId: string;
-    try {
-      const session = await requireSession();
-      userId = session.userId;
-      span.setAttribute("pang.auth.user_id", userId);
-    } catch (err) {
-      if (err instanceof UnauthenticatedError) {
-        span.setAttribute("pang.auth.fail_reason", err.reason);
-        return new Response(null, { status: 401 });
-      }
-      throw err;
+    // Auth gate relaxed in iter #19 — see request route for the
+    // doctrine note. The collector's contact is in the request body
+    // (channelContact) and becomes the identity carried into the
+    // mailto/wa.me URL. Annotate the span with anonymous vs
+    // authenticated so observability distinguishes the two paths.
+    const session = await readCurrentSession();
+    if (session) {
+      span.setAttribute("pang.auth.user_id", session.userId);
+    } else {
+      span.setAttribute("pang.auth.anonymous", true);
     }
 
     let bodyText: string;
