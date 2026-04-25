@@ -291,33 +291,33 @@ test.describe("settings-overlay-persistence — audioSpatial rehydrates", () => 
     await audioToggle.click();
     await expect(audioToggle).toHaveAttribute("data-state", "on");
 
-    // iter #16 (3rd extension): poll OPFS *directly* until the file
-    // contains audioSpatial="on". A fixed `waitForTimeout` covers
-    // an unknown variance — on chromium-mobile cold-cache CI both
-    // setTimeout granularity and the async `opfsWrite` chain
-    // (directory handle → file create → write → flush) can push
-    // past 2000 ms, masking under Playwright's automatic retry. By
-    // observing the file directly, we're deterministic: the wait
-    // ends *exactly* when persistence has landed, never sooner,
-    // never later. A real persistence regression now fails fast at
-    // the inner `waitForFunction` budget (10 s), not as an
-    // unexplained `Test timeout exceeded`.
-    await page.waitForFunction(
-      async () => {
-        try {
-          const root = await navigator.storage.getDirectory();
-          const dir = await root.getDirectoryHandle("prefs");
-          const handle = await dir.getFileHandle("index.json");
-          const file = await handle.getFile();
-          const text = await file.text();
-          return text.includes('"audioSpatial":"on"');
-        } catch {
-          return false;
-        }
-      },
-      undefined,
-      { timeout: 10_000 },
-    );
+    // iter #16 (4th extension): call the persistence flush helper
+    // *directly*. Three test-side approximations failed in turn:
+    //
+    //   1. `waitForTimeout(750)` — too tight on chromium-mobile cold
+    //      cache; debounce + async write outran it.
+    //   2. `waitForTimeout(2000)` — better, still racey under CI
+    //      variance; passed locally + on retry, flunked first attempt.
+    //   3. `waitForFunction(file-content poll)` — should have been
+    //      deterministic, but on chromium-mobile CI the predicate
+    //      timed out at 10 s while the page snapshot showed the
+    //      toggle was correctly flipped to "on" in memory. Either
+    //      the predicate's async OPFS read doesn't see the same OPFS
+    //      the persistence subscription writes to, or there's a
+    //      sandbox quirk under Pixel 7 emulation that the trace
+    //      didn't reveal.
+    //
+    // The flush helper is the principled fix: AppBoot exposes
+    // `__PANG.flushPreferencesPersistence` (E2E-only, gated on
+    // `NEXT_PUBLIC_PANG_E2E=1`); the helper resolves the moment any
+    // pending debounced write has completed. No timing guess, no
+    // file-poll, no race. The production app does not call it.
+    await page.evaluate(async () => {
+      const w = window as unknown as {
+        __PANG: { flushPreferencesPersistence: () => Promise<void> };
+      };
+      await w.__PANG.flushPreferencesPersistence();
+    });
 
     // Reload.
     await page.reload();

@@ -19,6 +19,7 @@
 import { useEffect } from "react";
 import { bindPreferencesToRoot, usePreferences } from "@design/preferences";
 import {
+  flushPreferencesPersistence,
   hydratePreferences,
   installPreferencesPersistence,
 } from "@design/preferences.persist";
@@ -114,6 +115,7 @@ export function AppBoot(): null {
             usePreferences: typeof usePreferences;
             authSeed: typeof authSeed;
             hydrationReady: Promise<void> | null;
+            flushPreferencesPersistence: typeof flushPreferencesPersistence;
           };
         }
       ).__PANG = {
@@ -123,6 +125,7 @@ export function AppBoot(): null {
         usePreferences,
         authSeed,
         hydrationReady,
+        flushPreferencesPersistence,
       };
     }
 

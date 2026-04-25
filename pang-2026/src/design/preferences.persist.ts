@@ -75,12 +75,42 @@ async function writePreferences(p: Preferences): Promise<void> {
 }
 
 /**
+ * Module-level reference to the most recently installed flush helper.
+ * E2E exposes this through `__PANG.flushPreferencesPersistence` so
+ * specs can deterministically wait for the next pending write to
+ * land in OPFS without guessing at debounce + I/O latency. Iter #16
+ * codified the pattern after fixed `waitForTimeout` and
+ * `waitForFunction(file-content poll)` both proved unreliable on
+ * chromium-mobile cold-cache CI.
+ *
+ * Null when no subscription is installed (server-side, OPFS-less
+ * navigators, between unsubscribe and re-install). Callers must
+ * handle null gracefully.
+ */
+let activeFlush: (() => Promise<void>) | null = null;
+
+/**
+ * Wait for any pending preferences write to complete. Resolves
+ * immediately if no write is pending. E2E-safe: the production app
+ * does not call this; the helper exists so tests don't have to
+ * race the 120 ms debounce.
+ */
+export async function flushPreferencesPersistence(): Promise<void> {
+  if (activeFlush) await activeFlush();
+}
+
+/**
  * Subscribe to the preferences store and write every change through
  * a 120 ms debounce. Returns an unsubscribe function the caller keeps
  * alive for the session and drops on unmount.
  *
  * Idempotent: re-installing clears the pending debounce timer, so the
  * next write is the latest snapshot, not a stale mid-drag value.
+ *
+ * Side-effect: replaces `activeFlush` with a closure that, when
+ * called, completes any debounced write *now* and returns the write
+ * Promise. Re-installing replaces the previous flush handle; the
+ * unsubscribe nulls it.
  */
 export function installPreferencesPersistence(): () => void {
   if (typeof navigator === "undefined") return () => {};
@@ -89,12 +119,16 @@ export function installPreferencesPersistence(): () => void {
   }
 
   let pending: ReturnType<typeof setTimeout> | null = null;
+  let pendingSnapshot: Preferences | null = null;
 
   const scheduleWrite = (p: Preferences): void => {
     if (pending !== null) clearTimeout(pending);
+    pendingSnapshot = p;
     pending = setTimeout(() => {
       pending = null;
-      void writePreferences(p);
+      const snap = pendingSnapshot;
+      pendingSnapshot = null;
+      if (snap) void writePreferences(snap);
     }, 120);
   };
 
@@ -111,11 +145,23 @@ export function installPreferencesPersistence(): () => void {
     // because we return a fresh object each time selecting.
   );
 
+  activeFlush = async (): Promise<void> => {
+    if (pending !== null && pendingSnapshot !== null) {
+      clearTimeout(pending);
+      pending = null;
+      const snap = pendingSnapshot;
+      pendingSnapshot = null;
+      await writePreferences(snap);
+    }
+  };
+
   return () => {
     if (pending !== null) {
       clearTimeout(pending);
       pending = null;
     }
+    pendingSnapshot = null;
+    activeFlush = null;
     unsubscribe();
   };
 }
