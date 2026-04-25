@@ -407,10 +407,18 @@ async function p10(): Promise<GateResult> {
     // scan her first work without already holding a session. The
     // route still calls `readCurrentSession()` to annotate the OTel
     // span (`pang.auth.user_id` vs `pang.auth.anonymous=true`), so
-    // observability distinguishes the two paths. The verification
-    // line (asking the gallery) keeps `requireSession()` — that's
-    // where identity actually matters.
+    // observability distinguishes the two paths.
     "app/api/intake/route.ts",
+    // Verification request + dispatch (iter #19). Collector's first
+    // outbound act; the AskGallery UI already collects the gallery
+    // contact (mailto/wa.me) which becomes the identity carried into
+    // the request. The gallery-side confirm/decline routes keep
+    // their signed-link auth — that's where identity actually
+    // matters. Both routes annotate the span with
+    // `pang.auth.user_id` vs `pang.auth.anonymous=true` so
+    // observability distinguishes the two paths.
+    "app/api/verification/request/route.ts",
+    "app/api/verification/dispatch/route.ts",
     // The auth surface itself — these routes are the auth gate.
     "app/api/auth/invite/bind/route.ts",
     "app/api/auth/invite/mint-dev/route.ts",

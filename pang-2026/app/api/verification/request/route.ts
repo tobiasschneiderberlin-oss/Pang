@@ -58,7 +58,7 @@ import {
   VoiceViolation,
 } from "@/ai/camel/sanitize";
 import { requestAckEvent } from "@/verification/otel";
-import { requireSession, UnauthenticatedError } from "@/auth/server/session";
+import { readCurrentSession } from "@/auth/server/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -81,16 +81,19 @@ export async function POST(request: Request): Promise<Response> {
     span.setAttribute("http.route", "/api/verification/request");
     const startedAt = performance.now();
 
-    // Auth gate (iter #9).
-    try {
-      const session = await requireSession();
+    // Auth gate relaxed in iter #19 — verification request is the
+    // collector's first outbound act and the AskGallery UI already
+    // collects the gallery contact (mailto/wa.me) that becomes the
+    // identity carried through the request. The gallery-side
+    // confirm/decline routes keep their signed-link auth, which is
+    // where identity actually matters. Annotate the span with
+    // anonymous vs authenticated so observability still distinguishes
+    // the two paths.
+    const session = await readCurrentSession();
+    if (session) {
       span.setAttribute("pang.auth.user_id", session.userId);
-    } catch (err) {
-      if (err instanceof UnauthenticatedError) {
-        span.setAttribute("pang.auth.fail_reason", err.reason);
-        return new Response(null, { status: 401 });
-      }
-      throw err;
+    } else {
+      span.setAttribute("pang.auth.anonymous", true);
     }
 
     // Body size gate — read as text to measure before parsing.
