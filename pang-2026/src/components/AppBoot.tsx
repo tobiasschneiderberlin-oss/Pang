@@ -192,6 +192,26 @@ export function AppBoot(): null {
         unsubscribeWorks = installWorksPersistence();
         unsubscribeVerification = installVerificationPersistence();
 
+        // iter #22: demo seed (REMOVE WITH src/demo/).
+        // Opt-in test affordance for product development before real
+        // gallery + Artlogic integrations land. Visiting any URL with
+        // `?seed=demo` populates the works store with 15 public-domain
+        // artworks; `?seed=clear` removes them. Cold install without
+        // the parameter remains empty, preserving the doctrine's
+        // "Laura is the baseline" rule. See `src/demo/REMOVAL.md`
+        // for the deletion procedure.
+        if (typeof window !== "undefined") {
+          const params = new URLSearchParams(window.location.search);
+          const seed = params.get("seed");
+          if (seed === "demo") {
+            const { seedDemoCollection } = await import("@/demo/seed");
+            seedDemoCollection();
+          } else if (seed === "clear") {
+            const { clearDemoCollection } = await import("@/demo/seed");
+            clearDemoCollection();
+          }
+        }
+
         // Reconcile the verification slice against the durable
         // outbox. Any drift (orphan outbox records, lost optimistic
         // flips) is resolved and logged via `verification.reconcile`.
