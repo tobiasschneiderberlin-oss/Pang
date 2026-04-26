@@ -42,9 +42,21 @@
   --color-warm-glow: var(--warm-glow);
   --color-cool: var(--cool);
 
-  /* Corners — two tiers, gate P9. Containers use 0 (no utility
-     needed); only chrome has a non-zero radius. */
+  /* Corners — chrome (2px) for affordances, tile (16px) for grid
+     image cards, hero (24px) for the full-screen detail image.
+     Plain containers stay 0 — the radii apply to image cards
+     specifically. */
   --radius-chrome: var(--r-chrome);
+  --radius-tile: var(--r-tile);
+  --radius-hero: var(--r-hero);
+
+  /* iter #23 supporting colors. */
+  --color-surface-elevated: var(--surface-elevated);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-hairline-verified: var(--hairline-verified);
+  --color-hairline-pending: var(--hairline-pending);
+  --color-action-primary: var(--action-primary);
+  --color-action-primary-on: var(--action-primary-on);
 
   /* Spacing — DS scale, mirrors SPACING_PX in locked.ts. P24
      asserts parity. */
