@@ -190,10 +190,15 @@ export function SettingsOverlay(): ReactElement {
         aria-expanded={isOpen}
         aria-controls="pang-settings-overlay"
         data-testid="pang-settings-trigger"
-        className="pointer-events-auto fixed right-4 top-[max(env(safe-area-inset-top),1rem)] z-40 grid h-11 min-w-11 place-items-center border border-hairline bg-paper-5 px-3 text-xs text-ink"
+        className="pointer-events-auto fixed right-4 top-[max(env(safe-area-inset-top),1rem)] z-40 grid h-11 w-11 place-items-center rounded-full bg-paper/90 text-ink shadow-sm backdrop-blur-md transition active:scale-95"
         style={{
-          borderRadius: "var(--r-chrome)",
           // Declare the anchor name so the popover can consume it.
+          // CSP `style-src` blocks `style=""` attribute values for
+          // properties that have a Tailwind utility (use the utility
+          // instead — `rounded-full` here). `anchor-name` has no
+          // utility today, so it stays inline; modern browsers parse
+          // it via the inline-style allowance the Anchor Positioning
+          // spec relies on.
           ["anchor-name" as unknown as string]: ANCHOR_NAME,
         }}
       >
@@ -316,18 +321,19 @@ export function SettingsOverlay(): ReactElement {
 function SettingsGlyph(): ReactElement {
   return (
     <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
       aria-hidden="true"
       focusable="false"
     >
-      <line x1="4" y1="2" x2="4" y2="14" stroke="currentColor" />
-      <line x1="8" y1="2" x2="8" y2="14" stroke="currentColor" />
-      <line x1="12" y1="2" x2="12" y2="14" stroke="currentColor" />
-      <circle cx="4" cy="6" r="1.5" fill="currentColor" />
-      <circle cx="8" cy="10" r="1.5" fill="currentColor" />
-      <circle cx="12" cy="5" r="1.5" fill="currentColor" />
+      <line x1="6" y1="3" x2="6" y2="21" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+      <line x1="12" y1="3" x2="12" y2="21" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+      <line x1="18" y1="3" x2="18" y2="21" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+      <circle cx="6" cy="9" r="2.25" fill="var(--paper)" stroke="currentColor" strokeWidth="1.75" />
+      <circle cx="12" cy="15" r="2.25" fill="var(--paper)" stroke="currentColor" strokeWidth="1.75" />
+      <circle cx="18" cy="7" r="2.25" fill="var(--paper)" stroke="currentColor" strokeWidth="1.75" />
     </svg>
   );
 }

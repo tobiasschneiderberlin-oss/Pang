@@ -49,8 +49,7 @@ export function RoomViewToggle(): ReactElement {
       aria-label={label}
       data-testid="pang-room-view-toggle"
       data-mode={viewMode}
-      className="pointer-events-auto fixed right-16 top-[max(env(safe-area-inset-top),1rem)] z-40 grid h-11 min-w-11 place-items-center border border-hairline bg-paper-5 px-3 text-xs text-ink"
-      style={{ borderRadius: "var(--r-chrome)" }}
+      className="pointer-events-auto fixed right-16 top-[max(env(safe-area-inset-top),1rem)] z-40 grid h-11 w-11 place-items-center rounded-full bg-paper/90 text-ink shadow-sm backdrop-blur-md transition active:scale-95"
     >
       {viewMode === "grid" ? <SpaceIcon /> : <GridIcon />}
     </button>
@@ -61,17 +60,17 @@ export function RoomViewToggle(): ReactElement {
 function SpaceIcon(): ReactElement {
   return (
     <svg
-      width="14"
-      height="14"
-      viewBox="0 0 14 14"
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
       fill="none"
       aria-hidden="true"
       focusable="false"
     >
       <path
-        d="M2 12V4l5-2 5 2v8M2 12h10M5 12V8h4v4"
+        d="M3 21V8l9-4 9 4v13M3 21h18M9 21v-7h6v7"
         stroke="currentColor"
-        strokeWidth="1.25"
+        strokeWidth="1.75"
         strokeLinejoin="round"
         strokeLinecap="round"
       />
@@ -83,17 +82,17 @@ function SpaceIcon(): ReactElement {
 function GridIcon(): ReactElement {
   return (
     <svg
-      width="14"
-      height="14"
-      viewBox="0 0 14 14"
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
       fill="none"
       aria-hidden="true"
       focusable="false"
     >
-      <rect x="2" y="2" width="4" height="4" stroke="currentColor" strokeWidth="1.25" />
-      <rect x="8" y="2" width="4" height="4" stroke="currentColor" strokeWidth="1.25" />
-      <rect x="2" y="8" width="4" height="4" stroke="currentColor" strokeWidth="1.25" />
-      <rect x="8" y="8" width="4" height="4" stroke="currentColor" strokeWidth="1.25" />
+      <rect x="3" y="3" width="7.5" height="7.5" rx="1" stroke="currentColor" strokeWidth="1.75" />
+      <rect x="13.5" y="3" width="7.5" height="7.5" rx="1" stroke="currentColor" strokeWidth="1.75" />
+      <rect x="3" y="13.5" width="7.5" height="7.5" rx="1" stroke="currentColor" strokeWidth="1.75" />
+      <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1" stroke="currentColor" strokeWidth="1.75" />
     </svg>
   );
 }

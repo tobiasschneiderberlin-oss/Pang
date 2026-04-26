@@ -41,21 +41,20 @@ export function RoomScanTrigger(): ReactElement {
       aria-label={ROOM_SCAN_TRIGGER_LABEL}
       data-testid="pang-room-scan-trigger"
       onClick={() => router.push("/scan")}
-      className="pointer-events-auto fixed left-4 top-[max(env(safe-area-inset-top),1rem)] z-40 grid h-11 min-w-11 place-items-center border border-hairline bg-paper-5 px-3 text-xs text-ink"
-      style={{ borderRadius: "var(--r-chrome)" }}
+      className="pointer-events-auto fixed left-4 top-[max(env(safe-area-inset-top),1rem)] z-40 grid h-11 w-11 place-items-center rounded-full bg-paper/90 text-ink shadow-sm backdrop-blur-md transition active:scale-95"
     >
       <svg
-        width="14"
-        height="14"
-        viewBox="0 0 14 14"
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
         fill="none"
         aria-hidden="true"
         focusable="false"
       >
         <path
-          d="M7 1.5V12.5M1.5 7H12.5"
+          d="M12 5V19M5 12H19"
           stroke="currentColor"
-          strokeWidth="1.25"
+          strokeWidth="1.75"
           strokeLinecap="round"
         />
       </svg>
