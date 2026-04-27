@@ -38,7 +38,7 @@
     "setup:hooks": "git -C .. config core.hooksPath pang-2026/scripts/git-hooks && echo 'pre-push hook wired. Skip with: git push --no-verify'"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.90.0",
+    "@anthropic-ai/sdk": "^0.91.1",
     "@mediapipe/tasks-vision": "^0.10.34",
     "@simplewebauthn/browser": "^11.0.0",
     "@simplewebauthn/server": "^11.0.0",
