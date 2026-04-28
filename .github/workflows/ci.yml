@@ -1,3 +1,15 @@
+# PANG — CI.
+#
+# Audit Day 3: typecheck + tests + build on every PR. Three jobs run
+# in parallel, all on Node 22 with pnpm via corepack. The previous
+# workflow targeted pang-2026/ and an npm/lockfile setup; that's gone.
+# This one runs against pang/ with pnpm.
+#
+# Adding a job? Pin its actions to a major version (@v6, not @latest)
+# and keep the working-directory rooted at pang/. Anything that needs
+# secrets goes in a separate workflow with `workflow_dispatch` so
+# accidental fork PRs don't burn cost.
+
 name: ci
 
 on:
@@ -9,171 +21,64 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Least-privilege default: jobs can read the checkout and nothing
-# more. Individual jobs opt in to extra scopes (e.g. the Claude
-# review job, if added later, needs `pull-requests: write`). Metadata
-# is always readable regardless of this block.
+# Least-privilege default — jobs read the checkout, nothing more.
 permissions:
   contents: read
 
+defaults:
+  run:
+    working-directory: pang
+
 jobs:
-  gates:
-    name: PANG gates
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: pang/.nvmrc
+      - name: Enable corepack (pnpm)
+        run: corepack enable
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm run typecheck
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: pang/.nvmrc
+      - name: Enable corepack (pnpm)
+        run: corepack enable
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Vitest
+        run: pnpm run test
+
+  build:
+    name: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      # Strict mode: skip → fail. Every gate must land pass or fail.
-      PANG_STRICT: "1"
-      # Supabase host used by next.config CSP construction. CI does
-      # not hit Supabase; the placeholder keeps the config typeable.
-      NEXT_PUBLIC_SUPABASE_HOST: "example.supabase.co"
-    defaults:
-      run:
-        working-directory: pang-2026
+      # CI does not hit Supabase / Anthropic / R2; these placeholders
+      # let the env validator pass at module load. NODE_ENV is left
+      # at the default Vercel sets at build time.
+      NEXT_PUBLIC_APP_URL: "http://localhost:3000"
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version-file: pang-2026/.nvmrc
-          cache: npm
-          cache-dependency-path: pang-2026/package-lock.json
-
-      # Cross-platform lockfile: the lockfile is authored on macOS
-      # arm64, which means npm on Linux x64 doesn't get the Linux
-      # optional binaries for lightningcss + @tailwindcss/oxide that
-      # Next.js 16 + Tailwind v4 need at build time. Install the main
-      # tree with `npm ci` (fast + strict), then top up the platform
-      # binaries explicitly. Same pattern Vercel uses internally.
+          node-version-file: pang/.nvmrc
+      - name: Enable corepack (pnpm)
+        run: corepack enable
       - name: Install
-        run: |
-          npm ci --no-audit --no-fund --prefer-offline
-          # Force-install Linux x64 native binaries that the macOS
-          # lockfile doesn't list. --no-save keeps package.json clean.
-          npm install --no-save --no-audit --no-fund \
-            lightningcss-linux-x64-gnu \
-            @tailwindcss/oxide-linux-x64-gnu
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Manifest check (P1)
-        run: npm run check:manifest
-
-      - name: String audit (voice doctrine)
-        run: npm run check:strings
-
-      - name: Gate runner (P1\u2013P10, P23\u2013P25 + A1\u2013A4, A7, A8, A16, A21)
-        run: npm run check:gates
-
-      # Next.js build cache, per the official CI-caching guide.
-      # Key: lockfile hash (deps) + source hash (code). Source change
-      # → new key but `restore-keys` falls back to the last cache
-      # with the same lockfile, so unchanged chunks stay cached.
-      # Lockfile change → full miss (intentional — upstream changed).
-      - name: Cache Next.js build
-        uses: actions/cache@v5
-        with:
-          path: pang-2026/.next/cache
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('pang-2026/package-lock.json') }}-${{ hashFiles('pang-2026/src/**/*.{js,jsx,ts,tsx,css}', 'pang-2026/app/**/*.{js,jsx,ts,tsx,css}') }}
-          restore-keys: |
-            ${{ runner.os }}-nextjs-${{ hashFiles('pang-2026/package-lock.json') }}-
-
+        run: pnpm install --frozen-lockfile
       - name: Build
-        run: npm run build
-
-      - name: A22 eval (mock — harness sanity)
-        run: npm run check:eval
-
-  e2e:
-    name: Playwright e2e (Tier 2)
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    needs: gates
-    env:
-      NEXT_PUBLIC_SUPABASE_HOST: "example.supabase.co"
-      # Serve the prod build via `next start` for parity with Vercel.
-      # Playwright's webServer respects CI=1 and runs `npm run start`.
-      CI: "1"
-      # `NEXT_PUBLIC_*` env vars are inlined by Next.js at **build**
-      # time, not read at runtime. The webServer env in
-      # `playwright.config.ts` is enough for local `next dev` (evaluates
-      # env live), but CI pre-builds with `npm run build` and then
-      # `next start` serves a static bundle — so the flag has to be
-      # present during the Build step below to compile the E2E seed
-      # hook (`window.__PANG.useWorks`, installed by `AppBoot`) into
-      # the production bundle. Without it, the hook is dead code and
-      # Playwright hangs waiting for `window.__PANG`.
-      NEXT_PUBLIC_PANG_E2E: "1"
-    defaults:
-      run:
-        working-directory: pang-2026
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version-file: pang-2026/.nvmrc
-          cache: npm
-          cache-dependency-path: pang-2026/package-lock.json
-
-      # Same install strategy as `gates` — see the comment there.
-      - name: Install
-        run: |
-          npm ci --no-audit --no-fund --prefer-offline
-          npm install --no-save --no-audit --no-fund \
-            lightningcss-linux-x64-gnu \
-            @tailwindcss/oxide-linux-x64-gnu
-
-      # Shared `.next/cache` with the gates job — same cache key
-      # means both jobs benefit from the other's warm cache on
-      # subsequent runs. Big win on unchanged-code PRs.
-      - name: Cache Next.js build
-        uses: actions/cache@v5
-        with:
-          path: pang-2026/.next/cache
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('pang-2026/package-lock.json') }}-${{ hashFiles('pang-2026/src/**/*.{js,jsx,ts,tsx,css}', 'pang-2026/app/**/*.{js,jsx,ts,tsx,css}') }}
-          restore-keys: |
-            ${{ runner.os }}-nextjs-${{ hashFiles('pang-2026/package-lock.json') }}-
-
-      # Build standalone. Earlier revisions tried sharing `.next/`
-      # from the gates job via upload/download-artifact to skip this
-      # ~2-minute rebuild, but that path hit an upload-artifact-v4
-      # hidden-files issue and a later webServer boot issue that
-      # wasn't worth chasing on CI hardware. The shared `.next/cache`
-      # above recovers most of the speedup safely.
-      - name: Build
-        run: npm run build
-
-      # Cache Playwright browsers across runs. The key is tied to
-      # `package-lock.json` (Playwright version moves with the lock).
-      # Cache hit → skip browser download, only install apt deps.
-      # Cache miss → full `install --with-deps`.
-      - name: Cache Playwright browsers
-        id: playwright-cache
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('pang-2026/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-playwright-
-
-      - name: Install Playwright browsers (cache miss)
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium
-
-      - name: Install Playwright system deps (cache hit)
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium
-
-      - name: Run Playwright (headless)
-        run: npm run test:e2e
-
-      - name: Upload Playwright report
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: playwright-report
-          path: pang-2026/playwright-report/
-          retention-days: 7
+        run: pnpm run build
