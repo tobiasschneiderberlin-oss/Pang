@@ -24,3 +24,9 @@ tsconfig.tsbuildinfo
 
 # Vitest coverage output
 coverage/
+
+# Local-only reference scrape of Galerie Droste pages (~73 MB).
+# Used by scripts/parse-gallery-reference.ts to extract metadata
+# into gallery_reference/derived.json (also gitignored). Never
+# committed — the source images live on Artlogic CDN.
+gallery_reference/
