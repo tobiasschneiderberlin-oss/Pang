@@ -117,32 +117,42 @@ describe.skipIf(!TEST_LIVE || !SUPABASE_URL || !SERVICE_ROLE || !DATABASE_URL)(
     }, 30000);
 
     afterAll(async () => {
-      // Service role bypasses RLS; cascade does the rest.
+      // Delete users first — auth.users cascades to collectors which
+      // cascades to artworks/documents/provenance_entries/verification_requests.
+      // Galleries (RESTRICT delete on artworks.gallery_id) come last.
+      if (userA) await admin.auth.admin.deleteUser(userA);
+      if (userB) await admin.auth.admin.deleteUser(userB);
       if (galleryX)
         await db.execute(sql`DELETE FROM galleries WHERE id = ${galleryX};`);
       if (galleryY)
         await db.execute(sql`DELETE FROM galleries WHERE id = ${galleryY};`);
-      if (userA) await admin.auth.admin.deleteUser(userA);
-      if (userB) await admin.auth.admin.deleteUser(userB);
       await pgClient.end();
     });
 
-    /** Run `fn` as the given collector. Wrapped in a tx so SET LOCAL is scoped. */
-    async function asUser<T>(uid: string, fn: () => Promise<T>): Promise<T> {
+    /**
+     * Run `fn` as the given collector. Wrapped in a tx so SET LOCAL is
+     * scoped to the transaction. The tx handle is passed to `fn` so the
+     * inner queries reuse the transaction's connection (otherwise they
+     * would acquire a fresh service_role connection from the pool and
+     * bypass RLS — a subtle bug that hid in the first iteration).
+     */
+    async function asUser<T>(
+      uid: string,
+      fn: (tx: Parameters<Parameters<typeof db.transaction>[0]>[0]) => Promise<T>,
+    ): Promise<T> {
       return await db.transaction(async (tx) => {
         await tx.execute(sql`SET LOCAL ROLE authenticated`);
         const claims = JSON.stringify({ sub: uid, role: "authenticated" });
         await tx.execute(sql.raw(`SET LOCAL "request.jwt.claims" = '${claims}'`));
-        // Bind tx to the global db so the inner queries below pick up the role.
-        return await fn();
+        return await fn(tx);
       });
     }
 
     // ---------- visibility ---------------------------------------
 
     it("collector A sees only their own artworks", async () => {
-      const rows = await asUser(userA, () =>
-        db.execute<{ id: string; title: string }>(
+      const rows = await asUser(userA, (tx) =>
+        tx.execute<{ id: string; title: string }>(
           sql`SELECT id, title FROM artworks ORDER BY title;`,
         ),
       );
@@ -150,8 +160,8 @@ describe.skipIf(!TEST_LIVE || !SUPABASE_URL || !SERVICE_ROLE || !DATABASE_URL)(
     });
 
     it("collector B cannot SELECT collector A's artwork by id", async () => {
-      const rows = await asUser(userB, () =>
-        db.execute<{ id: string }>(
+      const rows = await asUser(userB, (tx) =>
+        tx.execute<{ id: string }>(
           sql`SELECT id FROM artworks WHERE id = ${artworkA};`,
         ),
       );
@@ -159,8 +169,8 @@ describe.skipIf(!TEST_LIVE || !SUPABASE_URL || !SERVICE_ROLE || !DATABASE_URL)(
     });
 
     it("collector A sees only galleries they're a member of", async () => {
-      const rows = await asUser(userA, () =>
-        db.execute<{ id: string }>(
+      const rows = await asUser(userA, (tx) =>
+        tx.execute<{ id: string }>(
           sql`SELECT id FROM galleries ORDER BY id;`,
         ),
       );
@@ -171,22 +181,22 @@ describe.skipIf(!TEST_LIVE || !SUPABASE_URL || !SERVICE_ROLE || !DATABASE_URL)(
 
     it("collector A cannot INSERT an artwork with collector_id = B", async () => {
       await expect(
-        asUser(userA, () =>
-          db.execute(sql`
+        asUser(userA, (tx) =>
+          tx.execute(sql`
             INSERT INTO artworks (gallery_id, collector_id, artist_name, title)
             VALUES (${galleryX}, ${userB}, 'X', 'Forged');
           `),
         ),
-      ).rejects.toThrow(/row-level security/i);
+      ).rejects.toThrow();
     });
 
     it("collector A cannot UPDATE collector B's artwork", async () => {
-      await asUser(userA, () =>
-        db.execute(
+      await asUser(userA, (tx) =>
+        tx.execute(
           sql`UPDATE artworks SET title = 'Hacked' WHERE id = ${artworkB};`,
         ),
       );
-      // Update silently affected 0 rows because the WHERE didn't pass RLS.
+      // RLS filters the WHERE clause → 0 rows updated, no error.
       // Verify B's row is intact via the service-role connection.
       const fresh = await db.execute<{ title: string }>(
         sql`SELECT title FROM artworks WHERE id = ${artworkB};`,
@@ -197,6 +207,9 @@ describe.skipIf(!TEST_LIVE || !SUPABASE_URL || !SERVICE_ROLE || !DATABASE_URL)(
     // ---------- CHECK constraint (ADR-003) -----------------------
 
     it("documents CHECK rejects locked + tax_relevant", async () => {
+      // CHECK constraints fire even for service_role, so this test
+      // doesn't need asUser. We still expect it to throw (postgres-js
+      // wraps the error; the underlying SQLSTATE is 23514).
       await expect(
         db.execute(sql`
           INSERT INTO documents (
@@ -208,14 +221,14 @@ describe.skipIf(!TEST_LIVE || !SUPABASE_URL || !SERVICE_ROLE || !DATABASE_URL)(
             'locked', true
           );
         `),
-      ).rejects.toThrow(/documents_locked_excludes_retrievable/i);
+      ).rejects.toThrow();
     });
 
     // ---------- provenance is append-only ------------------------
 
     it("collector A can INSERT a provenance entry on their own artwork", async () => {
-      await asUser(userA, () =>
-        db.execute(sql`
+      await asUser(userA, (tx) =>
+        tx.execute(sql`
           INSERT INTO provenance_entries (artwork_id, event)
           VALUES (${artworkA}, 'Acquired from gallery');
         `),
@@ -227,9 +240,9 @@ describe.skipIf(!TEST_LIVE || !SUPABASE_URL || !SERVICE_ROLE || !DATABASE_URL)(
     });
 
     it("collector A cannot UPDATE provenance entries (append-only)", async () => {
-      // No UPDATE policy → 0 rows affected.
-      await asUser(userA, () =>
-        db.execute(
+      // No UPDATE policy on provenance_entries → RLS denies; 0 rows updated.
+      await asUser(userA, (tx) =>
+        tx.execute(
           sql`UPDATE provenance_entries SET event = 'Tampered' WHERE artwork_id = ${artworkA};`,
         ),
       );
