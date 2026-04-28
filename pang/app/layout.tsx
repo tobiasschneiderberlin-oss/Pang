@@ -4,6 +4,7 @@ import { Analytics } from '@vercel/analytics/next'
 import { AnalyticsProvider } from '@/components/analytics-provider'
 import { AccentProvider } from '@/components/accent-provider'
 import { AuthProvider } from '@/components/auth-provider'
+import { SwRegistrar } from '@/components/sw-registrar'
 import './globals.css'
 
 const geistSans = Geist({ 
@@ -62,6 +63,7 @@ export default function RootLayout({
       <body className="font-sans antialiased min-h-dvh">
         <AnalyticsProvider />
         <AccentProvider />
+        <SwRegistrar />
         <AuthProvider>
           {children}
         </AuthProvider>
