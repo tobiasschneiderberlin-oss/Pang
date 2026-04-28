@@ -17,3 +17,10 @@ node_modules
 
 # TS incremental build cache
 tsconfig.tsbuildinfo
+
+# signed-link consumed-marker store (test + dev scratch).
+# When Supabase replaces the filesystem store, this can go.
+.pang/
+
+# Vitest coverage output
+coverage/
