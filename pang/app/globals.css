@@ -1,0 +1,244 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+/* PANG - Gallery-inspired warm aesthetic */
+:root {
+  /* Near-white background with subtle warmth - gallery wall inspired */
+  --background: #f9f8f6;
+  --foreground: #2e2e2e;
+  
+  /* Cards: pure white */
+  --card: #ffffff;
+  --card-foreground: #2e2e2e;
+  
+  --popover: #ffffff;
+  --popover-foreground: #2e2e2e;
+  
+  /* Primary: Dark charcoal from logo */
+  --primary: #2e2e2e;
+  --primary-foreground: #ffffff;
+  
+  /* Secondary: Very light warm gray - almost white */
+  --secondary: #faf9f7;
+  --secondary-foreground: #4a4a4a;
+  
+  /* Muted: Light warm gray - same as artist row boxes */
+  --muted: #f0ebe0;
+  --muted-foreground: #6b6b6b;
+  
+  /* Accent: Neutral charcoal as default */
+  --accent: #2e2e2e;
+  --accent-foreground: #ffffff;
+  
+  --destructive: #c73e1d;
+  --destructive-foreground: #ffffff;
+  
+  --border: #ede8de;
+  --input: #faf9f7;
+  --ring: #2e2e2e;
+  
+  /* Chart colors - vibrant for visibility on light */
+  --chart-1: oklch(0.65 0.2 145);
+  --chart-2: oklch(0.7 0.18 45);
+  --chart-3: oklch(0.65 0.22 330);
+  --chart-4: oklch(0.6 0.18 250);
+  --chart-5: oklch(0.75 0.15 80);
+  
+  /* Larger radius for soft, rounded cards */
+  --radius: 1.25rem;
+  
+  --sidebar: #f9f8f6;
+  --sidebar-foreground: #2e2e2e;
+  --sidebar-primary: #2e2e2e;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f0ebe0;
+  --sidebar-accent-foreground: #2e2e2e;
+  --sidebar-border: #ede8de;
+  --sidebar-ring: #2e2e2e;
+}
+
+@theme inline {
+  --font-sans: 'Geist', 'Geist Fallback', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', 'Geist Mono Fallback', monospace;
+  
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  
+  /* Large rounded corners like Pillowtalk */
+  --radius-sm: calc(var(--radius) - 8px);
+  --radius-md: calc(var(--radius) - 4px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 8px);
+  --radius-2xl: calc(var(--radius) + 16px);
+  --radius-3xl: calc(var(--radius) + 24px);
+  
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  
+  /* Custom PANG colors */
+  --color-lavender: oklch(0.73 0.16 310);
+  --color-lavender-foreground: oklch(1 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  
+  html {
+    @apply bg-background;
+    /* PWA standalone mode optimizations */
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    overscroll-behavior: none;
+  }
+  
+  body {
+    @apply bg-background text-foreground antialiased;
+    min-height: 100dvh;
+  }
+  
+  /* Safe area padding for mobile notches */
+  .safe-area-inset-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  
+  .safe-area-inset-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+}
+
+/* Custom gradient backgrounds inspired by Pillowtalk */
+.gradient-sage {
+  background: linear-gradient(145deg, #5a6b4f 0%, #7a8b6f 50%, #9aab8f 100%);
+}
+
+.gradient-warm {
+  background: linear-gradient(180deg, #c45c26 0%, #e8a83c 25%, #f0e060 50%, #7cd490 75%, #4cb8d4 100%);
+}
+
+.gradient-sunset {
+  background: linear-gradient(180deg, #ff6b4a 0%, #ff9a5c 30%, #ffd06b 60%, #8fd49a 100%);
+}
+
+.gradient-pink-purple {
+  background: linear-gradient(145deg, #d4a0d4 0%, #a080d0 50%, #8060c0 100%);
+}
+
+.gradient-lime-dark {
+  background: linear-gradient(145deg, #1a2f1a 0%, #d4f34f 100%);
+}
+
+/* Organic blob animation */
+@keyframes blob-morph {
+  0%, 100% { border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; }
+  50% { border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%; }
+}
+
+.animate-blob {
+  animation: blob-morph 8s ease-in-out infinite;
+}
+
+/* Hide scrollbar */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Page transition animations */
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-page-enter {
+  animation: page-enter 0.3s ease-out forwards;
+}
+
+/* Card hover lift */
+@keyframes lift {
+  from { transform: translateY(0); }
+  to { transform: translateY(-4px); }
+}
+
+/* Skeleton shimmer */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, var(--muted) 25%, var(--background) 50%, var(--muted) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Image loading fade */
+@keyframes image-load {
+  from { opacity: 0; filter: blur(8px); }
+  to { opacity: 1; filter: blur(0); }
+}
+
+.animate-image-load {
+  animation: image-load 0.4s ease-out forwards;
+}
+
+/* Bottom sheet enter */
+@keyframes sheet-enter {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.animate-sheet-enter {
+  animation: sheet-enter 0.3s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+
+/* Haptic pulse for interactive elements */
+@keyframes haptic-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(0.97); }
+}
+
+.active\:animate-haptic:active {
+  animation: haptic-pulse 0.15s ease-out;
+}
