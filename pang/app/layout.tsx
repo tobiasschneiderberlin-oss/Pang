@@ -4,6 +4,7 @@ import { Analytics } from '@vercel/analytics/next'
 import { AnalyticsProvider } from '@/components/analytics-provider'
 import { AccentProvider } from '@/components/accent-provider'
 import { AuthProvider } from '@/components/auth-provider'
+import { PostHogProvider } from '@/components/posthog-provider'
 import { SwRegistrar } from '@/components/sw-registrar'
 import './globals.css'
 
@@ -65,7 +66,9 @@ export default function RootLayout({
         <AccentProvider />
         <SwRegistrar />
         <AuthProvider>
-          {children}
+          <PostHogProvider>
+            {children}
+          </PostHogProvider>
         </AuthProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
