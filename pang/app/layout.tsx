@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { AnalyticsProvider } from '@/components/analytics-provider'
 import { AccentProvider } from '@/components/accent-provider'
+import { AuthProvider } from '@/components/auth-provider'
 import './globals.css'
 
 const geistSans = Geist({ 
@@ -61,7 +62,9 @@ export default function RootLayout({
       <body className="font-sans antialiased min-h-dvh">
         <AnalyticsProvider />
         <AccentProvider />
-        {children}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
