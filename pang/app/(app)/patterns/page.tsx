@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Settings, Share2, TrendingUp, Palette, Calendar, MapPin } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
-import { artworks, artists } from "@/lib/data";
+import { artworks, artists } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { ShareSheet } from "@/components/share-sheet";
 import { CollectorMilestones } from "@/components/collector-milestones";

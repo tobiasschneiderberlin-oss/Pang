@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Search, X, Image as ImageIcon, User, Mic } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
-import { artworks, artists } from "@/lib/data";
+import { artworks, artists } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 interface SearchModalProps {

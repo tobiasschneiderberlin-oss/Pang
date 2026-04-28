@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { ChevronLeft, Instagram, Linkedin, Phone, Mail, Eye, EyeOff, Camera, ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { artworks } from "@/lib/data";
+import { artworks } from "@/lib/api";
 
 interface ProfilePageProps {
   params: Promise<{ username: string }>;

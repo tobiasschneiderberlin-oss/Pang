@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, Plus, FileText, Search, Filter, Download, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { artworks } from "@/lib/data";
+import { artworks } from "@/lib/api";
 import { DocumentScanner } from "@/components/document-scanner";
 
 type FilterType = 'all' | 'certificate' | 'invoice' | 'condition-report' | 'appraisal' | 'insurance';

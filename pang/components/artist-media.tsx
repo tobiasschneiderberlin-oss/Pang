@@ -4,7 +4,7 @@ import { useState, useRef } from "react";
 import Image from "next/image";
 import { Play, Pause, Volume2, Video, Mic, X, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { ArtistMedia, ArtistMessage } from "@/lib/data";
+import type { ArtistMedia, ArtistMessage } from "@/lib/api";
 
 // Voice note player
 export function VoiceNotePlayer({ note }: { note: ArtistMedia }) {

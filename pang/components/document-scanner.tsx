@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import { X, FileText, Sparkles, Check, Link2, ChevronRight, AlertCircle, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { artworks, type Artwork, type ArtworkDocument } from "@/lib/data";
+import { artworks, type Artwork, type ArtworkDocument } from "@/lib/api";
 
 interface ScannedDocument {
   id: string;

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { ChevronLeft, Share2, ExternalLink, Instagram, Globe, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getArtist, getArtworksByArtist } from "@/lib/data";
+import { getArtist, getArtworksByArtist } from "@/lib/api";
 import { ArtworkGridCard } from "@/components/artwork-card";
 import { VoiceNotePlayer, VideoThumbnail, VideoModal, ArtistMessageCard, StudioPhotos } from "@/components/artist-media";
 

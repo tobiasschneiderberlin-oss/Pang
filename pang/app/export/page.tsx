@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { ChevronLeft, FileText, Download, Mail, Share2, Check, Shield, FileSpreadsheet, Printer, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { artworks } from "@/lib/data";
+import { artworks } from "@/lib/api";
 
 type ExportType = 'insurance' | 'customs' | 'appraisal' | 'inventory' | 'pdf' | 'csv';
 

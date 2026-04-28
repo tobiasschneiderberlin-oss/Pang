@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Share2, Heart, FileText, Download } from "lucide-react";
-import { getArtwork, getArtist, artworks } from "@/lib/data";
+import { getArtwork, getArtist, artworks } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { ShareSheet } from "@/components/share-sheet";
 import { FullscreenViewer } from "@/components/fullscreen-viewer";
