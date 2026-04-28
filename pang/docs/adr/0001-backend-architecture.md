@@ -331,15 +331,15 @@ This means we never have a "big migration day." Artlogic risk is bounded from we
 
 ---
 
-## Open questions blocking action items 7, 11, 16
+## Resolutions (2026-04-28)
 
-These six need answers before week 2 work proceeds:
+The six open questions were resolved by the project owner. Action items 7, 11, and 16 are now unblocked.
 
-1. **Auth model** — do gallery staff share collector auth with role flags, or live in a separate auth context?
-2. **Data ownership** — collector or gallery? Affects deletion, export, and account-closure semantics.
-3. **Multi-gallery** — is the pilot single-gallery only, or do RLS policies pre-empt multi-tenant from day one?
-4. **Collector circle semantics** — can collectors see each other? Within a gallery only? Never?
-5. **AI extraction target** — exactly which fields does Claude extract from a scan? (Drives prompt design, schema, eval corpus.)
-6. **Document budget** — what counts as a "document"? Hard size cap? Encryption-at-rest mandatory or best-effort?
+1. **Auth model — separate.** Collectors use the `pang/` app; gallery staff use a future `pang-gallery/` app sharing `lib/auth/`. Two distinct auth contexts. The gallery portal does not yet exist; pencil it in around action items 16–17 (Week 5–6 follow-on after the collector PWA's foundation lands).
+2. **Data ownership — collector.** Artwork and document rows are owned by the collector. Galleries have read-only access via RLS for collectors who joined through their invite. On account closure: full export + delete of collector-owned rows. Provenance entries are append-only AND collector-owned — when ownership transfers, prior entries persist immutably. Privacy-aware collectors will have a "hide from gallery X" flag (multi-gallery membership case).
+3. **Multi-gallery — multi-tenant from day one.** Every row carries `gallery_id`; a `collector_gallery_membership` join table tracks which galleries see which collector. RLS policies pre-empt the multi-gallery case in the first migration. Cost: ~20% more SQL upfront, ~0% more later.
+4. **Collector circles — per-artist, ownership-gated.** A circle is the implicit set `{ collectors who own ≥1 work by artist X }`. Visibility surfaces inside the artist profile when the viewer is a member. Per-collector `discoverable_in_circles: boolean` flag for collectors who want to be invisible.
+5. **AI extraction target — Pipeline A only at launch.** Camera-on-the-work scan; supporting-document multi-image flow deferred. Schema, confidence model, and "no value/authenticity assessment" rule documented in [ADR-002](0002-ai-extraction-schema.md).
+6. **Document budget — standard tier only at launch.** Supabase encryption-at-rest + RLS + signed URLs (5-min TTL); optional locked tier (WebAuthn PRF) deferred until first user demand. Schema slot reserved from day one. Documented in [ADR-003](0003-document-sensitivity-tiers.md). Per-tenant KMS keys are a Year-1 milestone, not pilot work.
 
-Once these resolve, week 1 starts.
+Week 1 starts.
