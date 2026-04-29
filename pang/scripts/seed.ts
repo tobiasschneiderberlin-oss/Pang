@@ -33,12 +33,8 @@ import {
   artworks as artworksTbl,
   collectorGalleryMembership,
   collectors,
-  documents,
   galleries,
-  provenanceEntries,
 } from "../lib/db/schema";
-import { artists as srcArtists, artworks as srcArtworks } from "../lib/data";
-import type { ArtworkDocument, ProvenanceEntry } from "../lib/data";
 import derivedArtworks from "../lib/db/seed-data.json";
 
 type DerivedArtwork = (typeof derivedArtworks)[number];
@@ -67,31 +63,6 @@ const DEMO_COLLECTOR = {
   location: "Düsseldorf, DE",
   collectingSince: 2018,
 } as const;
-
-// ============================================================
-// Type-mapping helpers
-// ============================================================
-
-/** lib/data.ts uses kebab-case for the condition-report doc type;
- *  our DB enum uses snake_case. Otherwise the values match 1:1. */
-function mapDocumentType(t: ArtworkDocument["type"]): typeof documents.$inferInsert.type {
-  return t === "condition-report" ? "condition_report" : t;
-}
-
-/** lib/data.ts stores provenance dates as free-form strings ("2024",
- *  "1991-2003", "Spring 2024"). Coerce to a Postgres DATE. Anything
- *  unparseable becomes null. */
-function coerceProvenanceDate(raw: string): Date | null {
-  // Bare year: "2024"
-  if (/^\d{4}$/.test(raw)) return new Date(`${raw}-01-01T00:00:00Z`);
-  // ISO-ish: "2024-03-15"
-  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
-    const d = new Date(raw);
-    return isNaN(d.getTime()) ? null : d;
-  }
-  // Anything else: skip the date, keep the event narrative
-  return null;
-}
 
 // ============================================================
 // Implementation
@@ -129,68 +100,14 @@ async function main() {
       console.log(`  + gallery '${GALLERY.slug}' inserted`);
     }
 
-    // 2a. Artist profiles — 12 from data.ts
-    const artistIdBySlug: Record<string, string> = {};
+    // 2. Artist profiles — derived from the gallery_reference scrape.
+    //    Bios aren't in the scrape; rows are name-only and enriched
+    //    later via the gallery's curation UI.
     const artistIdByName: Record<string, string> = {};
-    for (const a of srcArtists) {
-      const found = await db
-        .select({ id: artistProfiles.id })
-        .from(artistProfiles)
-        .where(
-          and(
-            eq(artistProfiles.galleryId, galleryId),
-            eq(artistProfiles.name, a.name),
-          ),
-        );
-
-      if (found[0]) {
-        artistIdBySlug[a.id] = found[0].id;
-        artistIdByName[a.name] = found[0].id;
-        console.log(`  · artist '${a.name}'`);
-      } else {
-        const inserted = await db
-          .insert(artistProfiles)
-          .values({
-            galleryId,
-            name: a.name,
-            bio: a.bio ?? null,
-            nationality: a.nationality ?? null,
-            birthYear: a.birthYear ?? null,
-            imageUrl: a.imageUrl ?? null,
-            website: a.website ?? null,
-            instagram: a.instagram ?? null,
-            media: {
-              studioPhotos: a.studioPhotos,
-              voiceNotes: a.voiceNotes?.map((v) => ({
-                url: v.url,
-                title: v.title,
-                duration: v.duration,
-              })),
-              videos: a.videos?.map((v) => ({
-                url: v.url,
-                title: v.title,
-                duration: v.duration,
-                thumbnail: v.thumbnail,
-              })),
-              personalMessages: a.personalMessages,
-            },
-          })
-          .returning({ id: artistProfiles.id });
-        artistIdBySlug[a.id] = inserted[0].id;
-        artistIdByName[a.name] = inserted[0].id;
-        console.log(`  + artist '${a.name}'`);
-      }
-    }
-
-    // 2b. Artist profiles — additional artists from gallery_reference scrape
-    //     (Conrad Ruiz, Lena Valenzuela, Sojeong Lee, Tim Sandow, etc.).
-    //     Bios aren't in the scrape — the artist row is name-only and
-    //     can be enriched later via the gallery's curation UI.
     const derivedArtistNames = new Set(
       derivedArtworks.map((d) => d.artistName),
     );
     for (const name of derivedArtistNames) {
-      if (artistIdByName[name]) continue; // already inserted from data.ts
       const found = await db
         .select({ id: artistProfiles.id })
         .from(artistProfiles)
@@ -209,7 +126,7 @@ async function main() {
           .values({ galleryId, name })
           .returning({ id: artistProfiles.id });
         artistIdByName[name] = inserted[0].id;
-        console.log(`  + artist '${name}' (from scrape)`);
+        console.log(`  + artist '${name}'`);
       }
     }
 
@@ -290,107 +207,7 @@ async function main() {
       console.log(`  · membership`);
     }
 
-    // 6. Artworks — all 12 from data.ts
-    let inserted = 0;
-    let skipped = 0;
-    for (const aw of srcArtworks) {
-      const artistId = artistIdBySlug[aw.artistId] ?? null;
-
-      // Idempotent on (collector, title).
-      const found = await db
-        .select({ id: artworksTbl.id })
-        .from(artworksTbl)
-        .where(
-          and(
-            eq(artworksTbl.collectorId, userId),
-            eq(artworksTbl.title, aw.title),
-          ),
-        );
-
-      let artworkId: string;
-      if (found[0]) {
-        artworkId = found[0].id;
-        skipped++;
-      } else {
-        const ins = await db
-          .insert(artworksTbl)
-          .values({
-            galleryId,
-            collectorId: userId,
-            artistId,
-            artistName: aw.artistName,
-            title: aw.title,
-            year: aw.year,
-            medium: aw.medium,
-            dimensions: aw.dimensions,
-            imageUrl: aw.imageUrl,
-            description: aw.description ?? null,
-            visibility: aw.visibility ?? "private",
-            verified: aw.verified ?? false,
-            verifiedAt: aw.verifiedDate
-              ? new Date(aw.verifiedDate)
-              : null,
-          })
-          .returning({ id: artworksTbl.id });
-        artworkId = ins[0].id;
-        inserted++;
-      }
-
-      // Documents (idempotent on title within artwork).
-      if (aw.documents) {
-        for (const doc of aw.documents) {
-          const docFound = await db
-            .select({ id: documents.id })
-            .from(documents)
-            .where(
-              and(
-                eq(documents.artworkId, artworkId),
-                eq(documents.title, doc.title),
-              ),
-            );
-          if (docFound[0]) continue;
-          await db.insert(documents).values({
-            galleryId,
-            collectorId: userId,
-            artworkId,
-            type: mapDocumentType(doc.type),
-            title: doc.title,
-            storagePath: `legacy/artlogic/${doc.id}`,
-            // Mark CoAs and invoices as tax-relevant by default — sane
-            // GwG/§ 147 AO posture; collectors can opt out per-doc.
-            taxRelevant: doc.type === "invoice" || doc.type === "appraisal",
-          });
-        }
-      }
-
-      // Provenance entries (idempotent on (artwork, event_date, event)).
-      if (aw.provenance) {
-        for (const p of aw.provenance as ProvenanceEntry[]) {
-          const eventDate = coerceProvenanceDate(p.date);
-          // Skip dupes — composite check (event_date + event).
-          const provFound = await db
-            .select({ id: provenanceEntries.id })
-            .from(provenanceEntries)
-            .where(
-              and(
-                eq(provenanceEntries.artworkId, artworkId),
-                eq(provenanceEntries.event, p.event),
-              ),
-            );
-          if (provFound[0]) continue;
-          await db.insert(provenanceEntries).values({
-            artworkId,
-            eventDate,
-            event: p.event,
-            location: p.location ?? null,
-            photos: p.photos ?? null,
-          });
-        }
-      }
-    }
-    console.log(`  + ${inserted} artworks inserted, ${skipped} existed (from data.ts)`);
-
-    // 7. Artworks — additional from gallery_reference scrape
+    // 6. Artworks — only from the gallery_reference scrape.
     let dInserted = 0;
     let dSkipped = 0;
     for (const d of derivedArtworks as DerivedArtwork[]) {
