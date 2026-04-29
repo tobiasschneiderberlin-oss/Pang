@@ -327,13 +327,12 @@ async function main() {
       }
 
       // Update artwork-level fields (only those the entry sets).
+      // Verification status is intentionally NOT touched here — the
+      // verified/verifiedAt columns remain on the row for future use,
+      // but no UI surfaces them and nothing in the demo flow sets them.
       const patch: Record<string, unknown> = { updatedAt: new Date() };
       if (entry.description !== undefined) patch.description = entry.description;
       if (entry.movement !== undefined) patch.movement = entry.movement;
-      if (entry.verifiedAt !== undefined) {
-        patch.verified = true;
-        patch.verifiedAt = new Date(entry.verifiedAt);
-      }
       await db.update(artworksTbl).set(patch).where(eq(artworksTbl.id, art.id));
 
       // Provenance — replace existing entries idempotently.

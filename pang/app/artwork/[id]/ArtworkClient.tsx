@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { Check, ChevronLeft, ChevronRight, Share2, Heart, FileText, Download } from "lucide-react";
+import { ChevronLeft, ChevronRight, Share2, Heart, FileText, Download } from "lucide-react";
 import type { Artist, Artwork } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { ShareSheet } from "@/components/share-sheet";
@@ -97,9 +97,14 @@ export default function ArtworkClient({
           sizes="100vw"
         />
 
-        {/* Back button - minimal semi-transparent chevron, top-left */}
+        {/* Back button - minimal semi-transparent chevron, top-left.
+            stopPropagation so the click doesn't also trigger the parent
+            div's onClick (which opens the fullscreen viewer). */}
         <button
-          onClick={handleBack}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleBack();
+          }}
           className="absolute top-4 left-4 safe-area-inset-top z-10 w-10 h-10 rounded-full flex items-center justify-center transition-opacity hover:opacity-100"
           style={{
             background: "rgba(46, 46, 46, 0.6)",
@@ -168,17 +173,6 @@ export default function ArtworkClient({
         <p className="text-sm text-muted-foreground">
           {artwork.dimensions}
         </p>
-
-        {/* Verified badge — appears only for gallery-confirmed works */}
-        {artwork.verified && (
-          <div className="inline-flex items-center gap-1.5 mt-3 px-2.5 py-1 rounded-full bg-accent/10 text-accent text-xs font-medium">
-            <Check size={12} strokeWidth={3} />
-            Verified by Galerie Droste
-            {artwork.verifiedDate && (
-              <span className="opacity-70">· {artwork.verifiedDate}</span>
-            )}
-          </div>
-        )}
 
         {/* Artist row - tappable entry to artist page */}
         {artist && (

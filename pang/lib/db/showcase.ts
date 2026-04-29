@@ -37,8 +37,6 @@ export type ShowcaseProvenance = {
 };
 
 export type ShowcaseEntry = {
-  /** ISO date — sets verified=true + verifiedAt on the row. */
-  verifiedAt?: string;
   /** Editorial period / movement tag. Free text. */
   movement?: string;
   /** Override the scrape's blurb with a longer curatorial paragraph. */
@@ -49,7 +47,6 @@ export type ShowcaseEntry = {
 
 export const SHOWCASE: Record<string, ShowcaseEntry> = {
   "Laust Højgaard::Turmoil Rising": {
-    verifiedAt: "2026-02-04",
     movement: "Contemporary",
     provenance: [
       { date: "2025", event: "Created by artist", location: "Copenhagen studio" },
@@ -59,7 +56,6 @@ export const SHOWCASE: Record<string, ShowcaseEntry> = {
   },
 
   "Raphael Brunk::Resonant Reverie": {
-    verifiedAt: "2024-03-22",
     movement: "Post-digital figuration",
     provenance: [
       { date: "2023", event: "Created by artist", location: "Berlin studio" },
@@ -69,7 +65,6 @@ export const SHOWCASE: Record<string, ShowcaseEntry> = {
   },
 
   "Conrad Ruiz::Go Go Love (CK One Forever)": {
-    verifiedAt: "2025-04-18",
     movement: "Contemporary watercolor",
     provenance: [
       { date: "2024", event: "Created by artist", location: "Los Angeles studio" },
@@ -79,7 +74,6 @@ export const SHOWCASE: Record<string, ShowcaseEntry> = {
   },
 
   "Willehad Eilers::Das Leben Das Leben": {
-    verifiedAt: "2025-12-09",
     movement: "Contemporary figuration",
     provenance: [
       { date: "2025", event: "Created by artist", location: "Berlin studio" },
@@ -89,7 +83,6 @@ export const SHOWCASE: Record<string, ShowcaseEntry> = {
   },
 
   "Sojeong Lee::Out of Reach": {
-    verifiedAt: "2026-03-15",
     movement: "Contemporary",
     provenance: [
       { date: "2026", event: "Created by artist", location: "Seoul studio" },
@@ -99,7 +92,6 @@ export const SHOWCASE: Record<string, ShowcaseEntry> = {
   },
 
   "Andrew Schoultz::Green Owl With Stained Glass": {
-    verifiedAt: "2026-04-22",
     movement: "Contemporary symbolism",
     provenance: [
       { date: "2026", event: "Created by artist", location: "Los Angeles studio" },

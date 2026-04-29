@@ -71,10 +71,9 @@ function toArtwork(row: DbArtwork): Artwork {
     visibility:
       (row.visibility as "private" | "shared" | "public" | undefined) ??
       "private",
-    verified: row.verified,
-    verifiedDate: row.verifiedAt
-      ? row.verifiedAt.toISOString().slice(0, 10)
-      : undefined,
+    // Verification fields exist on the row but are intentionally not
+    // surfaced in the API — no UI renders them today.
+    verified: false,
     description: row.description ?? undefined,
     movement: row.movement ?? undefined,
   };
