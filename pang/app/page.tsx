@@ -1,70 +1,89 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+
+// Animation timing — keep these two in sync.
+const ANIMATION_MS = 2400;
+const NAV_DELAY_MS = ANIMATION_MS;
 
 export default function SplashPage() {
   const router = useRouter();
-  const [isExiting, setIsExiting] = useState(false);
 
   useEffect(() => {
-    const hasOnboarded = localStorage.getItem("pang-onboarded");
+    const hasOnboarded =
+      typeof window !== "undefined" &&
+      window.localStorage.getItem("pang-onboarded");
 
-    // Start fade-out just before animation ends (1.8s total)
-    const exitTimer = setTimeout(() => {
-      setIsExiting(true);
-    }, 1500);
-
-    // Navigate after fade-out completes
     const navTimer = setTimeout(() => {
-      if (hasOnboarded) {
-        router.replace("/collection");
-      } else {
-        router.replace("/onboarding");
-      }
-    }, 1900);
+      router.replace(hasOnboarded ? "/collection" : "/onboarding");
+    }, NAV_DELAY_MS);
 
-    return () => {
-      clearTimeout(exitTimer);
-      clearTimeout(navTimer);
-    };
+    return () => clearTimeout(navTimer);
   }, [router]);
 
   return (
-    <main
-      className="min-h-dvh w-screen overflow-hidden flex items-center justify-center bg-background"
-      style={{
-        opacity: isExiting ? 0 : 1,
-        transition: isExiting ? "opacity 400ms ease-in-out" : "none",
-      }}
-    >
+    <main className="min-h-dvh w-screen overflow-hidden flex items-center justify-center bg-background">
       <img
         src="/pang-logo.svg"
         alt="PANG"
-        width={800}
-        height={800}
+        width={320}
+        height={320}
         className="splash-logo"
+        // Hint to the browser: this layer is animated; promote to its
+        // own composite layer for jank-free transforms on mobile Safari.
+        style={{ willChange: "transform, opacity, filter" }}
       />
 
       <style>{`
         .splash-logo {
-          animation: splashZoom 1.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+          /* Single curve for the whole arc — Material standard easing —
+             so the inhale (zoom in) and exhale (zoom out) feel like one
+             breath instead of two abrupt phases. */
+          animation: splashBreath 2.4s cubic-bezier(0.65, 0, 0.35, 1) both;
         }
 
-        @keyframes splashZoom {
+        @keyframes splashBreath {
+          /* Inhale: small + soft → full size + sharp.  Logo arrives. */
           0% {
             opacity: 0;
-            transform: scale(0.15);
-            filter: blur(4px);
+            transform: scale(0.72);
+            filter: blur(10px);
           }
-          25% {
+          22% {
             opacity: 1;
-            filter: blur(0px);
+            filter: blur(0);
           }
+          38% {
+            transform: scale(1);
+          }
+          /* Hold: full size, fully visible.  Reading beat. */
+          62% {
+            transform: scale(1);
+            opacity: 1;
+            filter: blur(0);
+          }
+          /* Exhale: gentle scale-down + fade. Never overshoots past 1
+             so the full word stays readable on the way out. */
           100% {
-            opacity: 1;
-            transform: scale(3.2);
-            filter: blur(0px);
+            opacity: 0;
+            transform: scale(0.94);
+            filter: blur(3px);
+          }
+        }
+
+        /* Honour the OS-level reduce-motion preference — show the logo
+           at rest with a simple fade. Some users get nauseous from
+           zoom animations. */
+        @media (prefers-reduced-motion: reduce) {
+          .splash-logo {
+            animation: splashFade 2.4s ease-out both;
+          }
+          @keyframes splashFade {
+            0% { opacity: 0; }
+            12% { opacity: 1; }
+            88% { opacity: 1; }
+            100% { opacity: 0; }
           }
         }
       `}</style>
