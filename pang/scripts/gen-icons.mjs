@@ -42,3 +42,30 @@ await emit('apple-touch-icon.png', 180);
 // holds the glyph regardless of how the OS clips the icon.
 await emit('icon-maskable-192.png', 192, { padding: 0.1 });
 await emit('icon-maskable-512.png', 512, { padding: 0.1 });
+
+// Browser-tab favicons. Two sizes covers most rendering targets —
+// 32 for desktop tabs, 16 as a fallback for legacy / very small UIs.
+async function emitFavicon(name, size) {
+  const buf = await sharp(svg, { density: 384 })
+    .resize(size, size, { fit: 'contain', background: bg })
+    .flatten({ background: bg })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+  // App Router convention: app/icon.png is auto-wired as the favicon.
+  // Writing to public/ as well so any hard-coded /favicon.png lookups
+  // also hit a real file.
+  writeFileSync(join(root, 'public', name), buf);
+  console.log('wrote public/' + name, buf.length, 'bytes');
+}
+await emitFavicon('favicon-16.png', 16);
+await emitFavicon('favicon-32.png', 32);
+
+// Drop a 32x32 PNG at app/icon.png — Next App Router picks this up
+// automatically as the route's favicon, so no <link> wiring is needed.
+const appIcon = await sharp(svg, { density: 384 })
+  .resize(32, 32, { fit: 'contain', background: bg })
+  .flatten({ background: bg })
+  .png({ compressionLevel: 9 })
+  .toBuffer();
+writeFileSync(join(root, 'app', 'icon.png'), appIcon);
+console.log('wrote app/icon.png', appIcon.length, 'bytes');
