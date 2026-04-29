@@ -48,8 +48,13 @@ export async function listArtists(): Promise<readonly Artist[]> {
   return rows.map(toArtist);
 }
 
+/** RFC 4122 UUID shape — gate before the DB query so malformed ids
+ *  return undefined instead of letting Postgres throw. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** Find an artist by id. Returns `undefined` when not found. */
 export async function getArtistById(id: string): Promise<Artist | undefined> {
+  if (!UUID_RE.test(id)) return undefined;
   const rows = await db
     .select()
     .from(artistProfiles)

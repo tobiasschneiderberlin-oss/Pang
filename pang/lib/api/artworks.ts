@@ -65,8 +65,14 @@ export async function listArtworks(): Promise<readonly Artwork[]> {
   return rows.map(toArtwork);
 }
 
+/** RFC 4122 UUID shape — used to short-circuit before the DB query
+ *  so a malformed id (e.g. "aaaa" from a hand-typed URL) returns undefined
+ *  instead of letting Postgres throw `invalid input syntax for type uuid`. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** Find an artwork by id. Returns `undefined` when not found / not visible. */
 export async function getArtworkById(id: string): Promise<Artwork | undefined> {
+  if (!UUID_RE.test(id)) return undefined;
   const rows = await db
     .select()
     .from(artworksTbl)
@@ -79,6 +85,7 @@ export async function getArtworkById(id: string): Promise<Artwork | undefined> {
 export async function listArtworksByArtist(
   artistId: string,
 ): Promise<readonly Artwork[]> {
+  if (!UUID_RE.test(artistId)) return [];
   const rows = await db
     .select()
     .from(artworksTbl)
