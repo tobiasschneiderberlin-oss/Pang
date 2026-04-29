@@ -16,7 +16,9 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx scripts/seed.ts",
-    "db:seed:demo": "RUN_DEMO=1 tsx scripts/seed.ts"
+    "db:seed:demo": "RUN_DEMO=1 tsx scripts/seed.ts",
+    "db:scrape": "tsx scripts/scrape-artlogic.ts",
+    "db:scrape:fresh": "tsx scripts/scrape-artlogic.ts --fresh"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

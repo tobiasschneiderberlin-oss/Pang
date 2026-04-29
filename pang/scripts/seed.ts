@@ -36,8 +36,15 @@ import {
   galleries,
 } from "../lib/db/schema";
 import derivedArtworks from "../lib/db/seed-data.json";
+import derivedArtists from "../lib/db/seed-artists.json";
 
 type DerivedArtwork = (typeof derivedArtworks)[number];
+type DerivedArtist = (typeof derivedArtists)[number];
+
+/** Lookup table: artist name → rich record from seed-artists.json. */
+const richByName: Record<string, DerivedArtist> = Object.fromEntries(
+  derivedArtists.map((a) => [a.name, a]),
+);
 
 try {
   process.loadEnvFile(".env.local");
@@ -100,14 +107,17 @@ async function main() {
       console.log(`  + gallery '${GALLERY.slug}' inserted`);
     }
 
-    // 2. Artist profiles — derived from the gallery_reference scrape.
-    //    Bios aren't in the scrape; rows are name-only and enriched
-    //    later via the gallery's curation UI.
+    // 2. Artist profiles — rich rows from seed-artists.json + name-only
+    //    fallback for any artist that appears in artworks but didn't
+    //    have an overview page on the gallery's website.
     const artistIdByName: Record<string, string> = {};
-    const derivedArtistNames = new Set(
-      derivedArtworks.map((d) => d.artistName),
-    );
-    for (const name of derivedArtistNames) {
+    const allArtistNames = new Set<string>([
+      ...derivedArtists.map((a) => a.name),
+      ...derivedArtworks.map((d) => d.artistName),
+    ]);
+
+    for (const name of allArtistNames) {
+      const rich = richByName[name];
       const found = await db
         .select({ id: artistProfiles.id })
         .from(artistProfiles)
@@ -117,16 +127,40 @@ async function main() {
             eq(artistProfiles.name, name),
           ),
         );
+
       if (found[0]) {
         artistIdByName[name] = found[0].id;
-        console.log(`  · artist '${name}'`);
+        // Backfill bio + photo + socials if we have richer data than
+        // what's in the DB. UPDATE is idempotent on the same content.
+        if (rich) {
+          await db
+            .update(artistProfiles)
+            .set({
+              bio: rich.bio ?? null,
+              imageUrl: rich.imageUrl ?? null,
+              website: rich.website ?? null,
+              instagram: rich.instagram ?? null,
+              updatedAt: new Date(),
+            })
+            .where(eq(artistProfiles.id, found[0].id));
+          console.log(`  · artist '${name}' (refreshed)`);
+        } else {
+          console.log(`  · artist '${name}'`);
+        }
       } else {
         const inserted = await db
           .insert(artistProfiles)
-          .values({ galleryId, name })
+          .values({
+            galleryId,
+            name,
+            bio: rich?.bio ?? null,
+            imageUrl: rich?.imageUrl ?? null,
+            website: rich?.website ?? null,
+            instagram: rich?.instagram ?? null,
+          })
           .returning({ id: artistProfiles.id });
         artistIdByName[name] = inserted[0].id;
-        console.log(`  + artist '${name}'`);
+        console.log(`  + artist '${name}'${rich?.bio ? " (with bio)" : ""}`);
       }
     }
 
