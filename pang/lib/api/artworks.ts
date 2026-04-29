@@ -57,7 +57,25 @@ function formatProvenanceDate(iso: string): string {
   return `${MONTHS[month - 1]} ${day}, ${year}`;
 }
 
+/** Artlogic's CDN delivers every image with a forced 1200x630 landscape
+ *  crop baked into the URL (`w_1200,h_630,c_fill`). That destroys
+ *  portrait artworks at the source — by the time our app sees the
+ *  pixels, the work has already been cropped.
+ *
+ *  Replace `c_fill` (crop to fill aspect) with `c_limit` (cap width,
+ *  preserve aspect, no upscale) so the CDN serves the artwork at its
+ *  native proportions. The `h_*` segment is dropped: with `c_limit` we
+ *  only need a width ceiling. 1600px covers a 3-col masonry tile at
+ *  retina density on phones and the full 65dvh hero on detail. */
+function nativeAspectImageUrl(url: string): string {
+  return url.replace(
+    /\/w_\d+,h_\d+,c_fill,/,
+    "/w_1600,c_limit,",
+  );
+}
+
 function toArtwork(row: DbArtwork): Artwork {
+  const rawUrl = row.imageUrl ?? "/placeholder.svg";
   return {
     id: row.id,
     title: row.title,
@@ -66,7 +84,7 @@ function toArtwork(row: DbArtwork): Artwork {
     year: row.year ?? 0,
     medium: row.medium ?? "",
     dimensions: row.dimensions ?? "",
-    imageUrl: row.imageUrl ?? "/placeholder.svg",
+    imageUrl: nativeAspectImageUrl(rawUrl),
     gradient: gradientFor(row.id),
     visibility:
       (row.visibility as "private" | "shared" | "public" | undefined) ??
