@@ -50,35 +50,11 @@ export default function SplashPage() {
 
   return (
     <main className="splash-stage min-h-dvh w-screen overflow-hidden bg-background relative">
-      {/* Beat 1 — wordmark zooms in, then fades behind the flash */}
-      <img
-        src="/pang-logo.svg"
-        alt="PANG"
-        width={320}
-        height={320}
-        className="splash-logo splash-logo-1"
-        // opacity:0 inline so the img is invisible from the FIRST paint —
-        // before the <style> block below is parsed. Without this, the
-        // logos flash at full size for a frame before the CSS class
-        // hides them; reads as a phantom icon flicker on slow devices.
-        // The CSS animation overrides this once it runs.
-        style={{ opacity: 0, willChange: "transform, opacity, filter" }}
-      />
-
-      {/* Beat 3 — splash variant settles in after the flash */}
-      <img
-        src="/pang-splash-logo.svg"
-        alt="PANG"
-        width={320}
-        height={320}
-        className="splash-logo splash-logo-2"
-        style={{ opacity: 0, willChange: "transform, opacity, filter" }}
-        aria-hidden="true"
-      />
-
-      {/* Beat 2 — dark flash overlay covers the cross-fade */}
-      <div className="splash-flash" aria-hidden="true" />
-
+      {/* The <style> block is emitted BEFORE the <img> elements so the
+          browser has parsed `.splash-logo { opacity: 0 }` by the time it
+          encounters them. Without this ordering, on slower paints (Pixel
+          Chrome) the imgs render visibly for one frame before the rule
+          applies — reads as a phantom splat icon flashing in. */}
       <style>{`
         .splash-stage {
           display: grid;
@@ -136,8 +112,14 @@ export default function SplashPage() {
 
         @keyframes splashLogo2 {
           /* Visible the instant its delay expires (under the flash).
-             Smashed from peak scale back to 1.0 with strong ease-out. */
-          0%   { opacity: 1; transform: scale(${PEAK_SCALE}); filter: blur(0); }
+             Smashed from peak scale back to 1.0 with strong ease-out.
+             0% holds opacity:0 for an infinitesimal moment, then 0.01%
+             jumps to opacity:1 — defensive against any browser race
+             where the keyframe interpolator paints the 0% state for
+             a frame before the delay expires. Net effect is invisible
+             to the user, but eliminates the one-frame splat flash. */
+          0%      { opacity: 0; transform: scale(${PEAK_SCALE}); filter: blur(0); }
+          0.01%   { opacity: 1; transform: scale(${PEAK_SCALE}); filter: blur(0); }
           ${pct(SPLASH_IN_MS, SPLASH_IN_MS + SPLASH_HOLD_MS + OUT_MS)} { opacity: 1; transform: scale(1); filter: blur(0); }
           ${pct(SPLASH_IN_MS + SPLASH_HOLD_MS, SPLASH_IN_MS + SPLASH_HOLD_MS + OUT_MS)} { opacity: 1; transform: scale(1); filter: blur(0); }
           100% { opacity: 0; transform: scale(0.98); filter: blur(2px); }
@@ -164,6 +146,39 @@ export default function SplashPage() {
           }
         }
       `}</style>
+
+      {/* Beat 1 — wordmark zooms in, then fades behind the flash */}
+      <img
+        src="/pang-logo.svg"
+        alt="PANG"
+        width={320}
+        height={320}
+        className="splash-logo splash-logo-1"
+        // opacity:0 inline as a defence-in-depth: the <style> block
+        // above already covers this via .splash-logo, but the inline
+        // value is honoured before the stylesheet is parsed in case
+        // of an unusual paint order. The CSS animation overrides it
+        // once the choreography starts.
+        style={{ opacity: 0, willChange: "transform, opacity, filter" }}
+      />
+
+      {/* Beat 3 — splash variant settles in after the flash */}
+      <img
+        src="/pang-splash-logo.svg"
+        alt="PANG"
+        width={320}
+        height={320}
+        className="splash-logo splash-logo-2"
+        // No `willChange` here: the splash logo doesn't paint until
+        // the cut at ~630ms, and promoting it to its own compositor
+        // layer up-front is a known source of one-frame opacity:1
+        // glitches on Android Chrome.
+        style={{ opacity: 0 }}
+        aria-hidden="true"
+      />
+
+      {/* Beat 2 — dark flash overlay covers the cross-fade */}
+      <div className="splash-flash" aria-hidden="true" />
     </main>
   );
 }

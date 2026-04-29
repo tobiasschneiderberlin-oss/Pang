@@ -1,12 +1,9 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import { 
-  Search, 
-  Check, 
-  Share2,
-  Trash2,
-  Tag,
+import {
+  Search,
+  Check,
   Settings,
   FileText,
   Download,
@@ -17,7 +14,6 @@ import {
   LogOut
 } from "lucide-react";
 import Link from "next/link";
-import Image from "next/image";
 import type { Artwork, Artist } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -43,25 +39,11 @@ export default function CollectionClient({
 }) {
   const [zoomLevel, setZoomLevel] = useState<ZoomLevel>(3);
   const [activeFilter, setActiveFilter] = useState<FilterOption>("all");
-  const [isSelectMode, setIsSelectMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   // Favorites empty until we wire user-scoped persistence (post-auth).
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handleLongPress = useCallback((id: string) => {
-    longPressTimer.current = setTimeout(() => {
-      setIsSelectMode(true);
-      setSelectedIds(new Set([id]));
-    }, 500);
-  }, []);
-
-  const cancelLongPress = useCallback(() => {
-    if (longPressTimer.current) clearTimeout(longPressTimer.current);
-  }, []);
 
   const handleLogout = () => {
     localStorage.clear();
@@ -171,42 +153,22 @@ export default function CollectionClient({
     };
   }, [handleTouchStart, handleTouchMove, handleTouchEnd]);
 
-  // Selection handlers
-  const toggleSelect = (id: string) => {
-    const newSelected = new Set(selectedIds);
-    if (newSelected.has(id)) {
-      newSelected.delete(id);
-    } else {
-      newSelected.add(id);
-    }
-    setSelectedIds(newSelected);
-  };
+  // Show artist + title labels under each artwork only at the most-zoomed-in view.
+  const showInfo = zoomLevel === 1;
 
-  const toggleSelectAll = () => {
-    if (selectedIds.size === displayedArtworks.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(displayedArtworks.map(a => a.id)));
-    }
-  };
-
-  const exitSelectMode = () => {
-    setIsSelectMode(false);
-    setSelectedIds(new Set());
-  };
-
-  // Grid configuration based on zoom level
-  const getGridConfig = () => {
+  // Masonry layout via CSS columns. Artworks keep their native aspect ratio
+  // (no cropping ever), and tiles flow into columns whose count matches
+  // the zoom level. The eye reads "this is a curated collection" rather
+  // than "this is a uniform photo album."
+  const masonryClass = (() => {
     switch (zoomLevel) {
-      case 1: return { cols: "grid-cols-1", gap: "gap-0", showInfo: true };
-      case 2: return { cols: "grid-cols-2", gap: "gap-0.5", showInfo: false };
-      case 3: return { cols: "grid-cols-3", gap: "gap-px", showInfo: false };
-      case 4: return { cols: "grid-cols-4", gap: "gap-px", showInfo: false };
-      case 6: return { cols: "grid-cols-6", gap: "gap-px", showInfo: false };
+      case 1: return "columns-1";
+      case 2: return "columns-2 [column-gap:2px]";
+      case 3: return "columns-3 [column-gap:1px]";
+      case 4: return "columns-4 [column-gap:1px]";
+      case 6: return "columns-6 [column-gap:1px]";
     }
-  };
-
-  const gridConfig = getGridConfig();
+  })();
 
   return (
     <main className="min-h-dvh bg-background">
@@ -237,100 +199,38 @@ export default function CollectionClient({
         </div>
       </div>
 
-      {/* Select mode action bar - only shown when items are selected */}
-      {isSelectMode && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 px-4 pb-8 pt-3 bg-gradient-to-t from-background to-transparent pointer-events-none">
-          <div className="pointer-events-auto bg-card rounded-2xl px-4 py-3 flex items-center justify-between shadow-xl border border-border">
-            <button onClick={exitSelectMode} className="text-sm text-muted-foreground">Cancel</button>
-            <span className="text-sm font-medium">{selectedIds.size} selected</span>
-            <div className="flex gap-1">
-              <button className="p-2 hover:bg-muted rounded-xl transition-colors">
-                <Share2 size={18} />
-              </button>
-              <button className="p-2 hover:bg-muted rounded-xl transition-colors">
-                <Tag size={18} />
-              </button>
-              <button className="p-2 hover:bg-muted rounded-xl transition-colors">
-                <Trash2 size={18} className="text-destructive" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Grid - starts at very top */}
-      <div 
+      {/* Masonry grid — every artwork shows in full at its native aspect
+          ratio. No cropping, no letterboxing. Tap opens the detail page;
+          there is no long-press / multi-select / share / delete flow —
+          this is a curated collection, not a photo library. */}
+      <div
         ref={gridRef}
-        className={cn(
-          "grid touch-pan-y",
-          gridConfig.cols,
-          gridConfig.gap
-        )}
+        className={cn("touch-pan-y", masonryClass)}
       >
         {displayedArtworks.map((artwork) => (
-          <div key={artwork.id} className="relative">
-            {isSelectMode ? (
-              <button
-                onClick={() => toggleSelect(artwork.id)}
-                className="block w-full text-left"
-              >
-                <div className="relative aspect-square overflow-hidden">
-                  <Image
-                    src={artwork.imageUrl}
-                    alt={artwork.title}
-                    fill
-                    className={cn(
-                      "object-cover transition-transform duration-200",
-                      selectedIds.has(artwork.id) && "scale-[0.92]"
-                    )}
-                    sizes={`(max-width: 768px) ${Math.round(100/zoomLevel)}vw, ${Math.round(100/zoomLevel)}vw`}
-                  />
-                  <div className={cn(
-                    "absolute inset-0 bg-accent/20 transition-opacity",
-                    selectedIds.has(artwork.id) ? "opacity-100" : "opacity-0"
-                  )} />
-                  <div className={cn(
-                    "absolute top-2 right-2 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors",
-                    selectedIds.has(artwork.id) 
-                      ? "bg-accent border-accent" 
-                      : "bg-black/40 border-white/80"
-                  )}>
-                    {selectedIds.has(artwork.id) && <Check size={12} className="text-accent-foreground" />}
-                  </div>
-                </div>
-                {gridConfig.showInfo && (
-                  <div className="p-3">
-                    <p className="text-sm font-medium truncate lowercase">{artwork.title}</p>
-                    <p className="text-xs text-muted-foreground truncate">{artwork.artistName}</p>
-                  </div>
-                )}
-              </button>
-            ) : (
-              <Link 
-                href={`/artwork/${artwork.id}`} 
-                className="block"
-                onTouchStart={() => handleLongPress(artwork.id)}
-                onTouchEnd={cancelLongPress}
-                onTouchMove={cancelLongPress}
-              >
-                <div className="relative aspect-square overflow-hidden">
-                  <Image
-                    src={artwork.imageUrl}
-                    alt={artwork.title}
-                    fill
-                    className="object-cover"
-                    sizes={`(max-width: 768px) ${Math.round(100/zoomLevel)}vw, ${Math.round(100/zoomLevel)}vw`}
-                  />
-                </div>
-                {gridConfig.showInfo && (
-                  <div className="p-3">
-                    <p className="text-sm font-medium truncate lowercase">{artwork.title}</p>
-                    <p className="text-xs text-muted-foreground truncate">{artwork.artistName}</p>
-                  </div>
-                )}
-              </Link>
+          <Link
+            key={artwork.id}
+            href={`/artwork/${artwork.id}`}
+            className="block break-inside-avoid mb-px"
+          >
+            {/* Plain <img> so the browser can size the tile to the
+                artwork's native aspect ratio. Next/Image needs a known
+                width/height up-front, which we don't have until the
+                Artlogic feed wires us real metadata. */}
+            <img
+              src={artwork.imageUrl}
+              alt={artwork.title}
+              loading="lazy"
+              decoding="async"
+              className="w-full h-auto block"
+            />
+            {showInfo && (
+              <div className="p-3">
+                <p className="text-sm font-medium truncate lowercase">{artwork.title}</p>
+                <p className="text-xs text-muted-foreground truncate">{artwork.artistName}</p>
+              </div>
             )}
-          </div>
+          </Link>
         ))}
       </div>
 
