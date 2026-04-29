@@ -1,19 +1,34 @@
 /**
  * PANG — Drizzle client + schema barrel.
  *
- * Single instance per process. Server-side only — never import this
- * module from a Client Component (would leak DATABASE_URL into the
- * browser bundle, plus the postgres-js driver is Node-only).
+ * Server-side only — never import from a Client Component (would leak
+ * DATABASE_URL into the browser bundle, and postgres-js is Node-only).
  *
- * RLS-context note: this client connects with the role baked into
- * DATABASE_URL (the `postgres` superuser, via the Transaction Pooler).
- * That role bypasses RLS. For RLS-respecting queries we'll wire a
- * second client that runs as `authenticated` with the calling user's
- * JWT set via `set_config('request.jwt.claims', ...)`. Until that
- * lands, every read MUST be scoped by hand (e.g. `where(eq(collectors.id, userId))`).
+ * RLS-context note: connects via the role in DATABASE_URL (the
+ * `postgres` superuser through the Supabase Transaction Pooler), which
+ * bypasses RLS. For RLS-respecting reads we'll wire a second client
+ * that runs as `authenticated` with the caller's JWT set via
+ * `set_config('request.jwt.claims', ...)`. Until that lands, scope
+ * every read by hand (e.g. `where(eq(collectors.id, userId))`).
+ *
+ * ## Connection lifecycle
+ *
+ * On Vercel: every request opens a fresh client and closes it in a
+ * `finally`. Pooling across Lambda invocations is unsafe — when the
+ * function freezes, the Supabase pooler reaps idle TCP sockets at
+ * ~30s, and on thaw postgres-js sees a "healthy" connection and hangs
+ * forever waiting on the dead socket. We tried `idle_timeout` (depends
+ * on the JS event loop, which is paused while frozen) and `keep_alive`
+ * (kernel TCP keepalive, but defaults take ~12 minutes to declare a
+ * socket dead) — both leaked timeouts in production. Per-request
+ * connections cost ~150ms cold handshake but are deterministic.
+ *
+ * Off Vercel (local dev, seed scripts): a singleton is reused. Local
+ * Postgres doesn't have the pooler-reap problem.
  */
 
 import { drizzle } from "drizzle-orm/postgres-js";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { serverEnv } from "../env";
 import * as schema from "./schema";
@@ -24,36 +39,48 @@ if (!serverEnv.DATABASE_URL) {
   );
 }
 
-// Single connection client — postgres-js manages a pool internally.
-// Pooler-friendly settings for Vercel + Supabase transaction pooler:
-//
-//   - prepare: false        Supabase transaction pooler rejects prepared statements.
-//   - max: 1 on Vercel      Each Lambda invocation is its own process.
-//   - keep_alive: 30        THE fix for dead-socket-after-thaw. Vercel
-//                           freezes the Lambda after a request; the pooler
-//                           reaps the TCP socket at ~30s of inactivity;
-//                           postgres-js's JS-level idle_timeout never fires
-//                           because the event loop is paused while frozen.
-//                           Setting `keep_alive` enables kernel-level TCP
-//                           keepalive — the kernel sends probes after 30s
-//                           idle, gets RST from the dead pooler socket, and
-//                           the next query fails fast with ECONNRESET
-//                           (postgres-js auto-reconnects on transient errors)
-//                           instead of hanging until the function-execution
-//                           ceiling. Symptom before this fix: /collection
-//                           cold requests timing out at 300s.
-//   - connect_timeout: 10   Never block more than 10s on initial handshake.
-//   - idle_timeout: 20      Defence-in-depth: when the Lambda IS running,
-//                           close idle conns proactively before the pooler does.
-const client = postgres(serverEnv.DATABASE_URL, {
-  prepare: false,
-  max: process.env["VERCEL"] ? 1 : 10,
-  keep_alive: 30,
-  idle_timeout: 20,
-  connect_timeout: 10,
-});
+const isServerless = !!process.env["VERCEL"];
 
-export const db = drizzle(client, { schema });
+type Schema = typeof schema;
+export type Db = PostgresJsDatabase<Schema>;
+
+function makeClient() {
+  return postgres(serverEnv.DATABASE_URL!, {
+    prepare: false,
+    max: isServerless ? 1 : 10,
+    connect_timeout: 10,
+  });
+}
+
+let cached: ReturnType<typeof postgres> | null = null;
+function devClient() {
+  cached ??= makeClient();
+  return cached;
+}
+
+/**
+ * Run a callback against a Drizzle client. On Vercel, opens a fresh
+ * postgres-js connection per call and closes it in a `finally` — the
+ * only reliable pattern across Lambda freeze/thaw cycles. In dev or
+ * scripts, reuses a process-wide singleton.
+ *
+ * Always `await` the query inside the callback. If the callback
+ * returns a non-awaited Drizzle builder, the connection closes before
+ * the query runs.
+ */
+export async function withDb<T>(fn: (db: Db) => Promise<T>): Promise<T> {
+  if (!isServerless) {
+    return fn(drizzle(devClient(), { schema }));
+  }
+  const client = makeClient();
+  try {
+    return await fn(drizzle(client, { schema }));
+  } finally {
+    // Best-effort close; if the pooler already reaped the socket we
+    // don't want a teardown error to bubble up over the real result.
+    await client.end({ timeout: 5 }).catch(() => {});
+  }
+}
 
 export { schema };
 export * from "./schema";

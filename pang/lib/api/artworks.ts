@@ -14,7 +14,7 @@
  */
 
 import { asc, eq } from "drizzle-orm";
-import { db } from "../db";
+import { withDb } from "../db";
 import { artworks as artworksTbl, provenanceEntries } from "../db/schema";
 import type { Artwork, ProvenanceEntry } from "./types";
 
@@ -81,7 +81,9 @@ function toArtwork(row: DbArtwork): Artwork {
 
 /** List every artwork visible to the caller. */
 export async function listArtworks(): Promise<readonly Artwork[]> {
-  const rows = await db.select().from(artworksTbl).orderBy(artworksTbl.createdAt);
+  const rows = await withDb((db) =>
+    db.select().from(artworksTbl).orderBy(artworksTbl.createdAt),
+  );
   return rows.map(toArtwork);
 }
 
@@ -94,32 +96,34 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  *  `undefined` when not found / not visible. */
 export async function getArtworkById(id: string): Promise<Artwork | undefined> {
   if (!UUID_RE.test(id)) return undefined;
-  const [row] = await db
-    .select()
-    .from(artworksTbl)
-    .where(eq(artworksTbl.id, id))
-    .limit(1);
-  if (!row) return undefined;
+  return withDb(async (db) => {
+    const [row] = await db
+      .select()
+      .from(artworksTbl)
+      .where(eq(artworksTbl.id, id))
+      .limit(1);
+    if (!row) return undefined;
 
-  // Pull provenance entries (oldest → newest reads as the timeline).
-  const provenance = await db
-    .select()
-    .from(provenanceEntries)
-    .where(eq(provenanceEntries.artworkId, id))
-    .orderBy(asc(provenanceEntries.eventDate));
+    // Pull provenance entries (oldest → newest reads as the timeline).
+    const provenance = await db
+      .select()
+      .from(provenanceEntries)
+      .where(eq(provenanceEntries.artworkId, id))
+      .orderBy(asc(provenanceEntries.eventDate));
 
-  const result: Artwork = toArtwork(row);
-  if (provenance.length > 0) {
-    result.provenance = provenance.map((p): ProvenanceEntry => ({
-      date: p.eventDate
-        ? formatProvenanceDate(p.eventDate.toISOString().slice(0, 10))
-        : "",
-      event: p.event,
-      location: p.location ?? undefined,
-      photos: (p.photos as string[] | null) ?? undefined,
-    }));
-  }
-  return result;
+    const result: Artwork = toArtwork(row);
+    if (provenance.length > 0) {
+      result.provenance = provenance.map((p): ProvenanceEntry => ({
+        date: p.eventDate
+          ? formatProvenanceDate(p.eventDate.toISOString().slice(0, 10))
+          : "",
+        event: p.event,
+        location: p.location ?? undefined,
+        photos: (p.photos as string[] | null) ?? undefined,
+      }));
+    }
+    return result;
+  });
 }
 
 /** List artworks attributed to a specific artist (by artist_profile id). */
@@ -127,10 +131,12 @@ export async function listArtworksByArtist(
   artistId: string,
 ): Promise<readonly Artwork[]> {
   if (!UUID_RE.test(artistId)) return [];
-  const rows = await db
-    .select()
-    .from(artworksTbl)
-    .where(eq(artworksTbl.artistId, artistId))
-    .orderBy(artworksTbl.createdAt);
+  const rows = await withDb((db) =>
+    db
+      .select()
+      .from(artworksTbl)
+      .where(eq(artworksTbl.artistId, artistId))
+      .orderBy(artworksTbl.createdAt),
+  );
   return rows.map(toArtwork);
 }

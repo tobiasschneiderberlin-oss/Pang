@@ -7,7 +7,7 @@
  */
 
 import { eq } from "drizzle-orm";
-import { db } from "../db";
+import { withDb } from "../db";
 import { artistProfiles } from "../db/schema";
 import type { Artist } from "./types";
 
@@ -44,7 +44,9 @@ function toArtist(row: DbArtistProfile): Artist {
 
 /** List every artist profile in the gallery. */
 export async function listArtists(): Promise<readonly Artist[]> {
-  const rows = await db.select().from(artistProfiles).orderBy(artistProfiles.name);
+  const rows = await withDb((db) =>
+    db.select().from(artistProfiles).orderBy(artistProfiles.name),
+  );
   return rows.map(toArtist);
 }
 
@@ -55,10 +57,12 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 /** Find an artist by id. Returns `undefined` when not found. */
 export async function getArtistById(id: string): Promise<Artist | undefined> {
   if (!UUID_RE.test(id)) return undefined;
-  const rows = await db
-    .select()
-    .from(artistProfiles)
-    .where(eq(artistProfiles.id, id))
-    .limit(1);
+  const rows = await withDb((db) =>
+    db
+      .select()
+      .from(artistProfiles)
+      .where(eq(artistProfiles.id, id))
+      .limit(1),
+  );
   return rows[0] ? toArtist(rows[0]) : undefined;
 }
