@@ -14,7 +14,7 @@
 // Bump this when shipping changes that invalidate cached responses
 // (route shape changes, link href format changes, etc.). The activate
 // handler below evicts every cache whose name doesn't match.
-const CACHE_NAME = 'pang-v4-png-icons';
+const CACHE_NAME = 'pang-v5-wordmark-icon';
 
 // Same-origin GETs that should be available when offline. Keep this
 // list short — Next/Turbopack handles its own asset hashing for
