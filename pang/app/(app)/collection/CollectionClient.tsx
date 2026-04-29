@@ -423,7 +423,7 @@ export default function CollectionClient({
         </>
       )}
 
-      <SearchModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
+      <SearchModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} artworks={artworks} artists={artists} />
 
       {/* Filter Bottom Sheet */}
       {isFilterOpen && (

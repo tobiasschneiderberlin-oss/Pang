@@ -4,15 +4,17 @@ import { useState, useEffect, useRef } from "react";
 import { Search, X, Image as ImageIcon, User, Mic } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
-import { artworks, artists } from "@/lib/api";
+import type { Artist, Artwork } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 interface SearchModalProps {
   isOpen: boolean;
   onClose: () => void;
+  artworks: readonly Artwork[];
+  artists: readonly Artist[];
 }
 
-export function SearchModal({ isOpen, onClose }: SearchModalProps) {
+export function SearchModal({ isOpen, onClose, artworks, artists }: SearchModalProps) {
   const [query, setQuery] = useState("");
   const [isListening, setIsListening] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
