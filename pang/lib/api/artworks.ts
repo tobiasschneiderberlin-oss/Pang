@@ -13,10 +13,10 @@
  * the artwork id so re-renders are stable.
  */
 
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { db } from "../db";
-import { artworks as artworksTbl } from "../db/schema";
-import type { Artwork } from "./types";
+import { artworks as artworksTbl, provenanceEntries } from "../db/schema";
+import type { Artwork, ProvenanceEntry } from "./types";
 
 const GRADIENTS = [
   "sage",
@@ -35,6 +35,27 @@ function gradientFor(id: string): Artwork["gradient"] {
 }
 
 type DbArtwork = typeof artworksTbl.$inferSelect;
+
+const MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+] as const;
+
+/** Display-format a stored date, re-deriving precision from the
+ *  sentinel-day convention used by the showcase parser:
+ *    YYYY-01-01  → "YYYY"               (year only)
+ *    YYYY-MM-15  → "Mon YYYY"           (month only)
+ *    other       → "Mon D, YYYY"        (exact day) */
+function formatProvenanceDate(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m) return iso;
+  const year = m[1]!;
+  const month = parseInt(m[2]!, 10);
+  const day = parseInt(m[3]!, 10);
+  if (month === 1 && day === 1) return year;
+  if (day === 15) return `${MONTHS[month - 1]} ${year}`;
+  return `${MONTHS[month - 1]} ${day}, ${year}`;
+}
 
 function toArtwork(row: DbArtwork): Artwork {
   return {
@@ -70,15 +91,36 @@ export async function listArtworks(): Promise<readonly Artwork[]> {
  *  instead of letting Postgres throw `invalid input syntax for type uuid`. */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Find an artwork by id. Returns `undefined` when not found / not visible. */
+/** Find an artwork by id, with provenance timeline if any. Returns
+ *  `undefined` when not found / not visible. */
 export async function getArtworkById(id: string): Promise<Artwork | undefined> {
   if (!UUID_RE.test(id)) return undefined;
-  const rows = await db
+  const [row] = await db
     .select()
     .from(artworksTbl)
     .where(eq(artworksTbl.id, id))
     .limit(1);
-  return rows[0] ? toArtwork(rows[0]) : undefined;
+  if (!row) return undefined;
+
+  // Pull provenance entries (oldest → newest reads as the timeline).
+  const provenance = await db
+    .select()
+    .from(provenanceEntries)
+    .where(eq(provenanceEntries.artworkId, id))
+    .orderBy(asc(provenanceEntries.eventDate));
+
+  const result: Artwork = toArtwork(row);
+  if (provenance.length > 0) {
+    result.provenance = provenance.map((p): ProvenanceEntry => ({
+      date: p.eventDate
+        ? formatProvenanceDate(p.eventDate.toISOString().slice(0, 10))
+        : "",
+      event: p.event,
+      location: p.location ?? undefined,
+      photos: (p.photos as string[] | null) ?? undefined,
+    }));
+  }
+  return result;
 }
 
 /** List artworks attributed to a specific artist (by artist_profile id). */

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Share2, Heart, FileText, Download } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Share2, Heart, FileText, Download } from "lucide-react";
 import type { Artist, Artwork } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { ShareSheet } from "@/components/share-sheet";
@@ -169,6 +169,17 @@ export default function ArtworkClient({
           {artwork.dimensions}
         </p>
 
+        {/* Verified badge — appears only for gallery-confirmed works */}
+        {artwork.verified && (
+          <div className="inline-flex items-center gap-1.5 mt-3 px-2.5 py-1 rounded-full bg-accent/10 text-accent text-xs font-medium">
+            <Check size={12} strokeWidth={3} />
+            Verified by Galerie Droste
+            {artwork.verifiedDate && (
+              <span className="opacity-70">· {artwork.verifiedDate}</span>
+            )}
+          </div>
+        )}
+
         {/* Artist row - tappable entry to artist page */}
         {artist && (
           <Link
@@ -230,6 +241,26 @@ export default function ArtworkClient({
                 />
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Provenance timeline — appears when the gallery has populated
+            ownership history for the work. Append-only by ADR-001 Q2. */}
+        {artwork.provenance && artwork.provenance.length > 0 && (
+          <div>
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Provenance</h3>
+            <ol className="relative border-l border-border pl-5 space-y-4">
+              {artwork.provenance.map((entry, index) => (
+                <li key={index} className="relative">
+                  <span className="absolute -left-[26px] top-1.5 w-2 h-2 rounded-full bg-accent ring-4 ring-background" />
+                  <p className="text-sm font-medium leading-snug">{entry.event}</p>
+                  {entry.location && (
+                    <p className="text-xs text-muted-foreground mt-0.5">{entry.location}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground/60 mt-0.5">{entry.date}</p>
+                </li>
+              ))}
+            </ol>
           </div>
         )}
 

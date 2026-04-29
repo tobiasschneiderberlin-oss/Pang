@@ -34,9 +34,11 @@ import {
   collectorGalleryMembership,
   collectors,
   galleries,
+  provenanceEntries,
 } from "../lib/db/schema";
 import derivedArtworks from "../lib/db/seed-data.json";
 import derivedArtists from "../lib/db/seed-artists.json";
+import { SHOWCASE } from "../lib/db/showcase";
 
 type DerivedArtwork = (typeof derivedArtworks)[number];
 type DerivedArtist = (typeof derivedArtists)[number];
@@ -70,6 +72,25 @@ const DEMO_COLLECTOR = {
   location: "Düsseldorf, DE",
   collectingSince: 2018,
 } as const;
+
+/** "YYYY", "YYYY-MM", or "YYYY-MM-DD" → Postgres DATE. Anything else → null.
+ *
+ *  Uses a sentinel day-of-month so the display formatter can re-derive
+ *  the source precision later:
+ *    "2025"        → 2025-01-01    (year-only — formatter renders "2025")
+ *    "2025-09"     → 2025-09-15    (month-only — formatter renders "Sep 2025")
+ *    "2025-09-12"  → 2025-09-12    (exact — formatter renders "Sep 12, 2025")
+ *  An exact date that lands on the 1st of January or the 15th of a month
+ *  will round-trip slightly off; for the showcase use case that's fine. */
+function parseShowcaseDate(raw: string): Date | null {
+  if (/^\d{4}$/.test(raw)) return new Date(`${raw}-01-01T00:00:00Z`);
+  if (/^\d{4}-\d{2}$/.test(raw)) return new Date(`${raw}-15T00:00:00Z`);
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
+    const d = new Date(raw);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  return null;
+}
 
 // ============================================================
 // Implementation
@@ -278,6 +299,64 @@ async function main() {
       dInserted++;
     }
     console.log(`  + ${dInserted} artworks inserted, ${dSkipped} existed (from scrape)`);
+
+    // 7. Showcase — apply hand-curated editorial content (provenance,
+    //    verification, descriptions) to the small set of artworks that
+    //    demonstrate the full app experience. Idempotent on re-run.
+    let showcaseHits = 0;
+    let showcaseMisses = 0;
+    for (const [key, entry] of Object.entries(SHOWCASE)) {
+      const sep = key.indexOf("::");
+      if (sep < 0) continue;
+      const artistName = key.slice(0, sep);
+      const title = key.slice(sep + 2);
+
+      const [art] = await db
+        .select({ id: artworksTbl.id })
+        .from(artworksTbl)
+        .where(
+          and(
+            eq(artworksTbl.artistName, artistName),
+            eq(artworksTbl.title, title),
+          ),
+        );
+      if (!art) {
+        console.log(`  ✗ showcase: '${title}' by '${artistName}' not in DB`);
+        showcaseMisses++;
+        continue;
+      }
+
+      // Update artwork-level fields (only those the entry sets).
+      const patch: Record<string, unknown> = { updatedAt: new Date() };
+      if (entry.description !== undefined) patch.description = entry.description;
+      if (entry.movement !== undefined) patch.movement = entry.movement;
+      if (entry.verifiedAt !== undefined) {
+        patch.verified = true;
+        patch.verifiedAt = new Date(entry.verifiedAt);
+      }
+      await db.update(artworksTbl).set(patch).where(eq(artworksTbl.id, art.id));
+
+      // Provenance — replace existing entries idempotently.
+      if (entry.provenance) {
+        await db
+          .delete(provenanceEntries)
+          .where(eq(provenanceEntries.artworkId, art.id));
+        for (const p of entry.provenance) {
+          await db.insert(provenanceEntries).values({
+            artworkId: art.id,
+            eventDate: parseShowcaseDate(p.date),
+            event: p.event,
+            location: p.location ?? null,
+          });
+        }
+      }
+
+      console.log(`  ★ showcase: ${title}`);
+      showcaseHits++;
+    }
+    console.log(
+      `  + showcase applied to ${showcaseHits} artworks${showcaseMisses ? ` (${showcaseMisses} not found)` : ""}`,
+    );
 
     console.log("\nDone.");
   } finally {
