@@ -1,25 +1,21 @@
 /**
- * PANG — API barrel.
+ * PANG — client-safe API barrel.
  *
- * Convenience re-export so `import { getArtworkById, getArtistById }
- * from "@/lib/api"` works. New code can import from this barrel or
- * from the per-domain modules directly. Either is canonical.
+ * Type exports + the legacy mock-data surface from `lib/data.ts`.
+ * Safe to import from any context (Server, Client, Edge).
  *
- * `@/lib/data` is the mock-data provider only — pages and components
- * MUST NOT import from it. The seam protects:
- *   - RLS context (every read carries auth)
- *   - the sync→async migration when Supabase lands
- *   - the documents table-extraction when the schema flattens
+ * For Drizzle-backed reads, import from `@/lib/api/server` instead —
+ * that barrel is `server-only` and pulls in postgres-js, which can't
+ * cross the client boundary.
+ *
+ * Migration in progress: pages that have been converted to Server
+ * Components import from `@/lib/api/server`. Pages still on the v0
+ * mock layer keep importing from this barrel until they're touched.
  */
 
-// Backward-compat surface (mock-data symbols re-exported with stable names).
-// When Supabase lands, these become async — callers add `await`, the import
-// path stays the same.
+// Legacy mock-data surface — synchronous arrays + getters from lib/data.ts.
+// Drop this re-export when the last importer migrates to @/lib/api/server.
 export * from "../data";
 
-// Future-shape preferred surface (verb-prefixed; survives the async migration).
-export { getArtworkById, listArtworks, listArtworksByArtist } from "./artworks";
-export { getArtistById, listArtists } from "./artists";
-export { listArtistCircle, listCollectors } from "./collectors";
-export { getDocumentById, listDocumentsForArtwork } from "./documents";
+// Type exports — safe to use from any boundary.
 export type * from "./types";

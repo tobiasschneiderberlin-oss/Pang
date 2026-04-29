@@ -63,6 +63,12 @@ const ServerEnvSchema = z
   .superRefine((env, ctx) => {
     if (env.NODE_ENV !== "production") return;
 
+    // Skip required-in-prod enforcement during `next build` (the build
+    // phase runs with NODE_ENV=production but doesn't actually reach
+    // any of these secrets — page data collection only). Runtime SSR /
+    // edge / route handlers still validate at module load.
+    if (process.env["NEXT_PHASE"] === "phase-production-build") return;
+
     // Required-in-production fields.
     const required: Array<keyof typeof env> = [
       "PANG_AUTH_INVITE_SECRET",
@@ -157,19 +163,27 @@ export const serverEnv = parseOrThrow(
  * Public env. Safe to read from anywhere, including Client Components.
  * All values are guaranteed to be inlined into the client bundle.
  */
+/** Coerce empty strings to undefined so Zod defaults + .optional() apply.
+ *  An empty `NEXT_PUBLIC_FOO=` line in .env.local should be treated the
+ *  same as the var being absent. */
+const blank = (v: string | undefined): string | undefined =>
+  v && v.length > 0 ? v : undefined;
+
 export const publicEnv = parseOrThrow(
   PublicEnvSchema,
   {
-    NEXT_PUBLIC_APP_URL: process.env["NEXT_PUBLIC_APP_URL"],
-    NEXT_PUBLIC_SUPABASE_URL: process.env["NEXT_PUBLIC_SUPABASE_URL"],
-    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:
+    NEXT_PUBLIC_APP_URL: blank(process.env["NEXT_PUBLIC_APP_URL"]),
+    NEXT_PUBLIC_SUPABASE_URL: blank(process.env["NEXT_PUBLIC_SUPABASE_URL"]),
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: blank(
       process.env["NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"],
-    NEXT_PUBLIC_CLOUDFLARE_IMAGES_ACCOUNT_HASH:
+    ),
+    NEXT_PUBLIC_CLOUDFLARE_IMAGES_ACCOUNT_HASH: blank(
       process.env["NEXT_PUBLIC_CLOUDFLARE_IMAGES_ACCOUNT_HASH"],
-    NEXT_PUBLIC_SENTRY_DSN: process.env["NEXT_PUBLIC_SENTRY_DSN"],
-    NEXT_PUBLIC_POSTHOG_KEY: process.env["NEXT_PUBLIC_POSTHOG_KEY"],
-    NEXT_PUBLIC_POSTHOG_HOST: process.env["NEXT_PUBLIC_POSTHOG_HOST"],
-    NEXT_PUBLIC_PANG_E2E: process.env["NEXT_PUBLIC_PANG_E2E"],
+    ),
+    NEXT_PUBLIC_SENTRY_DSN: blank(process.env["NEXT_PUBLIC_SENTRY_DSN"]),
+    NEXT_PUBLIC_POSTHOG_KEY: blank(process.env["NEXT_PUBLIC_POSTHOG_KEY"]),
+    NEXT_PUBLIC_POSTHOG_HOST: blank(process.env["NEXT_PUBLIC_POSTHOG_HOST"]),
+    NEXT_PUBLIC_PANG_E2E: blank(process.env["NEXT_PUBLIC_PANG_E2E"]),
   },
   "publicEnv",
 );
