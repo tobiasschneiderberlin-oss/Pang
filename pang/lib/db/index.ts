@@ -28,9 +28,19 @@ if (!serverEnv.DATABASE_URL) {
 // Pooler-friendly settings:
 //   - prepare: false (Supabase Transaction pooler doesn't support prepared statements)
 //   - max: 1 in serverless (each invocation is its own process); 10 in long-running
+//   - idle_timeout / max_lifetime: bound how long a connection can sit
+//     unused in a frozen Lambda before we proactively close it. Without
+//     this, the pooler kills the TCP socket after ~30s but postgres-js
+//     still thinks the connection is alive — first use after thaw hangs
+//     for 5+ minutes waiting on a dead socket. Symptom we hit in prod:
+//     /collection cold requests timing out at the function ceiling.
+//   - connect_timeout: never block more than 10s on initial handshake.
 const client = postgres(serverEnv.DATABASE_URL, {
   prepare: false,
   max: process.env["VERCEL"] ? 1 : 10,
+  idle_timeout: 20,
+  max_lifetime: 60 * 30,
+  connect_timeout: 10,
 });
 
 export const db = drizzle(client, { schema });
