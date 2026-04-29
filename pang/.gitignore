@@ -30,3 +30,4 @@ coverage/
 # into gallery_reference/derived.json (also gitignored). Never
 # committed — the source images live on Artlogic CDN.
 gallery_reference/
+.vercel

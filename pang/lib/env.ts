@@ -69,15 +69,16 @@ const ServerEnvSchema = z
     // edge / route handlers still validate at module load.
     if (process.env["NEXT_PHASE"] === "phase-production-build") return;
 
-    // Required-in-production fields.
+    // Required-in-production fields. Trimmed to the four that have
+    // no working default and would silently produce a broken app.
+    // PANG_AUTH_RP_ID + PANG_AUTH_ORIGINS have localhost-shaped defaults
+    // in lib/auth/config.ts; ANTHROPIC_API_KEY is only needed once the
+    // /api/scan endpoint exists (ADR-001 Week 3).
     const required: Array<keyof typeof env> = [
       "PANG_AUTH_INVITE_SECRET",
       "PANG_AUTH_SESSION_SECRET",
-      "PANG_AUTH_RP_ID",
-      "PANG_AUTH_ORIGINS",
       "SUPABASE_SERVICE_ROLE_KEY",
       "DATABASE_URL",
-      "ANTHROPIC_API_KEY",
     ];
 
     for (const key of required) {
