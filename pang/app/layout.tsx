@@ -1,4 +1,11 @@
 import type { Metadata, Viewport } from 'next'
+
+// Co-locate function execution with the Supabase project (eu-west-1
+// Ireland) so Drizzle queries don't cross the Atlantic on every render.
+// fra1 = Frankfurt; ~5ms RTT to eu-west-1 vs ~80ms+ from iad1.
+// Default 'auto' was deploying to iad1 and timing out cold-start
+// /collection requests at 300s.
+export const preferredRegion = ["fra1"];
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { AnalyticsProvider } from '@/components/analytics-provider'
