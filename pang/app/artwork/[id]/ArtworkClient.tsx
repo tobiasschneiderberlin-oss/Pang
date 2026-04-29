@@ -79,9 +79,13 @@ export default function ArtworkClient({
   return (
     <main className="min-h-dvh bg-background pb-6">
 
-      {/* Artwork image — dominant, full-width */}
+      {/* Artwork image — dominant, full-width. Letterbox area uses
+          the page background colour (near-white) so the artwork
+          floats on the same wall as the rest of the screen, instead
+          of sitting in a warm-tan rectangle that visually splits the
+          page into two zones. */}
       <div
-        className="relative w-full bg-muted cursor-zoom-in"
+        className="relative w-full bg-background cursor-zoom-in"
         style={{ height: "65dvh" }}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
@@ -266,7 +270,7 @@ export default function ArtworkClient({
               {artwork.documents.map((doc) => (
                 <button
                   key={doc.id}
-                  className="w-full flex items-center gap-3 bg-muted rounded-xl px-4 py-3 text-left"
+                  className="w-full flex items-center gap-3 bg-muted/30 hover:bg-muted/50 rounded-xl px-4 py-3 text-left transition-colors"
                 >
                   <FileText size={18} className="text-accent flex-shrink-0" />
                   <div className="flex-1 min-w-0">

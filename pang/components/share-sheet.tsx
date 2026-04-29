@@ -107,7 +107,7 @@ export function ShareSheet({ isOpen, onClose, title, subtitle, url }: ShareSheet
         </div>
 
         {/* URL preview */}
-        <div className="bg-muted rounded-2xl p-4 flex items-center gap-3">
+        <div className="bg-muted/30 rounded-2xl p-4 flex items-center gap-3">
           <div className="w-10 h-10 bg-accent/20 rounded-xl flex items-center justify-center flex-shrink-0">
             <Link2 size={18} className="text-accent" />
           </div>
