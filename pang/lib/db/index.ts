@@ -25,21 +25,31 @@ if (!serverEnv.DATABASE_URL) {
 }
 
 // Single connection client — postgres-js manages a pool internally.
-// Pooler-friendly settings:
-//   - prepare: false (Supabase Transaction pooler doesn't support prepared statements)
-//   - max: 1 in serverless (each invocation is its own process); 10 in long-running
-//   - idle_timeout / max_lifetime: bound how long a connection can sit
-//     unused in a frozen Lambda before we proactively close it. Without
-//     this, the pooler kills the TCP socket after ~30s but postgres-js
-//     still thinks the connection is alive — first use after thaw hangs
-//     for 5+ minutes waiting on a dead socket. Symptom we hit in prod:
-//     /collection cold requests timing out at the function ceiling.
-//   - connect_timeout: never block more than 10s on initial handshake.
+// Pooler-friendly settings for Vercel + Supabase transaction pooler:
+//
+//   - prepare: false        Supabase transaction pooler rejects prepared statements.
+//   - max: 1 on Vercel      Each Lambda invocation is its own process.
+//   - keep_alive: 30        THE fix for dead-socket-after-thaw. Vercel
+//                           freezes the Lambda after a request; the pooler
+//                           reaps the TCP socket at ~30s of inactivity;
+//                           postgres-js's JS-level idle_timeout never fires
+//                           because the event loop is paused while frozen.
+//                           Setting `keep_alive` enables kernel-level TCP
+//                           keepalive — the kernel sends probes after 30s
+//                           idle, gets RST from the dead pooler socket, and
+//                           the next query fails fast with ECONNRESET
+//                           (postgres-js auto-reconnects on transient errors)
+//                           instead of hanging until the function-execution
+//                           ceiling. Symptom before this fix: /collection
+//                           cold requests timing out at 300s.
+//   - connect_timeout: 10   Never block more than 10s on initial handshake.
+//   - idle_timeout: 20      Defence-in-depth: when the Lambda IS running,
+//                           close idle conns proactively before the pooler does.
 const client = postgres(serverEnv.DATABASE_URL, {
   prepare: false,
   max: process.env["VERCEL"] ? 1 : 10,
+  keep_alive: 30,
   idle_timeout: 20,
-  max_lifetime: 60 * 30,
   connect_timeout: 10,
 });
 
