@@ -57,7 +57,12 @@ export default function SplashPage() {
         width={320}
         height={320}
         className="splash-logo splash-logo-1"
-        style={{ willChange: "transform, opacity, filter" }}
+        // opacity:0 inline so the img is invisible from the FIRST paint —
+        // before the <style> block below is parsed. Without this, the
+        // logos flash at full size for a frame before the CSS class
+        // hides them; reads as a phantom icon flicker on slow devices.
+        // The CSS animation overrides this once it runs.
+        style={{ opacity: 0, willChange: "transform, opacity, filter" }}
       />
 
       {/* Beat 3 — splash variant settles in after the flash */}
@@ -67,7 +72,7 @@ export default function SplashPage() {
         width={320}
         height={320}
         className="splash-logo splash-logo-2"
-        style={{ willChange: "transform, opacity, filter" }}
+        style={{ opacity: 0, willChange: "transform, opacity, filter" }}
         aria-hidden="true"
       />
 
