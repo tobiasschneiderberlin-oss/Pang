@@ -14,7 +14,7 @@
 // Bump this when shipping changes that invalidate cached responses
 // (route shape changes, link href format changes, etc.). The activate
 // handler below evicts every cache whose name doesn't match.
-const CACHE_NAME = 'pang-v3-icon-refresh';
+const CACHE_NAME = 'pang-v4-png-icons';
 
 // Same-origin GETs that should be available when offline. Keep this
 // list short — Next/Turbopack handles its own asset hashing for
@@ -22,8 +22,8 @@ const CACHE_NAME = 'pang-v3-icon-refresh';
 const PRECACHE_URLS = [
   '/',
   '/manifest.json',
-  '/icons/icon-192.jpg',
-  '/icons/icon-512.jpg',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
 ];
 
 self.addEventListener('install', (event) => {

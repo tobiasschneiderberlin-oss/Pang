@@ -13,6 +13,7 @@ import { AccentProvider } from '@/components/accent-provider'
 import { AuthProvider } from '@/components/auth-provider'
 import { PostHogProvider } from '@/components/posthog-provider'
 import { SwRegistrar } from '@/components/sw-registrar'
+import { InstallPrompt } from '@/components/install-prompt'
 import './globals.css'
 
 const geistSans = Geist({ 
@@ -40,11 +41,11 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: '/icons/icon-192.jpg', sizes: '192x192', type: 'image/jpeg' },
-      { url: '/icons/icon-512.jpg', sizes: '512x512', type: 'image/jpeg' },
+      { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
     ],
     apple: [
-      { url: '/icons/apple-touch-icon.jpg', sizes: '180x180', type: 'image/jpeg' },
+      { url: '/icons/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
     ],
   },
 }
@@ -72,6 +73,7 @@ export default function RootLayout({
         <AnalyticsProvider />
         <AccentProvider />
         <SwRegistrar />
+        <InstallPrompt />
         <AuthProvider>
           <PostHogProvider>
             {children}

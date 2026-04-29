@@ -1,4 +1,5 @@
 {
+  "id": "/?source=pwa",
   "name": "PANG",
   "short_name": "PANG",
   "description": "The iPod for art. Your collection, beautifully presented.",
@@ -10,27 +11,27 @@
   "scope": "/",
   "icons": [
     {
-      "src": "/icons/icon-192.jpg",
+      "src": "/icons/icon-192.png",
       "sizes": "192x192",
-      "type": "image/jpeg",
+      "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/icon-512.jpg",
+      "src": "/icons/icon-512.png",
       "sizes": "512x512",
-      "type": "image/jpeg",
+      "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/icon-maskable-192.jpg",
+      "src": "/icons/icon-maskable-192.png",
       "sizes": "192x192",
-      "type": "image/jpeg",
+      "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/icons/icon-maskable-512.jpg",
+      "src": "/icons/icon-maskable-512.png",
       "sizes": "512x512",
-      "type": "image/jpeg",
+      "type": "image/png",
       "purpose": "maskable"
     }
   ],
