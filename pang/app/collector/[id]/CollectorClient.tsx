@@ -90,16 +90,15 @@ export default function CollectorClient({
 
           {!sharedCircle && (
             <p className="text-sm text-muted-foreground bg-muted/30 rounded-2xl p-4 leading-relaxed">
-              Contact details are visible only to collectors who share
-              a Circle with {collector.name.split(" ")[0]}. Join an
-              artist circle you both belong to and they'll appear here.
+              {collector.name.split(" ")[0]} shares contact details only
+              inside a Circle you both belong to. Step into one and they
+              appear here.
             </p>
           )}
 
           {sharedCircle && !collector.contact && (
             <p className="text-sm text-muted-foreground bg-muted/30 rounded-2xl p-4 leading-relaxed">
-              {collector.name.split(" ")[0]} hasn't shared any contact
-              details yet.
+              {collector.name.split(" ")[0]} hasn't shared any details yet.
             </p>
           )}
 

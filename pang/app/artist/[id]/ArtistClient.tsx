@@ -114,7 +114,9 @@ export default function ArtistClient({
           </div>
         </div>
 
-        {/* Collector Circle CTA */}
+        {/* Circle CTA — leads with the world ("a circle exists"), not
+            the action. Spatial language ("inside", "step in") rather
+            than network language ("connect", "join community"). */}
         <button
           onClick={() => setIsCircleOpen(true)}
           className={cn(
@@ -132,12 +134,12 @@ export default function ArtistClient({
             />
             <div className="flex-1">
               <h4 className="font-semibold text-sm">
-                {inCircle ? 'In the Collector Circle' : 'Join the Collector Circle'}
+                The {artist.name} Circle
               </h4>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {inCircle
-                  ? `Connected with fellow ${artist.name} collectors`
-                  : `Connect with fellow collectors of ${artist.name}`}
+                  ? `You're inside. The other collectors can see you, and you can see them.`
+                  : `A private room for the collectors of ${artist.name}'s work.`}
               </p>
             </div>
             <ChevronRight size={16} className="text-muted-foreground flex-shrink-0" />
@@ -169,37 +171,29 @@ export default function ArtistClient({
                     className="mb-4"
                   />
                   <h2 className="text-xl font-semibold">
-                    {inCircle ? `In the ${artist.name} Circle` : `Join the ${artist.name} Circle`}
+                    {inCircle
+                      ? `Inside the ${artist.name} Circle`
+                      : `The ${artist.name} Circle`}
                   </h2>
                   {!inCircle && (
-                    <p className="text-sm text-muted-foreground mt-2 max-w-sm">
-                      The Circle is private and verified — only collectors
-                      who own a work by {artist.name} can be inside.
+                    <p className="text-sm text-muted-foreground mt-3 leading-relaxed max-w-sm">
+                      A small private room for the collectors of {artist.name}'s
+                      work. The gallery has confirmed every one.
                     </p>
                   )}
                 </div>
 
                 {!inCircle && (
-                  <ul className="space-y-2.5 mb-6 text-sm text-foreground/80 max-w-sm mx-auto">
-                    <li className="flex gap-2.5">
-                      <span className="text-accent flex-shrink-0">·</span>
-                      <span>You'll see other Circle members and they'll see you.</span>
-                    </li>
-                    <li className="flex gap-2.5">
-                      <span className="text-accent flex-shrink-0">·</span>
-                      <span>You decide which contact details to share, on your profile.</span>
-                    </li>
-                    <li className="flex gap-2.5">
-                      <span className="text-accent flex-shrink-0">·</span>
-                      <span>Leave at any time — you disappear from everyone else's view immediately.</span>
-                    </li>
-                  </ul>
+                  <p className="text-sm text-foreground/80 leading-relaxed text-center mb-6 max-w-sm mx-auto">
+                    Step in and you'll see the others. They'll see you. You
+                    choose which details to share — and you can step out
+                    whenever you like.
+                  </p>
                 )}
 
                 {inCircle && (
-                  <p className="text-sm text-muted-foreground text-center mb-6 max-w-sm mx-auto">
-                    You are visible to other verified collectors of {artist.name},
-                    and they are visible to you.
+                  <p className="text-sm text-muted-foreground text-center mb-6 max-w-sm mx-auto leading-relaxed">
+                    You're visible to the others here, and they to you.
                   </p>
                 )}
 
@@ -210,13 +204,13 @@ export default function ArtistClient({
                         onClick={() => { join(artist.id); setIsCircleOpen(false); }}
                         className="w-full py-3.5 bg-accent text-accent-foreground rounded-full font-semibold text-sm"
                       >
-                        Join the Circle
+                        Step inside
                       </button>
                       <button
                         onClick={() => setIsCircleOpen(false)}
                         className="w-full py-3.5 text-muted-foreground rounded-full font-medium text-sm"
                       >
-                        Keep private
+                        Not now
                       </button>
                     </>
                   ) : (
@@ -231,7 +225,7 @@ export default function ArtistClient({
                         onClick={() => { leave(artist.id); setIsCircleOpen(false); }}
                         className="w-full py-3.5 text-muted-foreground rounded-full font-medium text-sm"
                       >
-                        Leave the Circle
+                        Step out
                       </button>
                     </>
                   )}
@@ -242,17 +236,17 @@ export default function ArtistClient({
           </div>
         )}
 
-        {/* Fellow Collectors — only rendered for members. Empty state
-            when the user is the only verified collector so far. */}
+        {/* Other collectors of this artist — only rendered for members.
+            Empty state speaks to the user being early, not alone. */}
         {inCircle && (
           <section className="mt-8">
             <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">
-              Fellow Collectors
+              Others in this Circle
             </h2>
             {circle.length === 0 ? (
-              <p className="text-sm text-muted-foreground bg-muted/30 rounded-2xl p-4">
-                You're the first verified collector in this Circle. Others
-                will appear here as they join.
+              <p className="text-sm text-muted-foreground bg-muted/30 rounded-2xl p-4 leading-relaxed">
+                You're the first to step in. The others will appear here
+                as they join.
               </p>
             ) : (
               <ul className="space-y-2">
