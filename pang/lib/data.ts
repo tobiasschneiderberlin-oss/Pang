@@ -581,8 +581,36 @@ export function getArtworksByArtist(artistId: string): Artwork[] {
   return artworks.filter(a => a.artistId === artistId);
 }
 
+/**
+ * Pre-Supabase mock — returns a deterministic subset of collectors
+ * for the given artist. Determinism matters because the trust model
+ * leans on the navigation graph: if you tapped a collector inside an
+ * artist's circle, the collector profile page needs to verify that
+ * the target is in fact in that circle. A random subset would let a
+ * collector "appear" and "disappear" between renders, breaking the
+ * gate.
+ *
+ * Post-Supabase this function reads `artwork_owners` and trivially
+ * returns the real list.
+ */
 export function getCollectorsForArtist(artistId: string): Collector[] {
-  // In production, this would filter collectors who own works by this artist
-  // For now, return a random subset of collectors
-  return collectors.slice(0, Math.floor(Math.random() * 3) + 1);
+  return collectors.filter((c) => collectorIsInCircle(c.id, artistId));
+}
+
+/** True when the (mock) collector belongs to the given artist's circle. */
+export function collectorIsInCircle(
+  collectorId: string,
+  artistId: string,
+): boolean {
+  // Cheap stable hash — strings folded into an int, masked to a bool
+  // so each collector lands in roughly half of the artist circles.
+  let h = 0;
+  const s = `${collectorId}::${artistId}`;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return (h & 1) === 0;
+}
+
+/** Look up a single collector by id. */
+export function getCollectorById(id: string): Collector | undefined {
+  return collectors.find((c) => c.id === id);
 }

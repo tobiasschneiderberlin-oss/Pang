@@ -6,7 +6,7 @@
  */
 
 import { notFound } from "next/navigation";
-import { getArtistById, listArtworksByArtist } from "@/lib/api/server";
+import { getArtistById, listArtworksByArtist, listArtistCircle } from "@/lib/api/server";
 import ArtistClient from "./ArtistClient";
 
 export const dynamic = "force-dynamic";
@@ -18,12 +18,19 @@ export default async function ArtistPage({
 }) {
   const { id } = await params;
 
-  const [artist, artistArtworks] = await Promise.all([
+  const [artist, artistArtworks, circle] = await Promise.all([
     getArtistById(id),
     listArtworksByArtist(id),
+    listArtistCircle(id),
   ]);
 
   if (!artist) notFound();
 
-  return <ArtistClient artist={artist} artistArtworks={artistArtworks} />;
+  return (
+    <ArtistClient
+      artist={artist}
+      artistArtworks={artistArtworks}
+      circle={circle}
+    />
+  );
 }

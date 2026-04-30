@@ -1,25 +1,35 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { ChevronLeft, Share2, ExternalLink, Instagram, Globe, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Artist, Artwork } from "@/lib/api";
+import type { Artist, Artwork, Collector } from "@/lib/api";
 import { ArtworkGridCard } from "@/components/artwork-card";
 import { VoiceNotePlayer, VideoThumbnail, VideoModal, ArtistMessageCard, StudioPhotos } from "@/components/artist-media";
+import { useCircleMembership } from "@/hooks/use-circle-membership";
 
 export default function ArtistClient({
   artist,
   artistArtworks,
+  circle,
 }: {
   artist: Artist;
   artistArtworks: readonly Artwork[];
+  circle: readonly Collector[];
 }) {
   const router = useRouter();
   const [activeVideo, setActiveVideo] = useState<number | null>(null);
   const [isCircleOpen, setIsCircleOpen] = useState(false);
-  const [inCircle, setInCircle] = useState(false);
+
+  // Persistent circle membership — keyed by artist id, written to
+  // localStorage so the state survives reloads and other tabs see
+  // the change. Replaces the previous useState that lost membership
+  // the moment the modal closed.
+  const { isMember, join, leave } = useCircleMembership();
+  const inCircle = isMember(artist.id);
 
   const featuredImage = artistArtworks[0]?.imageUrl;
 
@@ -134,7 +144,9 @@ export default function ArtistClient({
           </div>
         </button>
 
-        {/* Collector Circle Modal */}
+        {/* Collector Circle modal — three things the user must understand
+            before joining: who else is in (gating), who sees what
+            (mutuality), and how to exit (control). */}
         {isCircleOpen && (
           <div
             className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm"
@@ -148,7 +160,7 @@ export default function ArtistClient({
                 <div className="w-12 h-1 bg-muted rounded-full" />
               </div>
               <div className="px-6 pb-8 pt-4">
-                <div className="flex flex-col items-center text-center mb-6">
+                <div className="flex flex-col items-center text-center mb-5">
                   <img
                     src="/pang-logo.svg"
                     alt="PANG"
@@ -157,28 +169,54 @@ export default function ArtistClient({
                     className="mb-4"
                   />
                   <h2 className="text-xl font-semibold">
-                    {inCircle ? 'In the Collector Circle' : 'Join the Collector Circle'}
+                    {inCircle ? `In the ${artist.name} Circle` : `Join the ${artist.name} Circle`}
                   </h2>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    {inCircle
-                      ? `You are part of the exclusive ${artist.name} collector community.`
-                      : `Become part of an exclusive community of verified ${artist.name} collectors.`}
-                  </p>
+                  {!inCircle && (
+                    <p className="text-sm text-muted-foreground mt-2 max-w-sm">
+                      The Circle is private and verified — only collectors
+                      who own a work by {artist.name} can be inside.
+                    </p>
+                  )}
                 </div>
+
+                {!inCircle && (
+                  <ul className="space-y-2.5 mb-6 text-sm text-foreground/80 max-w-sm mx-auto">
+                    <li className="flex gap-2.5">
+                      <span className="text-accent flex-shrink-0">·</span>
+                      <span>You'll see other Circle members and they'll see you.</span>
+                    </li>
+                    <li className="flex gap-2.5">
+                      <span className="text-accent flex-shrink-0">·</span>
+                      <span>You decide which contact details to share, on your profile.</span>
+                    </li>
+                    <li className="flex gap-2.5">
+                      <span className="text-accent flex-shrink-0">·</span>
+                      <span>Leave at any time — you disappear from everyone else's view immediately.</span>
+                    </li>
+                  </ul>
+                )}
+
+                {inCircle && (
+                  <p className="text-sm text-muted-foreground text-center mb-6 max-w-sm mx-auto">
+                    You are visible to other verified collectors of {artist.name},
+                    and they are visible to you.
+                  </p>
+                )}
+
                 <div className="space-y-3">
                   {!inCircle ? (
                     <>
                       <button
-                        onClick={() => { setInCircle(true); setIsCircleOpen(false); }}
+                        onClick={() => { join(artist.id); setIsCircleOpen(false); }}
                         className="w-full py-3.5 bg-accent text-accent-foreground rounded-full font-semibold text-sm"
                       >
-                        Join Circle
+                        Join the Circle
                       </button>
                       <button
                         onClick={() => setIsCircleOpen(false)}
                         className="w-full py-3.5 text-muted-foreground rounded-full font-medium text-sm"
                       >
-                        Keep Private
+                        Keep private
                       </button>
                     </>
                   ) : (
@@ -190,10 +228,10 @@ export default function ArtistClient({
                         Done
                       </button>
                       <button
-                        onClick={() => { setInCircle(false); setIsCircleOpen(false); }}
+                        onClick={() => { leave(artist.id); setIsCircleOpen(false); }}
                         className="w-full py-3.5 text-muted-foreground rounded-full font-medium text-sm"
                       >
-                        Leave Circle
+                        Leave the Circle
                       </button>
                     </>
                   )}
@@ -202,6 +240,44 @@ export default function ArtistClient({
               </div>
             </div>
           </div>
+        )}
+
+        {/* Fellow Collectors — only rendered for members. Empty state
+            when the user is the only verified collector so far. */}
+        {inCircle && (
+          <section className="mt-8">
+            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">
+              Fellow Collectors
+            </h2>
+            {circle.length === 0 ? (
+              <p className="text-sm text-muted-foreground bg-muted/30 rounded-2xl p-4">
+                You're the first verified collector in this Circle. Others
+                will appear here as they join.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {circle.map((c) => (
+                  <li key={c.id}>
+                    <Link
+                      href={`/collector/${c.id}?via=${artist.id}`}
+                      className="flex items-center gap-3 bg-muted/30 hover:bg-muted/50 rounded-xl p-3 transition-colors"
+                    >
+                      <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center flex-shrink-0 text-xs font-semibold">
+                        {c.initials}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{c.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {[c.location, `${c.worksCount} works`].filter(Boolean).join(" · ")}
+                        </p>
+                      </div>
+                      <ChevronRight size={16} className="text-muted-foreground flex-shrink-0" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         )}
 
         {/* Personal messages from artist */}

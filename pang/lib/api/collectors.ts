@@ -13,6 +13,8 @@
 import {
   collectors as _allCollectors,
   getCollectorsForArtist as _getCollectorsForArtist,
+  getCollectorById as _getCollectorById,
+  collectorIsInCircle as _collectorIsInCircle,
 } from "../data";
 import type { Collector } from "./types";
 
@@ -31,4 +33,17 @@ export function listCollectors(): readonly Collector[] {
  */
 export function listArtistCircle(artistId: string): readonly Collector[] {
   return _getCollectorsForArtist(artistId);
+}
+
+/** Look up a collector by id. Returns undefined when not found. */
+export function getCollectorById(id: string): Collector | undefined {
+  return _getCollectorById(id);
+}
+
+/** True when the collector belongs to the given artist's circle. */
+export function isCollectorInArtistCircle(
+  collectorId: string,
+  artistId: string,
+): boolean {
+  return _collectorIsInCircle(collectorId, artistId);
 }

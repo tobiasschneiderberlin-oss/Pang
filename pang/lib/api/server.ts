@@ -16,6 +16,11 @@ import "server-only";
 
 export { getArtworkById, listArtworks, listArtworksByArtist } from "./artworks";
 export { getArtistById, listArtists } from "./artists";
-export { listArtistCircle, listCollectors } from "./collectors";
+export {
+  listArtistCircle,
+  listCollectors,
+  getCollectorById,
+  isCollectorInArtistCircle,
+} from "./collectors";
 export { getDocumentById, listDocumentsForArtwork } from "./documents";
 export type * from "./types";
